@@ -1,0 +1,30 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+
+## Visual Studio
+.vs/
+*.rsuser
+*.sln.docstates
+
+## User-specific files
+*.userprefs
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+## NuGet
+**/packages/*
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/

@@ -1,0 +1,68 @@
+﻿@using System.Security.Claims;
+@using Authentication;
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation;
+@inject CustomAuthStateProvider AuthStateProvider;
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Menu</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="about">
+                <span class="bi bi-binoculars-nav-menu" aria-hidden="true"></span> About
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <AuthorizeView Roles="provider">
+                <Authorized>
+                    <NavLink class="nav-link" href="clients">
+                        <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Clients
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <div class="nav-item px-3">
+            <AuthorizeView>
+                <Authorized>
+                    <label class="text-white">
+                        Hello @context.User.FindFirst(ClaimTypes.Name)!.Value
+                    </label>
+                    <br/>
+                    <button type="button" class="btn btn-danger" @onclick="LogoutAsync">Logout</button>
+                </Authorized>
+                <NotAuthorized>
+                    <button type="button" class="btn btn-primary" @onclick="Login">Login</button>
+                </NotAuthorized>
+                <Authorizing>
+                    <span class="text-white">Checking Auth State...</span>
+                </Authorizing>
+            </AuthorizeView>
+        </div>
+    </nav>
+</div>
+
+@code {
+    private void Login()
+    {
+        Navigation.NavigateTo("authentication/login");
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthStateProvider.LogoutAsync();
+    }
+}
+

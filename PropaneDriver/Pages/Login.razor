@@ -1,0 +1,55 @@
+﻿@page "/authentication/login"
+@using PropaneDriver.Authentication;
+@using PropaneDriver.Dtos;
+@inject IJSRuntime JS;
+@inject NavigationManager NavigationManager;
+@inject CustomAuthStateProvider AuthStateProvider;
+
+<h3>Login</h3>
+
+<div class="container border" style="padding: 20px">
+    <EditForm class="form-signin mb-4" Model="@_creds" OnSubmit="@Authenticate">
+        <div class="form-group">
+            <label for="user-name">User Name</label>
+            <InputText class="form-control" id="user-name" style="width: 50%; border: inset;" @bind-Value=@_creds!.UserName />
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <InputText type="password" class="form-control" id="password" style="width: 50%; border: inset;" @bind-Value=@_creds!.Password />
+        </div>
+        <br />
+        <div class="form-group">
+            <button type="submit" id="login" name="login" class="btn btn-primary">Login</button>
+        </div>
+    </EditForm>
+    No account? <br />
+    <button type="button" class="btn btn-primary" @onclick="Register">Register</button>
+</div>
+
+@code {
+    private CredsDto? _creds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _creds = new();
+    }
+
+    protected async Task Authenticate()
+    {
+        var loginStatus = await AuthStateProvider!.LoginAsync(_creds!);
+
+        if (loginStatus.Successful)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", loginStatus.ErrorMessage);
+        }
+    }
+
+    protected async Task Register()
+    {
+        NavigationManager.NavigateTo("/register");
+    }
+}

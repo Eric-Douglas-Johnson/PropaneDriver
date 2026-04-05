@@ -1,0 +1,78 @@
+﻿@page "/"
+
+<style>
+    body {
+        background-color: #3C493F;
+    }
+
+    img {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px;
+        margin-left: 10px;
+    }
+    /* Container holding the image and the text */
+    .container {
+        position: relative;
+        color: whitesmoke;
+        border: groove;
+        border-color: #006666;
+    }
+
+    .bottom-left {
+        position: absolute;
+        bottom: 100px;
+        left: 270px;
+    }
+
+    .top-left {
+        position: absolute;
+        top: 75px;
+        left: 270px;
+        text-align: left;
+        font-size: 20px;
+        color: whitesmoke;
+        width: 1000px;
+    }
+
+    .top-right {
+        position: absolute;
+        left: 460px;
+        top: 0px;
+    }
+
+    .bottom-right {
+        position: absolute;
+        bottom: 8px;
+        right: 16px;
+    }
+
+    .centered {
+        position: absolute;
+        top: 53%;
+        left: 73%;
+        transform: translate(-50%, -50%);
+        font-size: 40px;
+        color: whitesmoke;
+        width: 500px;
+    }
+</style>
+
+<PageTitle>Propane Driver</PageTitle>
+
+<section>
+    <div class="top-left">
+        Welcome to the first version of thepropanedriver.com! <br />
+        If this is your first time here, please click the Login button and/or link, then register using the Register button at bottom. 
+    </div>
+    @* <div class="bottom-left">
+        <img src="@_image2">
+        <div class="centered">
+            Maria Madelina
+        </div>
+    </div> *@
+</section>
+
+@code {
+    string directory = Directory.GetCurrentDirectory();
+}
