@@ -1,0 +1,108 @@
+@page "/register"
+@using PropaneDriver.Client.Authentication
+@using PropaneDriver.Shared.Dtos
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject CustomAuthStateProvider AuthStateProvider
+
+<PageTitle>Register</PageTitle>
+<h3>Register</h3>
+
+<div class="container border" style="padding: 20px">
+    <EditForm class="form-signin mb-4" Model="@_registration" OnSubmit="@SubmitRegistration">
+        <div class="form-group">
+            <label for="user-name">User Name</label>
+            <InputText class="form-control" id="user-name" style="width: 50%; border: inset;" @bind-Value=@_registration.UserName />
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <InputText type="password" class="form-control" id="password" style="width: 50%; border: inset;" @bind-Value=@_registration.Password />
+        </div>
+        <div class="form-group">
+            <label for="confirm-password">Confirm Password</label>
+            <InputText type="password" class="form-control" id="confirm-password" style="width: 50%; border: inset;" @bind-Value=@_confirmPassword />
+        </div>
+        <div class="form-group">
+            <label for="first-name">First Name</label>
+            <InputText class="form-control" id="first-name" style="width: 50%; border: inset;" @bind-Value=@_registration.FirstName />
+        </div>
+        <div class="form-group">
+            <label for="middle-name">Middle Name</label>
+            <InputText class="form-control" id="middle-name" style="width: 50%; border: inset;" @bind-Value=@_registration.MiddleName />
+        </div>
+        <div class="form-group">
+            <label for="last-name">Last Name</label>
+            <InputText class="form-control" id="last-name" style="width: 50%; border: inset;" @bind-Value=@_registration.LastName />
+        </div>
+        <div class="form-group">
+            <label for="email">Email</label>
+            <InputText class="form-control" id="email" style="width: 50%; border: inset;" @bind-Value=@_registration.Email />
+        </div>
+        <div class="form-group">
+            <label for="phone">Phone</label>
+            <InputText class="form-control" id="phone" style="width: 50%; border: inset;" @bind-Value=@_registration.PhoneNumber />
+        </div>
+        <div class="form-group">
+            <label for="license-class">License Class</label>
+            <InputText class="form-control" id="license-class" style="width: 50%; border: inset;" @bind-Value=@_registration.LicenseClass />
+        </div>
+        <div class="form-group">
+            <label for="truck-number">Truck Number</label>
+            <InputText class="form-control" id="truck-number" style="width: 50%; border: inset;" @bind-Value=@_registration.TruckNumber />
+        </div>
+        <br />
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Register</button>
+            <button type="button" class="btn btn-secondary ms-2" @onclick="GoToLogin">Back to Login</button>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private RegisterDriverDto _registration = new();
+    private string _confirmPassword = string.Empty;
+
+    private async Task SubmitRegistration()
+    {
+        if (string.IsNullOrWhiteSpace(_registration.UserName))
+        {
+            await JS.InvokeVoidAsync("alert", "User name is required.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_registration.Password))
+        {
+            await JS.InvokeVoidAsync("alert", "Password is required.");
+            return;
+        }
+
+        if (_registration.Password != _confirmPassword)
+        {
+            await JS.InvokeVoidAsync("alert", "Passwords do not match.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_registration.FirstName) || string.IsNullOrWhiteSpace(_registration.LastName))
+        {
+            await JS.InvokeVoidAsync("alert", "First and last name are required.");
+            return;
+        }
+
+        var result = await AuthStateProvider.RegisterDriverAsync(_registration);
+
+        if (result.Successful)
+        {
+            await JS.InvokeVoidAsync("alert", "Registration successful! Please log in.");
+            NavigationManager.NavigateTo("/authentication/login");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", result.ErrorMessage);
+        }
+    }
+
+    private void GoToLogin()
+    {
+        NavigationManager.NavigateTo("/authentication/login");
+    }
+}

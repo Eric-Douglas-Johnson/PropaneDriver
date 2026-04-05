@@ -107,6 +107,38 @@ namespace PropaneDriver.Client.Authentication
             }
         }
 
+        public async Task<LoginStatus> RegisterDriverAsync(RegisterDriverDto registration)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "api/Register");
+                request.Content = new StringContent(
+                    JsonSerializer.Serialize(registration), Encoding.UTF8, "application/json");
+
+                using var response = await _httpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new LoginStatus
+                    {
+                        Successful = false,
+                        ErrorMessage = "Registration failed"
+                    };
+                }
+
+                return new LoginStatus { Successful = true };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return new LoginStatus
+                {
+                    Successful = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
         public async Task LogoutAsync()
         {
             await _browserStorageService.RemoveFromStorage(_userStorageKey);

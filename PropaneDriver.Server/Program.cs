@@ -49,6 +49,12 @@ app.MapGet("driver/{id:guid}", (Guid id) =>
     });
 });
 
+// Stub registration endpoint - TODO: implement real registration
+app.MapPost("api/Register", (RegisterDriverDto registration) =>
+{
+    return Results.Ok(new { Message = "Stub - registration accepted" });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

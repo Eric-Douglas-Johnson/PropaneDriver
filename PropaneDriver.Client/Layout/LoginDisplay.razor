@@ -10,6 +10,7 @@
     </Authorized>
     <NotAuthorized>
         <a href="authentication/login">Log in</a>
+        <a href="register" class="ms-3">Register</a>
     </NotAuthorized>
 </AuthorizeView>
 
@@ -17,5 +18,6 @@
     private async Task Logout()
     {
         await AuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/authentication/login", forceLoad: true);
     }
 }
