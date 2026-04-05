@@ -1,0 +1,216 @@
+@page "/deliveries"
+@using Microsoft.AspNetCore.Components.Authorization
+@using PropaneDriver.Client.Authentication
+@using PropaneDriver.Shared.Dtos
+@inject CustomAuthStateProvider AuthStateProvider
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+<PageTitle>Route</PageTitle>
+
+<!-- Route Summary -->
+<div class="route-summary">
+    <div class="summary-section driver-info">
+        <h6>Driver</h6>
+        <span class="summary-value">@_routeSummary.Driver?.FirstName @_routeSummary.Driver?.LastName</span>
+        <span class="summary-detail">Truck @_routeSummary.Driver?.TruckNumber &bull; @_routeSummary.Driver?.LicenseClass</span>
+    </div>
+    <div class="summary-section progress-info">
+        <h6>Route Progress</h6>
+        <span class="summary-value">@_routeSummary.CompletedStops / @_routeSummary.TotalStops stops</span>
+        <div class="progress-bar-container">
+            <div class="progress-bar-fill" style="width: @(ProgressPercent)%"></div>
+        </div>
+    </div>
+    <div class="summary-section time-info">
+        <h6>Est. Completion</h6>
+        <span class="summary-value">@_routeSummary.EstimatedCompletionTime</span>
+        <span class="summary-detail">@_routeSummary.TotalGallonsDelivered gal delivered &bull; @_routeSummary.TotalGallonsRemaining gal remaining</span>
+    </div>
+    <div class="summary-section alerts-info">
+        <h6>Alerts</h6>
+        @if (_routeSummary.Alerts.Count == 0)
+        {
+            <span class="alert-badge alert-ok">No alerts</span>
+        }
+        else
+        {
+            @foreach (var alert in _routeSummary.Alerts)
+            {
+                <span class="alert-badge alert-warning">@alert</span>
+            }
+        }
+    </div>
+</div>
+
+<!-- Main Content: Delivery List + Detail -->
+<div class="route-content">
+    <!-- Delivery List (Left) -->
+    <div class="delivery-list">
+        <h5>Deliveries</h5>
+        @foreach (var delivery in _deliveries)
+        {
+            var statusClass = GetStatusClass(delivery.Status);
+            var isSelected = _selectedDelivery?.Id == delivery.Id;
+            <div class="delivery-item @statusClass @(isSelected ? "selected" : "")"
+                 @onclick="() => SelectDelivery(delivery)">
+                <div class="delivery-item-header">
+                    <span class="delivery-time">@delivery.ScheduledTime</span>
+                    <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
+                </div>
+                <div class="delivery-item-name">@delivery.CustomerName</div>
+                <div class="delivery-item-address">@delivery.Address</div>
+            </div>
+        }
+    </div>
+
+    <!-- Delivery Detail (Right) -->
+    <div class="delivery-detail">
+        @if (_selectedDelivery is null)
+        {
+            <div class="no-selection">
+                <p>Select a delivery from the list to view details.</p>
+            </div>
+        }
+        else
+        {
+            <h5>Delivery Details</h5>
+            <div class="detail-card">
+                <div class="detail-row">
+                    <label>Customer</label>
+                    <span>@_selectedDelivery.CustomerName</span>
+                </div>
+                <div class="detail-row">
+                    <label>Address</label>
+                    <span>@_selectedDelivery.Address</span>
+                </div>
+                <div class="detail-row">
+                    <label>Scheduled Time</label>
+                    <span>@_selectedDelivery.ScheduledTime</span>
+                </div>
+                <div class="detail-row">
+                    <label>Tank Size</label>
+                    <span>@_selectedDelivery.TankSize gal</span>
+                </div>
+                <div class="detail-row">
+                    <label>Gallons Delivered</label>
+                    <span>@_selectedDelivery.GallonsDelivered gal</span>
+                </div>
+                <div class="detail-row">
+                    <label>Status</label>
+                    <span class="delivery-status-badge @GetStatusClass(_selectedDelivery.Status)">
+                        @GetStatusText(_selectedDelivery.Status)
+                    </span>
+                </div>
+            </div>
+
+            <div class="detail-actions">
+                @if (_selectedDelivery.Status == 0)
+                {
+                    <button class="btn btn-primary" @onclick="() => UpdateStatus(1)">Start Delivery</button>
+                }
+                else if (_selectedDelivery.Status == 1)
+                {
+                    <button class="btn btn-success" @onclick="() => UpdateStatus(2)">Mark Complete</button>
+                    <button class="btn btn-danger" @onclick="() => UpdateStatus(3)">Mark Unable to Deliver</button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private RouteSummaryDto _routeSummary = new();
+    private List<DeliveryDto> _deliveries = [];
+    private DeliveryDto? _selectedDelivery;
+
+    private int ProgressPercent => _routeSummary.TotalStops > 0
+        ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
+        : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Replace with real API calls
+        LoadMockData();
+    }
+
+    private void SelectDelivery(DeliveryDto delivery)
+    {
+        _selectedDelivery = delivery;
+    }
+
+    private void UpdateStatus(int newStatus)
+    {
+        if (_selectedDelivery is null) return;
+
+        var oldStatus = _selectedDelivery.Status;
+        _selectedDelivery.Status = newStatus;
+
+        if (newStatus == 2 && oldStatus != 2)
+        {
+            _routeSummary.CompletedStops++;
+            _routeSummary.TotalGallonsDelivered += _selectedDelivery.GallonsDelivered;
+            _routeSummary.TotalGallonsRemaining -= _selectedDelivery.GallonsDelivered;
+        }
+    }
+
+    private static string GetStatusClass(int status) => status switch
+    {
+        0 => "status-pending",
+        1 => "status-in-progress",
+        2 => "status-complete",
+        3 => "status-unable",
+        _ => ""
+    };
+
+    private static string GetStatusText(int status) => status switch
+    {
+        0 => "Pending",
+        1 => "In Progress",
+        2 => "Complete",
+        3 => "Unable",
+        _ => "Unknown"
+    };
+
+    private void LoadMockData()
+    {
+        var driver = new DriverDto
+        {
+            Id = "1",
+            FirstName = "Eric",
+            LastName = "Johnson",
+            UserName = "ejohnson",
+            Role = "driver",
+            LicenseClass = "Class B CDL",
+            TruckNumber = "T-114"
+        };
+
+        _deliveries = new List<DeliveryDto>
+        {
+            new() { Id = "1", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "7:30 AM", CustomerName = "Anderson Ranch", Address = "4520 County Rd 12, Marble Falls, TX", TankSize = 500, GallonsDelivered = 320, Status = 2 },
+            new() { Id = "2", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "8:45 AM", CustomerName = "Hill Country Cabins", Address = "1890 Lakeshore Dr, Burnet, TX", TankSize = 1000, GallonsDelivered = 0, Status = 1 },
+            new() { Id = "3", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "10:00 AM", CustomerName = "Bluebonnet Farms", Address = "7722 FM 1431, Marble Falls, TX", TankSize = 250, GallonsDelivered = 0, Status = 0 },
+            new() { Id = "4", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "11:15 AM", CustomerName = "Cedar Creek HOA", Address = "300 Cedar Creek Blvd, Cedar Park, TX", TankSize = 2000, GallonsDelivered = 0, Status = 0 },
+            new() { Id = "5", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "1:00 PM", CustomerName = "Marble Falls ISD", Address = "2101 Mustang Dr, Marble Falls, TX", TankSize = 1000, GallonsDelivered = 0, Status = 0 },
+            new() { Id = "6", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "2:30 PM", CustomerName = "Lakeside RV Park", Address = "5500 RR 1431, Kingsland, TX", TankSize = 500, GallonsDelivered = 0, Status = 0 },
+        };
+
+        _routeSummary = new RouteSummaryDto
+        {
+            Date = DateOnly.FromDateTime(DateTime.Today),
+            TotalStops = _deliveries.Count,
+            CompletedStops = 1,
+            TotalGallonsDelivered = 320,
+            TotalGallonsRemaining = 3430,
+            EstimatedCompletionTime = "3:45 PM",
+            Driver = driver,
+            Alerts = new List<string>
+            {
+                "Cedar Creek HOA — gate code required",
+                "High wind advisory after 12 PM"
+            }
+        };
+
+        _selectedDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
+            ?? _deliveries.FirstOrDefault();
+    }
+}

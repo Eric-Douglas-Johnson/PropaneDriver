@@ -1,0 +1,256 @@
+/* ===== Route Summary (Top Bar) ===== */
+.route-summary {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.summary-section {
+    flex: 1;
+    min-width: 160px;
+    padding: 0.5rem 1rem;
+    border-right: 1px solid #2a2a4a;
+}
+
+.summary-section:last-child {
+    border-right: none;
+}
+
+.summary-section h6 {
+    color: #8892b0;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.25rem;
+}
+
+.summary-value {
+    display: block;
+    color: whitesmoke;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.summary-detail {
+    display: block;
+    color: #8892b0;
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+/* Progress bar */
+.progress-bar-container {
+    width: 100%;
+    height: 6px;
+    background-color: #2a2a4a;
+    border-radius: 3px;
+    margin-top: 0.4rem;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: #22c55e;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+/* Alerts */
+.alert-badge {
+    display: inline-block;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin: 0.15rem 0.25rem 0.15rem 0;
+}
+
+.alert-ok {
+    background-color: #16382a;
+    color: #22c55e;
+}
+
+.alert-warning {
+    background-color: #3b2a10;
+    color: #f59e0b;
+}
+
+/* ===== Main Content (List + Detail) ===== */
+.route-content {
+    display: flex;
+    gap: 1rem;
+    min-height: calc(100vh - 14rem);
+}
+
+/* ===== Delivery List (Left Panel) ===== */
+.delivery-list {
+    flex: 0 0 340px;
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-y: auto;
+    max-height: calc(100vh - 14rem);
+}
+
+.delivery-list h5 {
+    color: whitesmoke;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.delivery-item {
+    padding: 0.75rem;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.delivery-item:hover {
+    background-color: #252545;
+}
+
+.delivery-item.selected {
+    background-color: #252545;
+    border-color: #4a6cf7;
+}
+
+.delivery-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.delivery-time {
+    color: whitesmoke;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.delivery-item-name {
+    color: whitesmoke;
+    font-size: 0.95rem;
+}
+
+.delivery-item-address {
+    color: #8892b0;
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+/* ===== Status Badges ===== */
+.delivery-status-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.delivery-status-badge.status-pending {
+    background-color: #2a2a4a;
+    color: #8892b0;
+}
+
+.delivery-status-badge.status-in-progress {
+    background-color: #1e3a5f;
+    color: #3b82f6;
+}
+
+.delivery-status-badge.status-complete {
+    background-color: #16382a;
+    color: #22c55e;
+}
+
+.delivery-status-badge.status-unable {
+    background-color: #3b1a1a;
+    color: #ef4444;
+}
+
+/* ===== Delivery Detail (Right Panel) ===== */
+.delivery-detail {
+    flex: 1;
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 1.25rem;
+}
+
+.delivery-detail h5 {
+    color: whitesmoke;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.no-selection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #8892b0;
+    font-size: 1rem;
+}
+
+.detail-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.detail-row label {
+    color: #8892b0;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.detail-row span {
+    color: whitesmoke;
+    font-size: 0.95rem;
+}
+
+.detail-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    .route-content {
+        flex-direction: column;
+    }
+
+    .delivery-list {
+        flex: none;
+        max-height: 300px;
+    }
+
+    .route-summary {
+        flex-direction: column;
+    }
+
+    .summary-section {
+        border-right: none;
+        border-bottom: 1px solid #2a2a4a;
+        padding: 0.5rem 0;
+    }
+
+    .summary-section:last-child {
+        border-bottom: none;
+    }
+}
