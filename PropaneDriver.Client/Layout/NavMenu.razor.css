@@ -17,7 +17,8 @@
 
 .top-row {
     height: 3.5rem;
-    background-color: rgba(0,0,0,0.4);
+    background-color: #141425;
+    border-bottom: 1px solid #2a2a4a;
 }
 
 .navbar-brand {
@@ -104,12 +105,12 @@
     }
 
 .nav-item ::deep a.active {
-    background-color: rgba(255,255,255,0.37);
+    background-color: #252545;
     color: white;
 }
 
 .nav-item ::deep .nav-link:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: #252545;
     color: white;
 }
 
