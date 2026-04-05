@@ -1,6 +1,6 @@
-﻿@page "/authentication/login"
-@using PropaneDriver.Authentication;
-@using PropaneDriver.Dtos;
+@page "/authentication/login"
+@using PropaneDriver.Client.Authentication;
+@using PropaneDriver.Shared.Dtos;
 @inject IJSRuntime JS;
 @inject NavigationManager NavigationManager;
 @inject CustomAuthStateProvider AuthStateProvider;
@@ -45,5 +45,4 @@
             await JS.InvokeVoidAsync("alert", loginStatus.ErrorMessage);
         }
     }
-
 }

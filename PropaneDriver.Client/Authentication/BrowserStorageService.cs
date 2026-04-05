@@ -1,8 +1,7 @@
-﻿
 using Microsoft.JSInterop;
 using System.Text.Json;
 
-namespace PropaneDriver.Authentication
+namespace PropaneDriver.Client.Authentication
 {
     public class BrowserStorageService
     {
@@ -48,5 +47,5 @@ namespace PropaneDriver.Authentication
                 return default;
             }
         }
-    }   
+    }
 }

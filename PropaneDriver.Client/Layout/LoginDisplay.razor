@@ -1,0 +1,21 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using PropaneDriver.Client.Authentication
+@inject NavigationManager Navigation
+@inject CustomAuthStateProvider AuthStateProvider
+
+<AuthorizeView>
+    <Authorized>
+        Hello, @context.User.Identity?.Name!
+        <button class="nav-link btn btn-link" @onclick="Logout">Log out</button>
+    </Authorized>
+    <NotAuthorized>
+        <a href="authentication/login">Log in</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code{
+    private async Task Logout()
+    {
+        await AuthStateProvider.LogoutAsync();
+    }
+}

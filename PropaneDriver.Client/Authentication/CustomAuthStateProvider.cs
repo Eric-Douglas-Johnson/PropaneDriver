@@ -1,17 +1,15 @@
-
-using PropaneDriver.Dtos;
+using PropaneDriver.Shared.Dtos;
 using Microsoft.AspNetCore.Components.Authorization;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 
-namespace PropaneDriver.Authentication
+namespace PropaneDriver.Client.Authentication
 {
     public class CustomAuthStateProvider : AuthenticationStateProvider
     {
         private readonly string _userStorageKey = "user";
         private readonly string _authType = "UserAuthentication";
-        private readonly string _apiBaseUri = "http://localhost:7179/";
         private readonly BrowserStorageService _browserStorageService;
         private readonly HttpClient _httpClient;
 
@@ -23,11 +21,10 @@ namespace PropaneDriver.Authentication
         public UserDto CurrentUser { get; private set; } = new();
         private AuthenticationState EmptyAuthState = new(new ClaimsPrincipal());
 
-        public CustomAuthStateProvider(BrowserStorageService storageService)
+        public CustomAuthStateProvider(BrowserStorageService storageService, HttpClient httpClient)
         {
             _browserStorageService = storageService;
-            _httpClient = new HttpClient();
-            _httpClient.BaseAddress = new Uri(_apiBaseUri);
+            _httpClient = httpClient;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -73,13 +70,11 @@ namespace PropaneDriver.Authentication
                     };
                 }
 
-                List<Claim> claims;
-
                 var driverResultStr = await SendGetRequest($"driver/{authResponseDto.UserId}");
                 var driver = Deserialize<DriverDto>(driverResultStr);
                 driver.Role = "driver";
 
-                claims = new List<Claim>
+                var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.NameIdentifier, driver.Id.ToString()),
                     new Claim(ClaimTypes.Name, driver.UserName),
@@ -121,7 +116,7 @@ namespace PropaneDriver.Authentication
 
         private async Task<string> SendAuthRequest(CredsDto creds)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, _apiBaseUri + "api/Authenticate");
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/Authenticate");
             request.Content = new StringContent(JsonSerializer.Serialize(creds), Encoding.UTF8, "application/json");
 
             using var response = await _httpClient.SendAsync(request);
@@ -138,7 +133,7 @@ namespace PropaneDriver.Authentication
 
         private async Task<string> SendGetRequest(string endpoint)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, _apiBaseUri + endpoint);
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             using var response = await _httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)

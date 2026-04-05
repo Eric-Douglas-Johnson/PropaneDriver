@@ -1,4 +1,4 @@
-namespace PropaneDriver.Dtos
+namespace PropaneDriver.Shared.Dtos
 {
     public class DeliveryDto
     {

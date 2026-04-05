@@ -1,5 +1,4 @@
-﻿
-namespace PropaneDriver.Authentication
+namespace PropaneDriver.Client.Authentication
 {
     public class LoginStatus
     {
