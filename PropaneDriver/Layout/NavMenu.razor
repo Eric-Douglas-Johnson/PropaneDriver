@@ -1,4 +1,4 @@
-﻿@using System.Security.Claims;
+@using System.Security.Claims;
 @using Authentication;
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
@@ -7,7 +7,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Menu</a>
+        <a class="navbar-brand" href="">Propane Driver</a>
     </div>
 </div>
 
@@ -26,10 +26,10 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <AuthorizeView Roles="provider">
+            <AuthorizeView Roles="driver">
                 <Authorized>
-                    <NavLink class="nav-link" href="clients">
-                        <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Clients
+                    <NavLink class="nav-link" href="deliveries">
+                        <span class="bi bi-people-nav-menu" aria-hidden="true"></span> Deliveries
                     </NavLink>
                 </Authorized>
             </AuthorizeView>
@@ -65,4 +65,3 @@
         await AuthStateProvider.LogoutAsync();
     }
 }
-

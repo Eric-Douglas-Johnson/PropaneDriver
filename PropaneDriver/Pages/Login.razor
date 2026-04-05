@@ -22,8 +22,6 @@
             <button type="submit" id="login" name="login" class="btn btn-primary">Login</button>
         </div>
     </EditForm>
-    No account? <br />
-    <button type="button" class="btn btn-primary" @onclick="Register">Register</button>
 </div>
 
 @code {
@@ -48,8 +46,4 @@
         }
     }
 
-    protected async Task Register()
-    {
-        NavigationManager.NavigateTo("/register");
-    }
 }

@@ -1,82 +1,20 @@
-﻿@page "/about"
-
-<style>
-    body {
-        background-color: #3C493F;
-    }
-
-    img {
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 5px;
-        margin-left: 10px;
-    }
-    /* Container holding the image and the text */
-    .container {
-        position: relative;
-        color: whitesmoke;
-        border: groove;
-        border-color: #006666;
-    }
-
-    .bottom-left {
-        position: absolute;
-        bottom: 100px;
-        left: 270px;
-    }
-
-    .top-left {
-        position: absolute;
-        top: 200px;
-        left: 280px;
-        text-align: left;
-        font-size: 20px;
-        color: whitesmoke;
-        width: 1000px;
-    }
-
-    .top-right {
-        position: absolute;
-        left: 460px;
-        top: 0px;
-    }
-
-    .bottom-right {
-        position: absolute;
-        bottom: 8px;
-        right: 16px;
-    }
-
-    .centered {
-        position: absolute;
-        top: 53%;
-        left: 73%;
-        transform: translate(-50%, -50%);
-        font-size: 40px;
-        color: whitesmoke;
-        width: 500px;
-    }
-</style>
+@page "/about"
 
 <PageTitle>About</PageTitle>
-<h2 style="color: whitesmoke;">Propane Driver</h2>
-<h3 style="color: whitesmoke;">The delivery driver utility app that's designed specifically for drivers!</h3>
 
-<section style="border:1px double black;">
-    <div class="top-left">
-        PropaneDriver was created for Class A,B delivery drivers. 
-        The delivery apps that are provided for drivers are not driver-centric. In other words, they're not designed
-        with drivers in mind, and they are lacking features that can make the driver's day much less stressful and less
-        error prone.
+<div class="container" style="padding: 20px;">
+    <h2 style="color: whitesmoke;">About Propane Driver</h2>
+    <h3 style="color: whitesmoke;">The delivery driver utility app designed specifically for drivers.</h3>
+
+    <div style="color: whitesmoke; font-size: 18px; margin-top: 20px;">
+        <p>
+            PropaneDriver was created for Class A and B propane delivery drivers. The delivery apps
+            provided by most companies are not driver-centric — they're designed for dispatchers and
+            back-office staff, not for the person behind the wheel.
+        </p>
+        <p>
+            This app puts the driver first: streamlined route views, quick delivery logging,
+            and the features that make a long day on the road less stressful and less error-prone.
+        </p>
     </div>
-    @* <div class="bottom-left">
-        <img src="@_image2">
-        <div class="centered">
-            Maria Madelina
-        </div>
-    </div> *@
-</section>
-
-@code {
-
-}
+</div>
