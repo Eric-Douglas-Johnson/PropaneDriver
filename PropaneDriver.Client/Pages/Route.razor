@@ -58,7 +58,7 @@
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                 </div>
                 <div class="delivery-item-name">@delivery.CustomerName</div>
-                <div class="delivery-item-address">@delivery.Address</div>
+                <div class="delivery-item-address">@delivery.Location.FullAddress</div>
             </div>
         }
     </div>
@@ -81,11 +81,22 @@
                 </div>
                 <div class="detail-row">
                     <label>Address</label>
-                    <span>@_selectedDelivery.Address</span>
+                    <span>@_selectedDelivery.Location.FullAddress</span>
                 </div>
+                @if (_selectedDelivery.Location.HasCoordinates)
+                {
+                    <div class="detail-row">
+                        <label>GPS</label>
+                        <span>@_selectedDelivery.Location.Latitude.ToString("F6"), @_selectedDelivery.Location.Longitude.ToString("F6")</span>
+                    </div>
+                }
                 <div class="detail-row">
                     <label>Scheduled Time</label>
                     <span>@_selectedDelivery.ScheduledTime</span>
+                </div>
+                <div class="detail-row">
+                    <label>Avg Delivery Time</label>
+                    <span>@_selectedDelivery.AvgDeliveryTimeMinutes min</span>
                 </div>
                 <div class="detail-row">
                     <label>Tank Size</label>
@@ -186,12 +197,42 @@
 
         _deliveries = new List<DeliveryDto>
         {
-            new() { Id = "1", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "7:30 AM", CustomerName = "Anderson Ranch", Address = "4520 County Rd 12, Marble Falls, TX", TankSize = 500, GallonsDelivered = 320, Status = 2 },
-            new() { Id = "2", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "8:45 AM", CustomerName = "Hill Country Cabins", Address = "1890 Lakeshore Dr, Burnet, TX", TankSize = 1000, GallonsDelivered = 0, Status = 1 },
-            new() { Id = "3", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "10:00 AM", CustomerName = "Bluebonnet Farms", Address = "7722 FM 1431, Marble Falls, TX", TankSize = 250, GallonsDelivered = 0, Status = 0 },
-            new() { Id = "4", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "11:15 AM", CustomerName = "Cedar Creek HOA", Address = "300 Cedar Creek Blvd, Cedar Park, TX", TankSize = 2000, GallonsDelivered = 0, Status = 0 },
-            new() { Id = "5", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "1:00 PM", CustomerName = "Marble Falls ISD", Address = "2101 Mustang Dr, Marble Falls, TX", TankSize = 1000, GallonsDelivered = 0, Status = 0 },
-            new() { Id = "6", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "2:30 PM", CustomerName = "Lakeside RV Park", Address = "5500 RR 1431, Kingsland, TX", TankSize = 500, GallonsDelivered = 0, Status = 0 },
+            new() {
+                Id = "1", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "7:30 AM",
+                CustomerName = "Anderson Ranch", AvgDeliveryTimeMinutes = 25,
+                Location = new() { Street = "4520 County Rd 12", City = "Marble Falls", State = "TX", ZipCode = "78654", Latitude = 30.5783, Longitude = -98.2750 },
+                TankSize = 500, GallonsDelivered = 320, Status = 2
+            },
+            new() {
+                Id = "2", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "8:45 AM",
+                CustomerName = "Hill Country Cabins", AvgDeliveryTimeMinutes = 35,
+                Location = new() { Street = "1890 Lakeshore Dr", City = "Burnet", State = "TX", ZipCode = "78611", Latitude = 30.7580, Longitude = -98.2284 },
+                TankSize = 1000, GallonsDelivered = 0, Status = 1
+            },
+            new() {
+                Id = "3", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "10:00 AM",
+                CustomerName = "Bluebonnet Farms", AvgDeliveryTimeMinutes = 20,
+                Location = new() { Street = "7722 FM 1431", City = "Marble Falls", State = "TX", ZipCode = "78654", Latitude = 30.6120, Longitude = -98.2100 },
+                TankSize = 250, GallonsDelivered = 0, Status = 0
+            },
+            new() {
+                Id = "4", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "11:15 AM",
+                CustomerName = "Cedar Creek HOA", AvgDeliveryTimeMinutes = 45,
+                Location = new() { Street = "300 Cedar Creek Blvd", City = "Cedar Park", State = "TX", ZipCode = "78613", Latitude = 30.5052, Longitude = -97.8203 },
+                TankSize = 2000, GallonsDelivered = 0, Status = 0
+            },
+            new() {
+                Id = "5", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "1:00 PM",
+                CustomerName = "Marble Falls ISD", AvgDeliveryTimeMinutes = 30,
+                Location = new() { Street = "2101 Mustang Dr", City = "Marble Falls", State = "TX", ZipCode = "78654", Latitude = 30.5684, Longitude = -98.2726 },
+                TankSize = 1000, GallonsDelivered = 0, Status = 0
+            },
+            new() {
+                Id = "6", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "2:30 PM",
+                CustomerName = "Lakeside RV Park", AvgDeliveryTimeMinutes = 20,
+                Location = new() { Street = "5500 RR 1431", City = "Kingsland", State = "TX", ZipCode = "78639", Latitude = 30.6598, Longitude = -98.4401 },
+                TankSize = 500, GallonsDelivered = 0, Status = 0
+            },
         };
 
         _routeSummary = new RouteSummaryDto
