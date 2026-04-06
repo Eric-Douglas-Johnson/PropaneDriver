@@ -27,6 +27,38 @@
         <a class="dismiss">🗙</a>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        window.getDeviceLocation = function () {
+            return new Promise(function (resolve, reject) {
+                if (!navigator.geolocation) {
+                    reject("Geolocation is not supported by this browser.");
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function (position) {
+                        resolve([position.coords.latitude, position.coords.longitude]);
+                    },
+                    function (error) {
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                reject("Location permission denied.");
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                reject("Location information unavailable.");
+                                break;
+                            case error.TIMEOUT:
+                                reject("Location request timed out.");
+                                break;
+                            default:
+                                reject("An unknown error occurred.");
+                                break;
+                        }
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            });
+        };
+    </script>
 </body>
 
 </html>
