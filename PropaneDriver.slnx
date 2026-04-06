@@ -2,4 +2,5 @@
   <Project Path="PropaneDriver.Client/PropaneDriver.Client.csproj" />
   <Project Path="PropaneDriver.Server/PropaneDriver.Server.csproj" />
   <Project Path="PropaneDriver.Shared/PropaneDriver.Shared.csproj" />
+  <Project Path="PropaneDriver.Tests/PropaneDriver.Tests.csproj" />
 </Solution>
