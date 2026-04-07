@@ -58,6 +58,38 @@
                 );
             });
         };
+
+        // GPS watch position for geofence monitoring
+        window._geoWatchId = null;
+
+        window.startWatchingPosition = function (dotNetRef) {
+            if (!navigator.geolocation) {
+                dotNetRef.invokeMethodAsync('OnPositionError', 'Geolocation is not supported.');
+                return;
+            }
+            if (window._geoWatchId !== null) {
+                navigator.geolocation.clearWatch(window._geoWatchId);
+            }
+            window._geoWatchId = navigator.geolocation.watchPosition(
+                function (position) {
+                    dotNetRef.invokeMethodAsync('OnPositionUpdate',
+                        position.coords.latitude,
+                        position.coords.longitude,
+                        position.coords.accuracy);
+                },
+                function (error) {
+                    dotNetRef.invokeMethodAsync('OnPositionError', error.message);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        };
+
+        window.stopWatchingPosition = function () {
+            if (window._geoWatchId !== null) {
+                navigator.geolocation.clearWatch(window._geoWatchId);
+                window._geoWatchId = null;
+            }
+        };
     </script>
 </body>
 

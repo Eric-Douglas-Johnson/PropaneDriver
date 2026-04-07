@@ -225,8 +225,30 @@
 
 .detail-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
     margin-top: 1.5rem;
+}
+
+/* ===== Geofence Status ===== */
+.geofence-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.geofence-inside {
+    background-color: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border: 1px solid #28a745;
+}
+
+.geofence-outside {
+    background-color: rgba(136, 146, 176, 0.15);
+    color: #8892b0;
+    border: 1px solid #3a3a5a;
 }
 
 /* ===== Responsive ===== */

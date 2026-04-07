@@ -9,7 +9,5 @@ namespace PropaneDriver.Shared.Dtos
         public string LastName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
-        public string LicenseClass { get; set; } = string.Empty;
-        public string TruckNumber { get; set; } = string.Empty;
     }
 }

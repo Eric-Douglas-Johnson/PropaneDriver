@@ -1,8 +1,12 @@
 @page "/deliveries"
 @using Microsoft.AspNetCore.Components.Authorization
 @using PropaneDriver.Client.Authentication
+@using PropaneDriver.Client.Services
 @using PropaneDriver.Shared.Dtos
 @inject CustomAuthStateProvider AuthStateProvider
+@inject GeolocationService GeolocationService
+@inject GeoFenceService GeoFenceService
+@implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Route</PageTitle>
@@ -90,6 +94,31 @@
                         <span>@_selectedDelivery.Location.Latitude.ToString("F6"), @_selectedDelivery.Location.Longitude.ToString("F6")</span>
                     </div>
                 }
+                @if (_geoFenceStatus != null)
+                {
+                    <div class="detail-row">
+                        <label>Distance</label>
+                        <span>@(_geoFenceStatus.DistanceMeters.ToString("F1")) m (@((_geoFenceStatus.DistanceMeters * 3.28084).ToString("F0")) ft)</span>
+                    </div>
+                    <div class="detail-row">
+                        <label>Geofence</label>
+                        @if (_geoFenceStatus.IsInsideFence)
+                        {
+                            <span class="geofence-badge geofence-inside">⏱ Inside — @FormatTimer(_timerSeconds)</span>
+                        }
+                        else
+                        {
+                            <span class="geofence-badge geofence-outside">Outside (100 ft radius)</span>
+                        }
+                    </div>
+                }
+                @if (_gpsError != null)
+                {
+                    <div class="detail-row">
+                        <label>GPS Status</label>
+                        <span class="text-danger">@_gpsError</span>
+                    </div>
+                }
                 <div class="detail-row">
                     <label>Scheduled Time</label>
                     <span>@_selectedDelivery.ScheduledTime</span>
@@ -124,6 +153,15 @@
                     <button class="btn btn-success" @onclick="() => UpdateStatus(2)">Mark Complete</button>
                     <button class="btn btn-danger" @onclick="() => UpdateStatus(3)">Mark Unable to Deliver</button>
                 }
+
+                @if (!GeolocationService.IsWatching)
+                {
+                    <button class="btn btn-outline-info mt-2" @onclick="StartGpsMonitoring">📍 Start GPS Monitoring</button>
+                }
+                else
+                {
+                    <button class="btn btn-outline-warning mt-2" @onclick="StopGpsMonitoring">⏹ Stop GPS Monitoring</button>
+                }
             </div>
         }
     </div>
@@ -133,6 +171,9 @@
     private RouteSummaryDto _routeSummary = new();
     private List<DeliveryDto> _deliveries = [];
     private DeliveryDto? _selectedDelivery;
+    private GeoFenceEventArgs? _geoFenceStatus;
+    private double _timerSeconds;
+    private string? _gpsError;
 
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
@@ -142,11 +183,62 @@
     {
         // TODO: Replace with real API calls
         LoadMockData();
+
+        GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
+        GeoFenceService.OnTimerTick += HandleTimerTick;
+        GeolocationService.OnError += HandleGpsError;
+
+        // Set the initial target to the first in-progress or pending delivery
+        var nextDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
+            ?? _deliveries.FirstOrDefault(d => d.Status == 0);
+        GeoFenceService.SetTarget(nextDelivery);
     }
 
     private void SelectDelivery(DeliveryDto delivery)
     {
         _selectedDelivery = delivery;
+        _geoFenceStatus = null;
+        _timerSeconds = 0;
+
+        // Update geofence target when selecting a delivery
+        GeoFenceService.SetTarget(delivery);
+    }
+
+    private async Task StartGpsMonitoring()
+    {
+        _gpsError = null;
+        await GeolocationService.StartWatchingAsync();
+    }
+
+    private async Task StopGpsMonitoring()
+    {
+        await GeolocationService.StopWatchingAsync();
+    }
+
+    private void HandleFenceStatusChanged(GeoFenceEventArgs args)
+    {
+        _geoFenceStatus = args;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleTimerTick(double seconds)
+    {
+        _timerSeconds = seconds;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGpsError(string error)
+    {
+        _gpsError = error;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatTimer(double totalSeconds)
+    {
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        return ts.Hours > 0
+            ? $"{ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
     private void UpdateStatus(int newStatus)
@@ -162,6 +254,22 @@
             _routeSummary.TotalGallonsDelivered += _selectedDelivery.GallonsDelivered;
             _routeSummary.TotalGallonsRemaining -= _selectedDelivery.GallonsDelivered;
         }
+
+        // Auto-advance geofence target to next pending/in-progress delivery
+        if (newStatus >= 2)
+        {
+            var nextDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
+                ?? _deliveries.FirstOrDefault(d => d.Status == 0);
+            GeoFenceService.SetTarget(nextDelivery);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
+        GeoFenceService.OnTimerTick -= HandleTimerTick;
+        GeolocationService.OnError -= HandleGpsError;
+        await GeolocationService.DisposeAsync();
     }
 
     private static string GetStatusClass(int status) => status switch
