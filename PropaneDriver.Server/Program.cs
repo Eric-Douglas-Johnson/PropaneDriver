@@ -44,8 +44,6 @@ using (var scope = app.Services.CreateScope())
                 [LastName] nvarchar(100) NOT NULL,
                 [Email] nvarchar(255) NOT NULL,
                 [PhoneNumber] nvarchar(30) NOT NULL,
-                [LicenseClass] nvarchar(50) NOT NULL,
-                [TruckNumber] nvarchar(50) NOT NULL,
                 [CreatedAt] datetime2 NOT NULL
             );
             CREATE UNIQUE INDEX [IX_Drivers_UserName] ON [Drivers] ([UserName]);
@@ -71,28 +69,49 @@ app.UseRouting();
 app.MapRazorPages();
 app.MapControllers();
 
-// Stub auth endpoint - TODO: implement real authentication
-app.MapPost("api/Authenticate", (CredsDto creds) =>
+// Authenticate a driver
+app.MapPost("api/Authenticate", async (CredsDto creds, PropaneDriverDbContext db) =>
 {
+    var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == creds.UserName);
+
+    if (driver is null || !BCrypt.Net.BCrypt.Verify(creds.Password, driver.PasswordHash))
+    {
+        return Results.Ok(new AuthResponseDto
+        {
+            IsAuthenticated = false,
+            Role = 0,
+            UserId = Guid.Empty,
+            StatusMessage = "Invalid username or password."
+        });
+    }
+
     return Results.Ok(new AuthResponseDto
     {
         IsAuthenticated = true,
         Role = 1,
-        UserId = Guid.NewGuid(),
-        StatusMessage = "Stub - implement real auth"
+        UserId = driver.Id,
+        StatusMessage = "Authenticated"
     });
 });
 
-// Stub driver endpoint - TODO: implement real driver lookup
-app.MapGet("driver/{id:guid}", (Guid id) =>
+// Get driver by ID
+app.MapGet("driver/{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
 {
+    var driver = await db.Drivers.FindAsync(id);
+
+    if (driver is null)
+        return Results.NotFound();
+
     return Results.Ok(new DriverDto
     {
-        Id = id.ToString(),
-        UserName = "stub_driver",
-        Role = "driver",
-        FirstName = "Stub",
-        LastName = "Driver"
+        Id = driver.Id.ToString(),
+        UserName = driver.UserName,
+        Role = driver.Role,
+        FirstName = driver.FirstName,
+        MiddleName = driver.MiddleName,
+        LastName = driver.LastName,
+        Email = driver.Email,
+        PhoneNumber = driver.PhoneNumber
     });
 });
 

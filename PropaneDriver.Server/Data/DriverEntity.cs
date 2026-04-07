@@ -32,12 +32,6 @@ namespace PropaneDriver.Server.Data
         [MaxLength(30)]
         public string PhoneNumber { get; set; } = string.Empty;
 
-        [MaxLength(50)]
-        public string LicenseClass { get; set; } = string.Empty;
-
-        [MaxLength(50)]
-        public string TruckNumber { get; set; } = string.Empty;
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

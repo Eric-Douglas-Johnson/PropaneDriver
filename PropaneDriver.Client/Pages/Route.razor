@@ -16,7 +16,7 @@
     <div class="summary-section driver-info">
         <h6>Driver</h6>
         <span class="summary-value">@_routeSummary.Driver?.FirstName @_routeSummary.Driver?.LastName</span>
-        <span class="summary-detail">Truck @_routeSummary.Driver?.TruckNumber &bull; @_routeSummary.Driver?.LicenseClass</span>
+        <span class="summary-detail">@_routeSummary.Driver?.UserName</span>
     </div>
     <div class="summary-section progress-info">
         <h6>Route Progress</h6>
@@ -299,8 +299,6 @@
             LastName = "Johnson",
             UserName = "ejohnson",
             Role = "driver",
-            LicenseClass = "Class B CDL",
-            TruckNumber = "T-114"
         };
 
         _deliveries = new List<DeliveryDto>
