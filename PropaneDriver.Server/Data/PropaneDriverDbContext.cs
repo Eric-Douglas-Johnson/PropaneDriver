@@ -10,6 +10,7 @@ namespace PropaneDriver.Server.Data
         }
 
         public DbSet<DeliveryTimeEntity> DeliveryTimes => Set<DeliveryTimeEntity>();
+        public DbSet<DriverEntity> Drivers => Set<DriverEntity>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -20,6 +21,13 @@ namespace PropaneDriver.Server.Data
                 entity.ToTable("DeliveryTimes");
                 entity.HasIndex(e => e.Address);
                 entity.HasIndex(e => e.DeliveryId);
+            });
+
+            modelBuilder.Entity<DriverEntity>(entity =>
+            {
+                entity.ToTable("Drivers");
+                entity.HasIndex(e => e.UserName).IsUnique();
+                entity.HasIndex(e => e.Email);
             });
         }
     }

@@ -29,6 +29,29 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
     db.Database.EnsureCreated();
+
+    // Create the Drivers table if it doesn't exist (EnsureCreated skips existing DBs)
+    db.Database.ExecuteSqlRaw(@"
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Drivers')
+        BEGIN
+            CREATE TABLE [Drivers] (
+                [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                [UserName] nvarchar(100) NOT NULL,
+                [PasswordHash] nvarchar(max) NOT NULL,
+                [Role] nvarchar(50) NOT NULL,
+                [FirstName] nvarchar(100) NOT NULL,
+                [MiddleName] nvarchar(100) NOT NULL,
+                [LastName] nvarchar(100) NOT NULL,
+                [Email] nvarchar(255) NOT NULL,
+                [PhoneNumber] nvarchar(30) NOT NULL,
+                [LicenseClass] nvarchar(50) NOT NULL,
+                [TruckNumber] nvarchar(50) NOT NULL,
+                [CreatedAt] datetime2 NOT NULL
+            );
+            CREATE UNIQUE INDEX [IX_Drivers_UserName] ON [Drivers] ([UserName]);
+            CREATE INDEX [IX_Drivers_Email] ON [Drivers] ([Email]);
+        END
+    ");
 }
 
 if (app.Environment.IsDevelopment())
@@ -73,10 +96,34 @@ app.MapGet("driver/{id:guid}", (Guid id) =>
     });
 });
 
-// Stub registration endpoint - TODO: implement real registration
-app.MapPost("api/Register", (RegisterDriverDto registration) =>
+// Register a new driver
+app.MapPost("api/Register", async (RegisterDriverDto registration, PropaneDriverDbContext db) =>
 {
-    return Results.Ok(new { Message = "Stub - registration accepted" });
+    if (string.IsNullOrWhiteSpace(registration.UserName) || string.IsNullOrWhiteSpace(registration.Password))
+        return Results.BadRequest(new { Message = "UserName and Password are required." });
+
+    var exists = await db.Drivers.AnyAsync(d => d.UserName == registration.UserName);
+    if (exists)
+        return Results.Conflict(new { Message = "A driver with that user name already exists." });
+
+    var driver = new DriverEntity
+    {
+        Id = Guid.NewGuid(),
+        UserName = registration.UserName,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(registration.Password),
+        Role = "driver",
+        FirstName = registration.FirstName,
+        MiddleName = registration.MiddleName,
+        LastName = registration.LastName,
+        Email = registration.Email,
+        PhoneNumber = registration.PhoneNumber,
+        CreatedAt = DateTime.UtcNow
+    };
+
+    db.Drivers.Add(driver);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new { driver.Id, Message = "Driver registered successfully." });
 });
 
 // Store a delivery time record
