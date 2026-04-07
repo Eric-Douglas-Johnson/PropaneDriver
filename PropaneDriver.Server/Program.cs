@@ -74,14 +74,25 @@ app.MapPost("api/Authenticate", async (CredsDto creds, PropaneDriverDbContext db
 {
     var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == creds.UserName);
 
-    if (driver is null || !BCrypt.Net.BCrypt.Verify(creds.Password, driver.PasswordHash))
+    if (driver is null)
     {
         return Results.Ok(new AuthResponseDto
         {
             IsAuthenticated = false,
             Role = 0,
             UserId = Guid.Empty,
-            StatusMessage = "Invalid username or password."
+            StatusMessage = $"No driver found with user name '{creds.UserName}'."
+        });
+    }
+
+    if (!BCrypt.Net.BCrypt.Verify(creds.Password, driver.PasswordHash))
+    {
+        return Results.Ok(new AuthResponseDto
+        {
+            IsAuthenticated = false,
+            Role = 0,
+            UserId = Guid.Empty,
+            StatusMessage = "Invalid password."
         });
     }
 

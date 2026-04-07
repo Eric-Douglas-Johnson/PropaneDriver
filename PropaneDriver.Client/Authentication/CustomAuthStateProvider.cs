@@ -60,13 +60,14 @@ namespace PropaneDriver.Client.Authentication
                 var requestResultStr = await SendAuthRequest(creds);
                 var authResponseDto = Deserialize<AuthResponseDto>(requestResultStr);
 
-                //Role.NotAuthorized == 0
-                if (authResponseDto.Role == 0)
+                if (!authResponseDto.IsAuthenticated || authResponseDto.Role == 0)
                 {
                     return new LoginStatus
                     {
                         Successful = false,
-                        ErrorMessage = "Not Authorized"
+                        ErrorMessage = string.IsNullOrWhiteSpace(authResponseDto.StatusMessage)
+                            ? "Not Authorized"
+                            : authResponseDto.StatusMessage
                     };
                 }
 
