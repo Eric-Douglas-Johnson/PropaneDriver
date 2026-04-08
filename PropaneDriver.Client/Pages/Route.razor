@@ -369,20 +369,32 @@
         {
             new() {
                 Id = "1", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "8:00 AM",
-                CustomerName = "Alexi Baldwin", AvgDeliveryTimeMinutes = 0,
-                Location = new() { Street = "12368 Jacobson Rd", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3856, Longitude = -92.9888 },
+                CustomerName = "Blake Armbruster", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "18453 County Road 12", City = "Pengilly", State = "MN", ZipCode = "55775", Latitude = 47.3128, Longitude = -93.1969 },
                 TankSize = 500, GallonsDelivered = 0, Status = 0
             },
             new() {
                 Id = "2", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "9:00 AM",
-                CustomerName = "David L Mancuso", AvgDeliveryTimeMinutes = 0,
-                Location = new() { Street = "12852 Wichingen Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3850, Longitude = -92.9700 },
+                CustomerName = "Steven Sotak", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "11276 Long Lake Road", City = "Nashwauk", State = "MN", ZipCode = "55769", Latitude = 47.3819, Longitude = -93.1689 },
                 TankSize = 500, GallonsDelivered = 0, Status = 0
             },
             new() {
                 Id = "3", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "10:00 AM",
-                CustomerName = "Scott Westrem", AvgDeliveryTimeMinutes = 0,
-                Location = new() { Street = "12795 Guello Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3840, Longitude = -92.9780 },
+                CustomerName = "Jeff Nehring", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "7520 Pine Tree Road", City = "Side Lake", State = "MN", ZipCode = "55781", Latitude = 47.5775, Longitude = -93.0205 },
+                TankSize = 500, GallonsDelivered = 0, Status = 0
+            },
+            new() {
+                Id = "4", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "11:00 AM",
+                CustomerName = "Dan Sandys", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "13009 Rudstrom Road", City = "Side Lake", State = "MN", ZipCode = "55781", Latitude = 47.5790, Longitude = -93.0250 },
+                TankSize = 500, GallonsDelivered = 0, Status = 0
+            },
+            new() {
+                Id = "5", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "12:00 PM",
+                CustomerName = "Stephen Wilenius", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "12884 Rudstrom Road", City = "Side Lake", State = "MN", ZipCode = "55781", Latitude = 47.5785, Longitude = -93.0260 },
                 TankSize = 500, GallonsDelivered = 0, Status = 0
             },
         };
@@ -393,7 +405,7 @@
             TotalStops = _deliveries.Count,
             CompletedStops = 0,
             TotalGallonsDelivered = 0,
-            TotalGallonsRemaining = 1500,
+            TotalGallonsRemaining = 2500,
             EstimatedCompletionTime = "10:30 AM",
             Driver = driver,
             Alerts = new List<string>()
