@@ -15,6 +15,7 @@ namespace PropaneDriver.Client.Services
 
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
+        public event Action<SaveDeliveryTimeResult>? OnSaveResult;
 
         public bool IsInsideFence => _isInsideFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
@@ -27,12 +28,12 @@ namespace PropaneDriver.Client.Services
             _geolocationService.OnPositionChanged += HandlePositionChanged;
         }
 
-        public void SetTarget(DeliveryDto? delivery)
+        public async Task SetTargetAsync(DeliveryDto? delivery)
         {
             // If we were inside a fence for a previous target, stop the timer
             if (_isInsideFence && _currentTarget != null)
             {
-                StopTimerAndSave();
+                await StopTimerAndSaveAsync();
             }
 
             _currentTarget = delivery;
@@ -40,7 +41,21 @@ namespace PropaneDriver.Client.Services
             _timer.Reset();
         }
 
-        private void HandlePositionChanged(double latitude, double longitude, double accuracy)
+        // Backwards-compatible sync wrapper
+        public void SetTarget(DeliveryDto? delivery) => _ = SetTargetAsync(delivery);
+
+        /// <summary>
+        /// Force a save of the current timer if inside the fence. Safe to call at any time.
+        /// </summary>
+        public async Task FlushAsync()
+        {
+            if (_isInsideFence && _currentTarget != null)
+            {
+                await StopTimerAndSaveAsync();
+            }
+        }
+
+        private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
         {
             if (_currentTarget == null || !_currentTarget.Location.HasCoordinates) return;
 
@@ -60,7 +75,7 @@ namespace PropaneDriver.Client.Services
             else if (!nowInside && _isInsideFence)
             {
                 // Left the geofence
-                StopTimerAndSave();
+                await StopTimerAndSaveAsync();
             }
 
             if (_isInsideFence)
@@ -79,7 +94,7 @@ namespace PropaneDriver.Client.Services
             });
         }
 
-        private void StopTimerAndSave()
+        private async Task StopTimerAndSaveAsync()
         {
             _timer.Stop();
 
@@ -94,8 +109,15 @@ namespace PropaneDriver.Client.Services
                     TimeIntervalSeconds = _timer.Elapsed.TotalSeconds
                 };
 
-                // Fire and forget — save delivery time to server
-                _ = _apiService.SaveDeliveryTimeAsync(dto);
+                try
+                {
+                    var result = await _apiService.SaveDeliveryTimeAsync(dto);
+                    OnSaveResult?.Invoke(result);
+                }
+                catch (Exception ex)
+                {
+                    OnSaveResult?.Invoke(new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message });
+                }
             }
 
             _isInsideFence = false;

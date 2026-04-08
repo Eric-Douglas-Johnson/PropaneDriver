@@ -50,7 +50,21 @@
 <div class="route-content">
     <!-- Delivery List (Left) -->
     <div class="delivery-list">
-        <h5>Deliveries</h5>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="m-0">Deliveries</h5>
+            @if (!_routeStarted)
+            {
+                <button class="btn btn-sm btn-primary" @onclick="StartRoute">▶ Start Route</button>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="EndRoute">⏹ End Route</button>
+            }
+        </div>
+        @if (!string.IsNullOrEmpty(_saveStatus))
+        {
+            <div class="@(_saveSuccess ? "text-success" : "text-danger") mb-2" style="font-size:0.8rem;">@_saveStatus</div>
+        }
         @foreach (var delivery in _deliveries)
         {
             var statusClass = GetStatusClass(delivery.Status);
@@ -154,14 +168,6 @@
                     <button class="btn btn-danger" @onclick="() => UpdateStatus(3)">Mark Unable to Deliver</button>
                 }
 
-                @if (!GeolocationService.IsWatching)
-                {
-                    <button class="btn btn-outline-info mt-2" @onclick="StartGpsMonitoring">📍 Start GPS Monitoring</button>
-                }
-                else
-                {
-                    <button class="btn btn-outline-warning mt-2" @onclick="StopGpsMonitoring">⏹ Stop GPS Monitoring</button>
-                }
             </div>
         }
     </div>
@@ -174,6 +180,9 @@
     private GeoFenceEventArgs? _geoFenceStatus;
     private double _timerSeconds;
     private string? _gpsError;
+    private string? _saveStatus;
+    private bool _saveSuccess;
+    private bool _routeStarted;
 
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
@@ -186,6 +195,7 @@
 
         GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick += HandleTimerTick;
+        GeoFenceService.OnSaveResult += HandleSaveResult;
         GeolocationService.OnError += HandleGpsError;
 
         // Set the initial target to the first in-progress or pending delivery
@@ -204,15 +214,28 @@
         GeoFenceService.SetTarget(delivery);
     }
 
-    private async Task StartGpsMonitoring()
+    private async Task StartRoute()
     {
         _gpsError = null;
+        _routeStarted = true;
         await GeolocationService.StartWatchingAsync();
     }
 
-    private async Task StopGpsMonitoring()
+    private async Task EndRoute()
     {
+        // Flush any in-progress timer before stopping the watch so we don't lose data
+        await GeoFenceService.FlushAsync();
         await GeolocationService.StopWatchingAsync();
+        _routeStarted = false;
+    }
+
+    private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
+    {
+        _saveSuccess = result.Success;
+        _saveStatus = result.Success
+            ? "✓ Delivery time saved"
+            : $"✗ Save failed: {result.ErrorMessage}";
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandleFenceStatusChanged(GeoFenceEventArgs args)
@@ -266,10 +289,16 @@
 
     public async ValueTask DisposeAsync()
     {
+        // Flush any in-progress timer before tearing down
+        try { await GeoFenceService.FlushAsync(); } catch { }
+
         GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick -= HandleTimerTick;
+        GeoFenceService.OnSaveResult -= HandleSaveResult;
         GeolocationService.OnError -= HandleGpsError;
-        await GeolocationService.DisposeAsync();
+
+        // Do NOT dispose GeolocationService — it is a shared singleton.
+        try { await GeolocationService.StopWatchingAsync(); } catch { }
     }
 
     private static string GetStatusClass(int status) => status switch
@@ -315,6 +344,12 @@
                 Location = new() { Street = "12852 Wichingen Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3850, Longitude = -92.9700 },
                 TankSize = 500, GallonsDelivered = 0, Status = 0
             },
+            new() {
+                Id = "3", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "10:00 AM",
+                CustomerName = "Scott Westrem", AvgDeliveryTimeMinutes = 0,
+                Location = new() { Street = "12795 Guello Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3840, Longitude = -92.9780 },
+                TankSize = 500, GallonsDelivered = 0, Status = 0
+            },
         };
 
         _routeSummary = new RouteSummaryDto
@@ -323,8 +358,8 @@
             TotalStops = _deliveries.Count,
             CompletedStops = 0,
             TotalGallonsDelivered = 0,
-            TotalGallonsRemaining = 1000,
-            EstimatedCompletionTime = "9:30 AM",
+            TotalGallonsRemaining = 1500,
+            EstimatedCompletionTime = "10:30 AM",
             Driver = driver,
             Alerts = new List<string>()
         };

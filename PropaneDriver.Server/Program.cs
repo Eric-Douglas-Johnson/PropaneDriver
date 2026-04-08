@@ -246,20 +246,36 @@ app.MapPost("api/ResetPassword", async (ResetPasswordDto dto, PropaneDriverDbCon
 // Store a delivery time record
 app.MapPost("api/delivery-times", async (DeliveryTimeDto dto, PropaneDriverDbContext db) =>
 {
-    var entity = new DeliveryTimeEntity
+    app.Logger.LogInformation(
+        "Saving delivery time: DeliveryId={DeliveryId} Address={Address} Seconds={Seconds}",
+        dto.DeliveryId, dto.Address, dto.TimeIntervalSeconds);
+
+    try
     {
-        DeliveryId = dto.DeliveryId,
-        Address = dto.Address,
-        Latitude = dto.Latitude,
-        Longitude = dto.Longitude,
-        TimeIntervalSeconds = dto.TimeIntervalSeconds,
-        RecordedAt = DateTime.UtcNow
-    };
+        var entity = new DeliveryTimeEntity
+        {
+            DeliveryId = dto.DeliveryId,
+            Address = dto.Address,
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude,
+            TimeIntervalSeconds = dto.TimeIntervalSeconds,
+            RecordedAt = DateTime.UtcNow
+        };
 
-    db.DeliveryTimes.Add(entity);
-    await db.SaveChangesAsync();
+        db.DeliveryTimes.Add(entity);
+        await db.SaveChangesAsync();
 
-    return Results.Ok(new { entity.Id, entity.RecordedAt });
+        app.Logger.LogInformation("Saved delivery time Id={Id}", entity.Id);
+        return Results.Ok(new { entity.Id, entity.RecordedAt });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to save delivery time for {Address}", dto.Address);
+        return Results.Problem(
+            detail: ex.Message,
+            title: "Failed to save delivery time",
+            statusCode: 500);
+    }
 });
 
 // Get average delivery time for an address

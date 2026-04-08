@@ -12,15 +12,25 @@ namespace PropaneDriver.Client.Services
             _http = http;
         }
 
-        public async Task SaveDeliveryTimeAsync(DeliveryTimeDto dto)
+        public async Task<SaveDeliveryTimeResult> SaveDeliveryTimeAsync(DeliveryTimeDto dto)
         {
             try
             {
-                await _http.PostAsJsonAsync("api/delivery-times", dto);
+                var response = await _http.PostAsJsonAsync("api/delivery-times", dto);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    var msg = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}: {body}";
+                    Console.WriteLine($"Failed to save delivery time: {msg}");
+                    return new SaveDeliveryTimeResult { Success = false, ErrorMessage = msg };
+                }
+
+                return new SaveDeliveryTimeResult { Success = true };
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to save delivery time: {ex.Message}");
+                return new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message };
             }
         }
 
@@ -38,6 +48,12 @@ namespace PropaneDriver.Client.Services
                 return new DeliveryAverageResult();
             }
         }
+    }
+
+    public class SaveDeliveryTimeResult
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 
     public class DeliveryAverageResult
