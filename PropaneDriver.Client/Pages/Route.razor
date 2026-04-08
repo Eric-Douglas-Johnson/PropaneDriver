@@ -69,10 +69,15 @@
         {
             var statusClass = GetStatusClass(delivery.Status);
             var isSelected = _selectedDelivery?.Id == delivery.Id;
-            <div class="delivery-item @statusClass @(isSelected ? "selected" : "")"
+            var isActive = _activeDelivery?.Id == delivery.Id;
+            <div class="delivery-item @statusClass @(isSelected ? "selected" : "") @(isActive ? "active" : "")"
                  @onclick="() => SelectDelivery(delivery)">
                 <div class="delivery-item-header">
                     <span class="delivery-time">@delivery.ScheduledTime</span>
+                    @if (isActive)
+                    {
+                        <span class="delivery-status-badge active-badge">● Active</span>
+                    }
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                 </div>
                 <div class="delivery-item-name">@delivery.CustomerName</div>
@@ -177,12 +182,14 @@
     private RouteSummaryDto _routeSummary = new();
     private List<DeliveryDto> _deliveries = [];
     private DeliveryDto? _selectedDelivery;
+    private DeliveryDto? _activeDelivery;
     private GeoFenceEventArgs? _geoFenceStatus;
     private double _timerSeconds;
     private string? _gpsError;
     private string? _saveStatus;
     private bool _saveSuccess;
     private bool _routeStarted;
+    private bool _wasInsideFence;
 
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
@@ -198,20 +205,34 @@
         GeoFenceService.OnSaveResult += HandleSaveResult;
         GeolocationService.OnError += HandleGpsError;
 
-        // Set the initial target to the first in-progress or pending delivery
-        var nextDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
-            ?? _deliveries.FirstOrDefault(d => d.Status == 0);
-        GeoFenceService.SetTarget(nextDelivery);
+        // Set the initial active delivery (used by the geofence)
+        SetActiveDelivery(FindNextDelivery());
     }
 
     private void SelectDelivery(DeliveryDto delivery)
     {
+        // Selecting a delivery only changes the detail view; the geofence
+        // stays locked to the current/active delivery.
         _selectedDelivery = delivery;
+    }
+
+    private DeliveryDto? FindNextDelivery()
+        => _deliveries.FirstOrDefault(d => d.Status == 1)
+           ?? _deliveries.FirstOrDefault(d => d.Status == 0);
+
+    private void SetActiveDelivery(DeliveryDto? delivery)
+    {
+        _activeDelivery = delivery;
         _geoFenceStatus = null;
         _timerSeconds = 0;
-
-        // Update geofence target when selecting a delivery
+        _wasInsideFence = false;
         GeoFenceService.SetTarget(delivery);
+
+        // Keep the detail view in sync if nothing is selected yet
+        if (_selectedDelivery is null && delivery is not null)
+        {
+            _selectedDelivery = delivery;
+        }
     }
 
     private async Task StartRoute()
@@ -241,6 +262,22 @@
     private void HandleFenceStatusChanged(GeoFenceEventArgs args)
     {
         _geoFenceStatus = args;
+
+        // Detect inside -> outside transition. If the active delivery was
+        // never marked completed/unable, auto-advance to the next delivery.
+        if (_wasInsideFence && !args.IsInsideFence)
+        {
+            if (_activeDelivery is not null && _activeDelivery.Status < 2)
+            {
+                var next = FindNextDelivery();
+                if (next is not null && next.Id != _activeDelivery.Id)
+                {
+                    SetActiveDelivery(next);
+                }
+            }
+        }
+        _wasInsideFence = args.IsInsideFence;
+
         InvokeAsync(StateHasChanged);
     }
 
@@ -278,12 +315,10 @@
             _routeSummary.TotalGallonsRemaining -= _selectedDelivery.GallonsDelivered;
         }
 
-        // Auto-advance geofence target to next pending/in-progress delivery
-        if (newStatus >= 2)
+        // If the active delivery was just completed/unable, advance to the next one
+        if (newStatus >= 2 && _activeDelivery?.Id == _selectedDelivery.Id)
         {
-            var nextDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
-                ?? _deliveries.FirstOrDefault(d => d.Status == 0);
-            GeoFenceService.SetTarget(nextDelivery);
+            SetActiveDelivery(FindNextDelivery());
         }
     }
 
