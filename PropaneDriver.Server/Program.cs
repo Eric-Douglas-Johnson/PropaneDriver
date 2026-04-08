@@ -21,16 +21,23 @@ builder.Services.AddDbContext<PropaneDriverDbContext>(options =>
     var token = credential.GetToken(new Azure.Core.TokenRequestContext(
         new[] { "https://database.windows.net/.default" }));
     sqlConnection.AccessToken = token.Token;
-    options.UseSqlServer(sqlConnection);
+    options.UseSqlServer(sqlConnection, sql => sql.EnableRetryOnFailure(
+        maxRetryCount: 6,
+        maxRetryDelay: TimeSpan.FromSeconds(15),
+        errorNumbersToAdd: null));
 });
 
 builder.Services.AddSingleton<EmailService>();
 
 var app = builder.Build();
 
-// Ensure the database is created
+// Ensure the database is created. Wrapped in try/catch so transient/cold-start
+// failures (Azure SQL serverless paused) don't crash the host at boot — EF retry
+// will handle it on the first real request.
 using (var scope = app.Services.CreateScope())
 {
+    try
+    {
     var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
     db.Database.EnsureCreated();
 
@@ -71,6 +78,11 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX [IX_PasswordResetTokens_TokenHash] ON [PasswordResetTokens] ([TokenHash]);
         END
     ");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Database initialization failed at startup; will retry on first request.");
+    }
 }
 
 if (app.Environment.IsDevelopment())
