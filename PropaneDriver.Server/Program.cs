@@ -31,6 +31,33 @@ builder.Services.AddSingleton<EmailService>();
 
 var app = builder.Build();
 
+// Ensure ErrorLog table exists
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+        db.Database.ExecuteSqlRaw(@"
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ErrorLog')
+            BEGIN
+                CREATE TABLE [ErrorLog] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [Source] nvarchar(200) NOT NULL,
+                    [Level] nvarchar(50) NOT NULL,
+                    [Message] nvarchar(max) NOT NULL,
+                    [Timestamp] datetime2 NOT NULL
+                );
+                CREATE INDEX [IX_ErrorLog_Source] ON [ErrorLog] ([Source]);
+                CREATE INDEX [IX_ErrorLog_Timestamp] ON [ErrorLog] ([Timestamp]);
+            END
+        ");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "ErrorLog table creation failed at startup; will retry on first request.");
+    }
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
@@ -247,6 +274,32 @@ app.MapGet("api/delivery-times/average/{address}", async (string address, Propan
 
     var avg = times.Average();
     return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
+});
+
+// Log a client-side error
+app.MapPost("api/client-logs", async (ClientLogDto log, PropaneDriverDbContext db) =>
+{
+    try
+    {
+        var entity = new ErrorLogEntity
+        {
+            Id = Guid.NewGuid(),
+            Source = log.Source ?? "Unknown",
+            Level = log.Level ?? "Error",
+            Message = log.Message ?? "",
+            Timestamp = log.Timestamp ?? DateTime.UtcNow
+        };
+
+        db.ErrorLogs.Add(entity);
+        await db.SaveChangesAsync();
+
+        return Results.Ok(new { entity.Id });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to persist client error log");
+        return Results.Problem(detail: ex.Message, statusCode: 500);
+    }
 });
 
 app.MapFallbackToFile("index.html");

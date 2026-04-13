@@ -12,6 +12,7 @@ namespace PropaneDriver.Server.Data
         public DbSet<DeliveryTimeEntity> DeliveryTimes => Set<DeliveryTimeEntity>();
         public DbSet<DriverEntity> Drivers => Set<DriverEntity>();
         public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
+        public DbSet<ErrorLogEntity> ErrorLogs => Set<ErrorLogEntity>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -36,6 +37,13 @@ namespace PropaneDriver.Server.Data
                 entity.ToTable("PasswordResetTokens");
                 entity.HasIndex(e => e.DriverId);
                 entity.HasIndex(e => e.TokenHash);
+            });
+
+            modelBuilder.Entity<ErrorLogEntity>(entity =>
+            {
+                entity.ToTable("ErrorLog");
+                entity.HasIndex(e => e.Source);
+                entity.HasIndex(e => e.Timestamp);
             });
         }
     }
