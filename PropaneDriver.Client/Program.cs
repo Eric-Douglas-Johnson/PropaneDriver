@@ -20,6 +20,7 @@ builder.Services.AddScoped<CustomAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
     provider.GetRequiredService<CustomAuthStateProvider>());
 
+builder.Services.AddScoped<ErrorLogService>();
 builder.Services.AddScoped<DeliveryTimeApiService>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeoFenceService>();

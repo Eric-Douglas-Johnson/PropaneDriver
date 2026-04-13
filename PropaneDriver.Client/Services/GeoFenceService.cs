@@ -8,6 +8,7 @@ namespace PropaneDriver.Client.Services
         private const double FENCE_RADIUS = 30.48; // 100 feet
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
+        private readonly ErrorLogService _errorLog;
 
         private DeliveryDto? _currentDelivery;
         private bool _isInsideFence;
@@ -21,10 +22,11 @@ namespace PropaneDriver.Client.Services
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
         public bool IsMonitoring => _currentDelivery != null;
 
-        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService)
+        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService, ErrorLogService errorLog)
         {
             _geolocationService = geolocationService;
             _apiService = apiService;
+            _errorLog = errorLog;
             _geolocationService.OnPositionChanged += HandlePositionChanged;
         }
 
@@ -57,40 +59,54 @@ namespace PropaneDriver.Client.Services
 
         private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
         {
-            if (_currentDelivery == null) throw new Exception("Current Delivery is null");
-            if (!_currentDelivery.Location.HasCoordinates) throw new Exception("Current Delivery does not have GPS coordinates");
-
-            var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude, 
-                _currentDelivery.Location.Longitude);
-
-            var nowInside = distance <= FENCE_RADIUS;
-
-            if (nowInside && !_isInsideFence)
+            try
             {
-                // Entered the geofence
-                _isInsideFence = true;
-                _timer.Restart();
+                if (_currentDelivery == null)
+                {
+                    await _errorLog.LogErrorAsync("GeoFenceService", "HandlePositionChanged called with no current delivery");
+                    return;
+                }
+
+                if (!_currentDelivery.Location.HasCoordinates)
+                {
+                    await _errorLog.LogErrorAsync("GeoFenceService", $"Delivery '{_currentDelivery.CustomerName}' has no GPS coordinates");
+                    return;
+                }
+
+                var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude,
+                    _currentDelivery.Location.Longitude);
+
+                var nowInside = distance <= FENCE_RADIUS;
+
+                if (nowInside && !_isInsideFence)
+                {
+                    _isInsideFence = true;
+                    _timer.Restart();
+                }
+                else if (!nowInside && _isInsideFence)
+                {
+                    await StopTimerAndSaveAsync();
+                }
+
+                if (_isInsideFence)
+                {
+                    OnTimerTick?.Invoke(_timer.Elapsed.TotalSeconds);
+                }
+
+                OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
+                {
+                    DeliveryId = _currentDelivery.Id,
+                    Address = _currentDelivery.Location.FullAddress,
+                    Latitude = latitude,
+                    Longitude = longitude,
+                    IsInsideFence = _isInsideFence,
+                    DistanceMeters = distance
+                });
             }
-            else if (!nowInside && _isInsideFence)
+            catch (Exception ex)
             {
-                // Left the geofence
-                await StopTimerAndSaveAsync();
+                await _errorLog.LogErrorAsync("GeoFenceService", $"HandlePositionChanged failed: {ex.Message}");
             }
-
-            if (_isInsideFence)
-            {
-                OnTimerTick?.Invoke(_timer.Elapsed.TotalSeconds);
-            }
-
-            OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
-            {
-                DeliveryId = _currentDelivery.Id,
-                Address = _currentDelivery.Location.FullAddress,
-                Latitude = latitude,
-                Longitude = longitude,
-                IsInsideFence = _isInsideFence,
-                DistanceMeters = distance
-            });
         }
 
         private async Task StopTimerAndSaveAsync()
@@ -115,6 +131,7 @@ namespace PropaneDriver.Client.Services
                 }
                 catch (Exception ex)
                 {
+                    await _errorLog.LogErrorAsync("GeoFenceService", $"StopTimerAndSaveAsync failed: {ex.Message}");
                     OnSaveResult?.Invoke(new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message });
                 }
             }
