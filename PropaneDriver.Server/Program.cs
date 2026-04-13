@@ -31,60 +31,6 @@ builder.Services.AddSingleton<EmailService>();
 
 var app = builder.Build();
 
-// Ensure the database is created. Wrapped in try/catch so transient/cold-start
-// failures (Azure SQL serverless paused) don't crash the host at boot — EF retry
-// will handle it on the first real request.
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-    var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-    db.Database.EnsureCreated();
-
-    // Create the Drivers table if it doesn't exist (EnsureCreated skips existing DBs)
-    db.Database.ExecuteSqlRaw(@"
-        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Drivers')
-        BEGIN
-            CREATE TABLE [Drivers] (
-                [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                [UserName] nvarchar(100) NOT NULL,
-                [PasswordHash] nvarchar(max) NOT NULL,
-                [Role] nvarchar(50) NOT NULL,
-                [FirstName] nvarchar(100) NOT NULL,
-                [MiddleName] nvarchar(100) NOT NULL,
-                [LastName] nvarchar(100) NOT NULL,
-                [Email] nvarchar(255) NOT NULL,
-                [PhoneNumber] nvarchar(30) NOT NULL,
-                [CreatedAt] datetime2 NOT NULL
-            );
-            CREATE UNIQUE INDEX [IX_Drivers_UserName] ON [Drivers] ([UserName]);
-            CREATE INDEX [IX_Drivers_Email] ON [Drivers] ([Email]);
-        END
-    ");
-
-    // Create the PasswordResetTokens table if it doesn't exist
-    db.Database.ExecuteSqlRaw(@"
-        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PasswordResetTokens')
-        BEGIN
-            CREATE TABLE [PasswordResetTokens] (
-                [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                [DriverId] uniqueidentifier NOT NULL,
-                [TokenHash] nvarchar(128) NOT NULL,
-                [CreatedAt] datetime2 NOT NULL,
-                [ExpiresAt] datetime2 NOT NULL,
-                [UsedAt] datetime2 NULL
-            );
-            CREATE INDEX [IX_PasswordResetTokens_DriverId] ON [PasswordResetTokens] ([DriverId]);
-            CREATE INDEX [IX_PasswordResetTokens_TokenHash] ON [PasswordResetTokens] ([TokenHash]);
-        END
-    ");
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "Database initialization failed at startup; will retry on first request.");
-    }
-}
-
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
@@ -258,10 +204,6 @@ app.MapPost("api/ResetPassword", async (ResetPasswordDto dto, PropaneDriverDbCon
 // Store a delivery time record
 app.MapPost("api/delivery-times", async (DeliveryTimeDto dto, PropaneDriverDbContext db) =>
 {
-    app.Logger.LogInformation(
-        "Saving delivery time: DeliveryId={DeliveryId} Address={Address} Seconds={Seconds}",
-        dto.DeliveryId, dto.Address, dto.TimeIntervalSeconds);
-
     try
     {
         var entity = new DeliveryTimeEntity

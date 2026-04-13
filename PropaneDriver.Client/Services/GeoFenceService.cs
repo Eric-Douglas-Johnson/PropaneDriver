@@ -5,11 +5,11 @@ namespace PropaneDriver.Client.Services
 {
     public class GeoFenceService
     {
-        private const double FenceRadiusMeters = 30.48; // 100 feet
+        private const double FENCE_RADIUS = 30.48; // 100 feet
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
 
-        private DeliveryDto? _currentTarget;
+        private DeliveryDto? _currentDelivery;
         private bool _isInsideFence;
         private readonly Stopwatch _timer = new();
 
@@ -19,7 +19,7 @@ namespace PropaneDriver.Client.Services
 
         public bool IsInsideFence => _isInsideFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
-        public bool IsMonitoring => _currentTarget != null;
+        public bool IsMonitoring => _currentDelivery != null;
 
         public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService)
         {
@@ -31,12 +31,12 @@ namespace PropaneDriver.Client.Services
         public async Task SetTargetAsync(DeliveryDto? delivery)
         {
             // If we were inside a fence for a previous target, stop the timer
-            if (_isInsideFence && _currentTarget != null)
+            if (_isInsideFence && _currentDelivery != null)
             {
                 await StopTimerAndSaveAsync();
             }
 
-            _currentTarget = delivery;
+            _currentDelivery = delivery;
             _isInsideFence = false;
             _timer.Reset();
         }
@@ -49,7 +49,7 @@ namespace PropaneDriver.Client.Services
         /// </summary>
         public async Task FlushAsync()
         {
-            if (_isInsideFence && _currentTarget != null)
+            if (_isInsideFence && _currentDelivery != null)
             {
                 await StopTimerAndSaveAsync();
             }
@@ -57,14 +57,13 @@ namespace PropaneDriver.Client.Services
 
         private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
         {
-            if (_currentTarget == null || !_currentTarget.Location.HasCoordinates) return;
+            if (_currentDelivery == null) throw new Exception("Current Delivery is null");
+            if (!_currentDelivery.Location.HasCoordinates) throw new Exception("Current Delivery does not have GPS coordinates");
 
-            var distance = HaversineDistance(
-                latitude, longitude,
-                _currentTarget.Location.Latitude,
-                _currentTarget.Location.Longitude);
+            var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude, 
+                _currentDelivery.Location.Longitude);
 
-            var nowInside = distance <= FenceRadiusMeters;
+            var nowInside = distance <= FENCE_RADIUS;
 
             if (nowInside && !_isInsideFence)
             {
@@ -85,8 +84,8 @@ namespace PropaneDriver.Client.Services
 
             OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
             {
-                DeliveryId = _currentTarget.Id,
-                Address = _currentTarget.Location.FullAddress,
+                DeliveryId = _currentDelivery.Id,
+                Address = _currentDelivery.Location.FullAddress,
                 Latitude = latitude,
                 Longitude = longitude,
                 IsInsideFence = _isInsideFence,
@@ -98,14 +97,14 @@ namespace PropaneDriver.Client.Services
         {
             _timer.Stop();
 
-            if (_currentTarget != null && _timer.Elapsed.TotalSeconds > 0)
+            if (_currentDelivery != null && _timer.Elapsed.TotalSeconds > 0)
             {
                 var dto = new DeliveryTimeDto
                 {
-                    DeliveryId = _currentTarget.Id,
-                    Address = _currentTarget.Location.FullAddress,
-                    Latitude = _currentTarget.Location.Latitude,
-                    Longitude = _currentTarget.Location.Longitude,
+                    DeliveryId = _currentDelivery.Id,
+                    Address = _currentDelivery.Location.FullAddress,
+                    Latitude = _currentDelivery.Location.Latitude,
+                    Longitude = _currentDelivery.Location.Longitude,
                     TimeIntervalSeconds = _timer.Elapsed.TotalSeconds
                 };
 
