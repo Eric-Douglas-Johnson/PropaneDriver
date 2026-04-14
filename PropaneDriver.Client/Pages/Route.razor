@@ -50,17 +50,7 @@
 <div class="route-content">
     <!-- Delivery List (Left) -->
     <div class="delivery-list">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="m-0">Deliveries</h5>
-            @if (!_routeStarted)
-            {
-                <button class="btn btn-sm btn-primary" @onclick="StartRoute">▶ Start Route</button>
-            }
-            else
-            {
-                <button class="btn btn-sm btn-outline-secondary" @onclick="EndRoute">⏹ End Route</button>
-            }
-        </div>
+        <h5>Deliveries</h5>
         @if (!string.IsNullOrEmpty(_saveStatus))
         {
             <div class="@(_saveSuccess ? "text-success" : "text-danger") mb-2" style="font-size:0.8rem;">@_saveStatus</div>
@@ -76,7 +66,7 @@
                     <span class="delivery-time">@delivery.ScheduledTime</span>
                     @if (isActive)
                     {
-                        <span class="delivery-status-badge active-badge">● Active</span>
+                        <span class="delivery-status-badge @(isActive && _geoFenceStatus?.IsInsideFence == true ? "geofence-inside-badge" : "active-badge")">● Active</span>
                     }
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                 </div>
@@ -132,7 +122,6 @@
     private string? _gpsError;
     private string? _saveStatus;
     private bool _saveSuccess;
-    private bool _routeStarted;
     private bool _wasInsideFence;
 
     private int ProgressPercent => _routeSummary.TotalStops > 0
@@ -151,6 +140,9 @@
 
         // Set the initial active delivery (used by the geofence)
         SetActiveDelivery(FindNextDelivery());
+
+        // Auto-start GPS monitoring
+        await GeolocationService.StartWatchingAsync();
     }
 
     private void SelectDelivery(DeliveryDto delivery)
@@ -163,21 +155,6 @@
     private DeliveryDto? FindNextDelivery()
         => _deliveries.FirstOrDefault(d => d.Status == 1)
            ?? _deliveries.FirstOrDefault(d => d.Status == 0);
-
-    private async Task StartRoute()
-    {
-        _gpsError = null;
-        _routeStarted = true;
-        await GeolocationService.StartWatchingAsync();
-    }
-
-    private async Task EndRoute()
-    {
-        // Flush any in-progress timer before stopping the watch so we don't lose data
-        await GeoFenceService.FlushAsync();
-        await GeolocationService.StopWatchingAsync();
-        _routeStarted = false;
-    }
 
     private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
     {
