@@ -161,19 +161,6 @@
                     </span>
                 </div>
             </div>
-
-            <div class="detail-actions">
-                @if (_selectedDelivery.Status == 0)
-                {
-                    <button class="btn btn-primary" @onclick="() => UpdateStatus(1)">Start Delivery</button>
-                }
-                else if (_selectedDelivery.Status == 1)
-                {
-                    <button class="btn btn-success" @onclick="() => UpdateStatus(2)">Mark Complete</button>
-                    <button class="btn btn-danger" @onclick="() => UpdateStatus(3)">Mark Unable to Deliver</button>
-                }
-
-            </div>
         }
     </div>
 </div>
@@ -299,27 +286,6 @@
         return ts.Hours > 0
             ? $"{ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
             : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
-    }
-
-    private void UpdateStatus(int newStatus)
-    {
-        if (_selectedDelivery is null) throw new NullReferenceException();
-
-        var oldStatus = _selectedDelivery.Status;
-        _selectedDelivery.Status = newStatus;
-
-        if (newStatus == 2 && oldStatus != 2)
-        {
-            _routeSummary.CompletedStops++;
-            _routeSummary.TotalGallonsDelivered += _selectedDelivery.GallonsDelivered;
-            _routeSummary.TotalGallonsRemaining -= _selectedDelivery.GallonsDelivered;
-        }
-
-        // If the active delivery was just completed/unable, advance to the next one
-        if (newStatus >= 2 && _activeDelivery?.Id == _selectedDelivery.Id)
-        {
-            SetActiveDelivery(FindNextDelivery());
-        }
     }
 
     public async ValueTask DisposeAsync()
