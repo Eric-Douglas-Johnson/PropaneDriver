@@ -7,8 +7,6 @@ namespace PropaneDriver.Shared.Dtos
         public string ScheduledTime { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
         public GeoAddressDto Location { get; set; } = new();
-        public double TankSize { get; set; }
-        public double GallonsDelivered { get; set; }
         public double AvgDeliveryTimeMinutes { get; set; }
         public int Status { get; set; }
 
