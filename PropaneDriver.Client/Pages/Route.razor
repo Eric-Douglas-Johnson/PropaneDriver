@@ -113,52 +113,9 @@
                         <span>@_selectedDelivery.Location.Latitude.ToString("F6"), @_selectedDelivery.Location.Longitude.ToString("F6")</span>
                     </div>
                 }
-                @if (_geoFenceStatus != null)
-                {
-                    <div class="detail-row">
-                        <label>Distance</label>
-                        <span>@(_geoFenceStatus.DistanceMeters.ToString("F1")) m (@((_geoFenceStatus.DistanceMeters * 3.28084).ToString("F0")) ft)</span>
-                    </div>
-                    <div class="detail-row">
-                        <label>Geofence</label>
-                        @if (_geoFenceStatus.IsInsideFence)
-                        {
-                            <span class="geofence-badge geofence-inside">⏱ Inside — @FormatTimer(_timerSeconds)</span>
-                        }
-                        else
-                        {
-                            <span class="geofence-badge geofence-outside">Outside (100 ft radius)</span>
-                        }
-                    </div>
-                }
-                @if (_gpsError != null)
-                {
-                    <div class="detail-row">
-                        <label>GPS Status</label>
-                        <span class="text-danger">@_gpsError</span>
-                    </div>
-                }
-                <div class="detail-row">
-                    <label>Scheduled Time</label>
-                    <span>@_selectedDelivery.ScheduledTime</span>
-                </div>
                 <div class="detail-row">
                     <label>Avg Delivery Time</label>
                     <span>@_selectedDelivery.AvgDeliveryTimeMinutes min</span>
-                </div>
-                <div class="detail-row">
-                    <label>Tank Size</label>
-                    <span>@_selectedDelivery.TankSize gal</span>
-                </div>
-                <div class="detail-row">
-                    <label>Gallons Delivered</label>
-                    <span>@_selectedDelivery.GallonsDelivered gal</span>
-                </div>
-                <div class="detail-row">
-                    <label>Status</label>
-                    <span class="delivery-status-badge @GetStatusClass(_selectedDelivery.Status)">
-                        @GetStatusText(_selectedDelivery.Status)
-                    </span>
                 </div>
             </div>
         }
