@@ -11,14 +11,14 @@ namespace PropaneDriver.Client.Services
         private readonly ErrorLogService _errorLog;
 
         private DeliveryDto? _currentDelivery;
-        private bool _isInsideFence;
+        private bool _lastCheckWasInsideGeoFence;
         private readonly Stopwatch _timer = new();
 
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
 
-        public bool IsInsideFence => _isInsideFence;
+        public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
         public bool IsMonitoring => _currentDelivery != null;
 
@@ -33,13 +33,13 @@ namespace PropaneDriver.Client.Services
         public async Task SetTargetAsync(DeliveryDto? delivery)
         {
             // If we were inside a fence for a previous target, stop the timer
-            if (_isInsideFence && _currentDelivery != null)
+            if (_lastCheckWasInsideGeoFence && _currentDelivery != null)
             {
                 await StopTimerAndSaveAsync();
             }
 
             _currentDelivery = delivery;
-            _isInsideFence = false;
+            _lastCheckWasInsideGeoFence = false;
             _timer.Reset();
         }
 
@@ -51,7 +51,7 @@ namespace PropaneDriver.Client.Services
         /// </summary>
         public async Task FlushAsync()
         {
-            if (_isInsideFence && _currentDelivery != null)
+            if (_lastCheckWasInsideGeoFence && _currentDelivery != null)
             {
                 await StopTimerAndSaveAsync();
             }
@@ -76,19 +76,19 @@ namespace PropaneDriver.Client.Services
                 var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude,
                     _currentDelivery.Location.Longitude);
 
-                var nowInside = distance <= FENCE_RADIUS;
+                var insideGeoFence = distance <= FENCE_RADIUS;
 
-                if (nowInside && !_isInsideFence)
+                if (insideGeoFence && !_lastCheckWasInsideGeoFence)
                 {
-                    _isInsideFence = true;
+                    _lastCheckWasInsideGeoFence = true;
                     _timer.Restart();
                 }
-                else if (!nowInside && _isInsideFence)
+                else if (!insideGeoFence && _lastCheckWasInsideGeoFence)
                 {
                     await StopTimerAndSaveAsync();
                 }
 
-                if (_isInsideFence)
+                if (_lastCheckWasInsideGeoFence)
                 {
                     OnTimerTick?.Invoke(_timer.Elapsed.TotalSeconds);
                 }
@@ -99,7 +99,7 @@ namespace PropaneDriver.Client.Services
                     Address = _currentDelivery.Location.FullAddress,
                     Latitude = latitude,
                     Longitude = longitude,
-                    IsInsideFence = _isInsideFence,
+                    IsInsideFence = _lastCheckWasInsideGeoFence,
                     DistanceMeters = distance
                 });
             }
@@ -113,7 +113,15 @@ namespace PropaneDriver.Client.Services
         {
             _timer.Stop();
 
-            if (_currentDelivery != null && _timer.Elapsed.TotalSeconds > 0)
+            if (_currentDelivery == null)
+            {
+                await _errorLog.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_currentDelivery is null");
+            }
+            else if (_timer.Elapsed.TotalSeconds <= 0)
+            {
+                await _errorLog.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_timer.Elapsed.TotalSeconds <= 0");
+            }
+            else
             {
                 var dto = new DeliveryTimeDto
                 {
@@ -136,7 +144,7 @@ namespace PropaneDriver.Client.Services
                 }
             }
 
-            _isInsideFence = false;
+            _lastCheckWasInsideGeoFence = false;
             _timer.Reset();
         }
 

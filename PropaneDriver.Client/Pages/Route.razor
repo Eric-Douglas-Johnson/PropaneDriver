@@ -122,9 +122,11 @@
     @if (_gpsCheckResult is not null)
     {
         <div style="font-size: 0.85rem; color: #cbd5e1;">
+
             <div><strong>Latitude:</strong> @_gpsCheckResult.Latitude.ToString("F6")</div>
             <div><strong>Longitude:</strong> @_gpsCheckResult.Longitude.ToString("F6")</div>
             <div><strong>Accuracy:</strong> @_gpsCheckResult.Accuracy.ToString("F1") m</div>
+
             @if (_activeDelivery?.Location.HasCoordinates == true)
             {
                 var distance = GeoFenceService.HaversineDistance(
