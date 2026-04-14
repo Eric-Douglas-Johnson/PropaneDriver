@@ -63,7 +63,6 @@
             <div class="delivery-item @statusClass @(isSelected ? "selected" : "") @(isActive ? "active" : "")"
                  @onclick="() => SelectDelivery(delivery)">
                 <div class="delivery-item-header">
-                    <span class="delivery-time">@delivery.ScheduledTime</span>
                     @if (isActive)
                     {
                         <span class="delivery-status-badge @(isActive && _geoFenceStatus?.IsInsideFence == true ? "geofence-inside-badge" : "active-badge")">● Active</span>
@@ -112,6 +111,54 @@
     </div>
 </div>
 
+<!-- GPS Debug -->
+<div class="gps-debug mt-3 p-3" style="background: #1a1a2e; border-radius: 8px; border: 1px solid #2a2a4a;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="m-0" style="color: #e2e8f0;">GPS Check</h5>
+        <button class="btn btn-sm btn-outline-info" @onclick="CheckGpsLocation" disabled="@_gpsChecking">
+            @(_gpsChecking ? "Checking..." : "Check Location")
+        </button>
+    </div>
+    @if (_gpsCheckResult is not null)
+    {
+        <div style="font-size: 0.85rem; color: #cbd5e1;">
+            <div><strong>Latitude:</strong> @_gpsCheckResult.Latitude.ToString("F6")</div>
+            <div><strong>Longitude:</strong> @_gpsCheckResult.Longitude.ToString("F6")</div>
+            <div><strong>Accuracy:</strong> @_gpsCheckResult.Accuracy.ToString("F1") m</div>
+            @if (_activeDelivery?.Location.HasCoordinates == true)
+            {
+                var distance = GeoFenceService.HaversineDistance(
+                    _gpsCheckResult.Latitude, _gpsCheckResult.Longitude,
+                    _activeDelivery.Location.Latitude, _activeDelivery.Location.Longitude);
+
+                var distanceFt = distance * 3.28084;
+                var insideFence = distance <= 60.96;
+
+                <div><strong>Distance to @_activeDelivery.CustomerName:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
+                <div>
+                    <strong>Geofence (200 ft):</strong>
+                    @if (insideFence)
+                    {
+                        <span style="color: #22c55e; font-weight: 600;">INSIDE</span>
+                    }
+                    else
+                    {
+                        <span style="color: #ef4444; font-weight: 600;">OUTSIDE</span>
+                    }
+                </div>
+            }
+            else
+            {
+                <div style="color: #8892b0;">No active delivery with coordinates to check against.</div>
+            }
+        </div>
+    }
+    @if (_gpsCheckError is not null)
+    {
+        <div class="text-danger" style="font-size: 0.85rem;">@_gpsCheckError</div>
+    }
+</div>
+
 @code {
     private RouteSummaryDto _routeSummary = new();
     private List<DeliveryDto> _deliveries = [];
@@ -123,6 +170,11 @@
     private string? _saveStatus;
     private bool _saveSuccess;
     private bool _wasInsideFence;
+    private bool _gpsChecking;
+    private GpsCheckResult? _gpsCheckResult;
+    private string? _gpsCheckError;
+
+    private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
 
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
@@ -222,6 +274,37 @@
             : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
     }
 
+    private async Task CheckGpsLocation()
+    {
+        _gpsChecking = true;
+        _gpsCheckResult = null;
+        _gpsCheckError = null;
+
+        try
+        {
+            // Use the current values from the GeolocationService (already watching)
+            if (GeolocationService.IsWatching && (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0))
+            {
+                _gpsCheckResult = new GpsCheckResult(
+                    GeolocationService.CurrentLatitude,
+                    GeolocationService.CurrentLongitude,
+                    GeolocationService.CurrentAccuracy);
+            }
+            else
+            {
+                _gpsCheckError = "GPS not available yet. Ensure location permissions are granted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _gpsCheckError = $"GPS error: {ex.Message}";
+        }
+        finally
+        {
+            _gpsChecking = false;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         // Flush any in-progress timer before tearing down
@@ -268,17 +351,11 @@
         _deliveries = new List<DeliveryDto>
         {
             new() {
-                Id = "1", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "8:00 AM",
-                CustomerName = "Russ Kallio", AvgDeliveryTimeMinutes = 0,
-                Location = new() { Street = "3435 Anderson Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3612, Longitude = -92.9698 },
+                Id = "1", Date = DateOnly.FromDateTime(DateTime.Today),
+                CustomerName = "Eric Johnson", AvgDeliveryTimeMinutes = 20,
+                Location = new() { Street = "3619 N Estates Dr", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3804, Longitude = -92.9133 },
                 Status = 0
-            },
-            new() {
-                Id = "2", Date = DateOnly.FromDateTime(DateTime.Today), ScheduledTime = "9:00 AM",
-                CustomerName = "Kevin Hagen", AvgDeliveryTimeMinutes = 0,
-                Location = new() { Street = "3836 South Salmi Road", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3961, Longitude = -92.8936 },
-                Status = 0
-            },
+            }
         };
 
         _routeSummary = new RouteSummaryDto

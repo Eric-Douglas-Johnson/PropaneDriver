@@ -4,7 +4,6 @@ namespace PropaneDriver.Shared.Dtos
     {
         public string Id { get; set; } = string.Empty;
         public DateOnly Date { get; set; }
-        public string ScheduledTime { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
         public GeoAddressDto Location { get; set; } = new();
         public double AvgDeliveryTimeMinutes { get; set; }
@@ -12,7 +11,7 @@ namespace PropaneDriver.Shared.Dtos
 
         public override string ToString()
         {
-            return CustomerName + " - " + ScheduledTime;
+            return CustomerName;
         }
     }
 }

@@ -5,7 +5,7 @@ namespace PropaneDriver.Client.Services
 {
     public class GeoFenceService
     {
-        private const double FENCE_RADIUS = 30.48; // 100 feet
+        private const double FENCE_RADIUS = 60.96; // 200 feet
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
         private readonly ErrorLogService _errorLog;
