@@ -7,8 +7,7 @@
 
 .nav-header {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     background-color: #1a1a2e;
@@ -16,34 +15,26 @@
     border-radius: 8px;
 }
 
-.nav-header h4 {
-    color: whitesmoke;
-    margin: 0;
-    font-size: 1.1rem;
-    flex: 0 0 auto;
-}
-
-.nav-controls {
-    display: flex;
-    gap: 0.5rem;
-    flex: 1 1 auto;
-    min-width: 240px;
-    align-items: center;
-}
-
-.nav-controls input {
-    flex: 1 1 auto;
+.destination-input {
+    width: 100%;
     background-color: #0f0f1e;
     color: whitesmoke;
     border: 1px solid #2a2a4a;
+    font-size: 1.75rem;
+    font-weight: 500;
+    padding: 1rem 1.25rem;
+    min-height: 4rem;
+    letter-spacing: 0.01em;
 }
 
-.nav-controls .destination-input {
-    font-size: 1.25rem;
-    font-weight: 500;
-    padding: 0.75rem 1rem;
-    min-height: 3rem;
-    letter-spacing: 0.01em;
+.destination-input::placeholder {
+    color: #8892b0;
+}
+
+.nav-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .nav-controls input::placeholder {

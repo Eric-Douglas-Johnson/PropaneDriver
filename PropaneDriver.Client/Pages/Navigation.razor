@@ -14,14 +14,13 @@
 
 <div class="nav-page">
     <div class="nav-header">
-        <h4>Navigation</h4>
-        <div class="nav-controls">
-            <input type="text" class="form-control destination-input" placeholder="Destination address"
-                   @bind="_destination" @bind:event="oninput" />
-            <button class="btn btn-sm btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
+        <input type="text" class="form-control destination-input" placeholder="Destination address"
+               @bind="_destination" @bind:event="oninput" />
+        <div class="nav-buttons">
+            <button class="btn btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
                 Get Directions
             </button>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="OpenInGoogleMaps" disabled="@string.IsNullOrWhiteSpace(_destination)">
+            <button class="btn btn-outline-secondary" @onclick="OpenInGoogleMaps" disabled="@string.IsNullOrWhiteSpace(_destination)">
                 Open in Maps
             </button>
         </div>
