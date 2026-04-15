@@ -127,6 +127,12 @@
             @(_gpsChecking ? "Checking..." : "Check Location")
         </button>
     </div>
+    <div class="d-flex align-items-center gap-2 mb-2" style="font-size: 0.85rem; color: #cbd5e1;">
+        <strong>Geofence radius:</strong>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => AdjustFenceRadius(-25)">−25 ft</button>
+        <span style="min-width: 4.5rem; text-align: center; font-weight: 600;">@GeoFenceService.FenceRadiusFeet.ToString("F0") ft</span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => AdjustFenceRadius(25)">+25 ft</button>
+    </div>
     @if (_gpsCheckResult is not null)
     {
         <div style="font-size: 0.85rem; color: #cbd5e1;">
@@ -142,11 +148,11 @@
                     _activeDelivery.Location.Latitude, _activeDelivery.Location.Longitude);
 
                 var distanceFt = distance * 3.28084;
-                var insideFence = distance <= 60.96;
+                var insideFence = distance <= GeoFenceService.FenceRadiusMeters;
 
                 <div><strong>Distance to @_activeDelivery.CustomerName:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
                 <div>
-                    <strong>Geofence (200 ft):</strong>
+                    <strong>Geofence (@GeoFenceService.FenceRadiusFeet.ToString("F0") ft):</strong>
                     @if (insideFence)
                     {
                         <span style="color: #22c55e; font-weight: 600;">INSIDE</span>
@@ -205,6 +211,11 @@
 
         // Auto-start GPS monitoring
         await GeolocationService.StartWatchingAsync();
+    }
+
+    private void AdjustFenceRadius(double deltaFeet)
+    {
+        GeoFenceService.AdjustFenceRadiusFeet(deltaFeet);
     }
 
     private async Task ScrollToGpsCheck()

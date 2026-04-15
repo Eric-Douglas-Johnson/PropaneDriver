@@ -5,7 +5,25 @@ namespace PropaneDriver.Client.Services
 {
     public class GeoFenceService
     {
-        private const double FENCE_RADIUS = 60.96; // 200 feet
+        private const double METERS_PER_FOOT = 0.3048;
+        private const double MIN_FENCE_RADIUS_FT = 25;
+        private const double MAX_FENCE_RADIUS_FT = 2000;
+
+        public double FenceRadiusMeters { get; private set; } = 200 * METERS_PER_FOOT; // 200 feet default
+        public double FenceRadiusFeet => FenceRadiusMeters / METERS_PER_FOOT;
+
+        public void AdjustFenceRadiusFeet(double deltaFeet)
+        {
+            var newFeet = Math.Clamp(FenceRadiusFeet + deltaFeet, MIN_FENCE_RADIUS_FT, MAX_FENCE_RADIUS_FT);
+            FenceRadiusMeters = newFeet * METERS_PER_FOOT;
+        }
+
+        public void SetFenceRadiusFeet(double feet)
+        {
+            var clamped = Math.Clamp(feet, MIN_FENCE_RADIUS_FT, MAX_FENCE_RADIUS_FT);
+            FenceRadiusMeters = clamped * METERS_PER_FOOT;
+        }
+
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
         private readonly ErrorLogService _errorLog;
@@ -76,7 +94,7 @@ namespace PropaneDriver.Client.Services
                 var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude,
                     _currentDelivery.Location.Longitude);
 
-                var insideGeoFence = distance <= FENCE_RADIUS;
+                var insideGeoFence = distance <= FenceRadiusMeters;
 
                 if (insideGeoFence && !_lastCheckWasInsideGeoFence)
                 {
