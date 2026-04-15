@@ -394,9 +394,45 @@
         _deliveries = new List<DeliveryDto>
         {
             new() {
-                Id = "1", Date = DateOnly.FromDateTime(DateTime.Today),
-                CustomerName = "Eric Johnson", AvgDeliveryTimeMinutes = 20,
-                Location = new() { Street = "3619 N Estates Dr", City = "Hibbing", State = "MN", ZipCode = "55746", Latitude = 47.3804, Longitude = -92.9133 },
+                Id = "1", 
+                Date = DateOnly.FromDateTime(DateTime.Today),
+                CustomerName = "Rubin Rusco", 
+                AvgDeliveryTimeMinutes = 20,
+
+                Location = new() 
+                { 
+                    Street = "10292 Hwy 37", City = "Hibbing", State = "MN", ZipCode = "55746", 
+                    Latitude = 47.3998786634559, Longitude = -92.7751257839519
+                },
+
+                Status = 0
+            },
+            new() {
+                Id = "2",
+                Date = DateOnly.FromDateTime(DateTime.Today),
+                CustomerName = "Lyle Goerdt",
+                AvgDeliveryTimeMinutes = 20,
+
+                Location = new()
+                {
+                    Street = "3904 Gerzin Road", City = "Hibbing", State = "MN", ZipCode = "55746",
+                    Latitude = 47.40141396164016, Longitude = -92.73815967346705
+                },
+
+                Status = 0
+            },
+            new() {
+                Id = "3",
+                Date = DateOnly.FromDateTime(DateTime.Today),
+                CustomerName = "Clinton Lind",
+                AvgDeliveryTimeMinutes = 20,
+
+                Location = new()
+                {
+                    Street = "9960 Hwy 37", City = "Mountain Iron", State = "MN", ZipCode = "55746",
+                    Latitude = 47.398928904866324, Longitude = -92.73094427346714
+                },
+
                 Status = 0
             }
         };

@@ -1,0 +1,112 @@
+@page "/navigation"
+@using PropaneDriver.Client.Services
+@inject GeolocationService GeolocationService
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+<PageTitle>Navigation</PageTitle>
+
+<div class="nav-page">
+    <div class="nav-header">
+        <h4>Navigation</h4>
+        <div class="nav-controls">
+            <input type="text" class="form-control form-control-sm" placeholder="Destination address"
+                   @bind="_destination" @bind:event="oninput" />
+            <button class="btn btn-sm btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
+                Get Directions
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="OpenInGoogleMaps" disabled="@string.IsNullOrWhiteSpace(_destination)">
+                Open in Maps
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_status))
+    {
+        <div class="nav-status">@_status</div>
+    }
+
+    <div class="nav-map">
+        <iframe src="@_mapUrl"
+                allowfullscreen=""
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade">
+        </iframe>
+    </div>
+</div>
+
+@code {
+    // Default view — Hibbing, MN area. Replaced once we have a GPS fix.
+    private const double DefaultLat = 47.4273;
+    private const double DefaultLon = -92.9378;
+
+    private string _destination = string.Empty;
+    private string _mapUrl = $"https://www.google.com/maps?q={DefaultLat},{DefaultLon}&z=11&output=embed";
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        GeolocationService.OnPositionChanged += HandlePositionChanged;
+
+        if (!GeolocationService.IsWatching)
+        {
+            await GeolocationService.StartWatchingAsync();
+        }
+        else if (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0)
+        {
+            // Already have a fix — center on it immediately.
+            UpdateMapToCurrentLocation();
+        }
+    }
+
+    private void HandlePositionChanged(double lat, double lon, double accuracy)
+    {
+        // Only auto-center on the first fix so the user's manual navigation/zoom isn't stomped on.
+        if (!_hasCenteredOnGps)
+        {
+            _hasCenteredOnGps = true;
+            UpdateMapToCurrentLocation();
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool _hasCenteredOnGps;
+
+    private void UpdateMapToCurrentLocation()
+    {
+        var lat = GeolocationService.CurrentLatitude;
+        var lon = GeolocationService.CurrentLongitude;
+        if (lat == 0 && lon == 0) return;
+        _mapUrl = $"https://www.google.com/maps?q={lat},{lon}&z=15&output=embed";
+    }
+
+    private void GetDirections()
+    {
+        if (string.IsNullOrWhiteSpace(_destination)) return;
+
+        var origin = GeolocationService.IsWatching
+                     && (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0)
+            ? $"{GeolocationService.CurrentLatitude},{GeolocationService.CurrentLongitude}"
+            : "Current+Location";
+
+        var dest = Uri.EscapeDataString(_destination);
+        // Unofficial but widely-used directions embed; works without an API key.
+        _mapUrl = $"https://www.google.com/maps?saddr={origin}&daddr={dest}&output=embed";
+        _status = $"Routing to {_destination}…";
+    }
+
+    private async Task OpenInGoogleMaps()
+    {
+        if (string.IsNullOrWhiteSpace(_destination)) return;
+
+        var dest = Uri.EscapeDataString(_destination);
+        var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
+
+    public void Dispose()
+    {
+        GeolocationService.OnPositionChanged -= HandlePositionChanged;
+    }
+}
