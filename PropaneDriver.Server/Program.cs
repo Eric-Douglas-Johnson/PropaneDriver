@@ -50,11 +50,21 @@ using (var scope = app.Services.CreateScope())
                 CREATE INDEX [IX_ErrorLog_Source] ON [ErrorLog] ([Source]);
                 CREATE INDEX [IX_ErrorLog_Timestamp] ON [ErrorLog] ([Timestamp]);
             END
+
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryStatus')
+            BEGIN
+                CREATE TABLE [DeliveryStatus] (
+                    [DeliveryId] nvarchar(100) NOT NULL PRIMARY KEY,
+                    [Status] int NOT NULL,
+                    [UpdatedAt] datetime2 NOT NULL
+                );
+                CREATE INDEX [IX_DeliveryStatus_UpdatedAt] ON [DeliveryStatus] ([UpdatedAt]);
+            END
         ");
     }
     catch (Exception ex)
     {
-        app.Logger.LogError(ex, "ErrorLog table creation failed at startup; will retry on first request.");
+        app.Logger.LogError(ex, "Startup table creation failed; will retry on first request.");
     }
 }
 
@@ -274,6 +284,40 @@ app.MapGet("api/delivery-times/average/{address}", async (string address, Propan
 
     var avg = times.Average();
     return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
+});
+
+// Update (upsert) a delivery's status
+app.MapPut("api/deliveries/{id}/status", async (string id, DeliveryStatusUpdateDto dto, PropaneDriverDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(id))
+        return Results.BadRequest(new { Message = "Delivery id is required." });
+
+    try
+    {
+        var existing = await db.DeliveryStatuses.FindAsync(id);
+        if (existing is null)
+        {
+            db.DeliveryStatuses.Add(new DeliveryStatusEntity
+            {
+                DeliveryId = id,
+                Status = dto.Status,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            existing.Status = dto.Status;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
+        return Results.Ok(new { DeliveryId = id, dto.Status });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to update status for delivery {Id}", id);
+        return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
+    }
 });
 
 // Log a client-side error

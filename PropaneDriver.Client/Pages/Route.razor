@@ -6,6 +6,7 @@
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
+@inject DeliveryStatusApiService DeliveryStatusApi
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
@@ -241,8 +242,7 @@
     }
 
     private DeliveryDto? FindNextDelivery()
-        => _deliveries.FirstOrDefault(d => d.Status == 1)
-           ?? _deliveries.FirstOrDefault(d => d.Status == 0);
+        => _deliveries.FirstOrDefault(d => d.Status == 0);
 
     private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
     {
@@ -253,18 +253,26 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void HandleFenceStatusChanged(GeoFenceEventArgs args)
+    private async void HandleFenceStatusChanged(GeoFenceEventArgs args)
     {
         _geoFenceStatus = args;
 
         // Detect inside -> outside transition. If the active delivery was
-        // never marked completed/unable, auto-advance to the next delivery.
+        // never marked completed/unable, mark it complete, persist the
+        // status, and auto-advance to the next delivery.
         if (_wasInsideFence && !args.IsInsideFence)
         {
             if (_activeDelivery is not null && _activeDelivery.Status < 2)
             {
+                var completedDelivery = _activeDelivery;
+                completedDelivery.Status = 2; // Complete
+
+                // Persist the status change (fire-and-forget-safe; the API
+                // service catches and logs its own errors).
+                _ = DeliveryStatusApi.UpdateStatusAsync(completedDelivery.Id, 2);
+
                 var next = FindNextDelivery();
-                if (next is not null && next.Id != _activeDelivery.Id)
+                if (next is not null && next.Id != completedDelivery.Id)
                 {
                     SetActiveDelivery(next);
                 }
@@ -272,7 +280,7 @@
         }
         _wasInsideFence = args.IsInsideFence;
 
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     private void SetActiveDelivery(DeliveryDto? delivery)
@@ -358,7 +366,6 @@
     private static string GetStatusClass(int status) => status switch
     {
         0 => "status-pending",
-        1 => "status-in-progress",
         2 => "status-complete",
         3 => "status-unable",
         _ => ""
@@ -367,7 +374,6 @@
     private static string GetStatusText(int status) => status switch
     {
         0 => "Pending",
-        1 => "In Progress",
         2 => "Complete",
         3 => "Unable",
         _ => "Unknown"
@@ -406,7 +412,6 @@
             Alerts = new List<string>()
         };
 
-        _selectedDelivery = _deliveries.FirstOrDefault(d => d.Status == 1)
-            ?? _deliveries.FirstOrDefault();
+        _selectedDelivery = _deliveries.FirstOrDefault();
     }
 }
