@@ -74,7 +74,8 @@
                 <div class="delivery-item-header">
                     @if (isActive)
                     {
-                        <span class="delivery-status-badge @(isActive && _geoFenceStatus?.IsInsideFence == true ? "geofence-inside-badge" : "active-badge")">● Active</span>
+                        var inside = _geoFenceStatus?.IsInsideFence == true;
+                        <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
                     }
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                 </div>
