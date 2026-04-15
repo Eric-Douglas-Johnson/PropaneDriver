@@ -16,7 +16,7 @@
     <div class="nav-header">
         <h4>Navigation</h4>
         <div class="nav-controls">
-            <input type="text" class="form-control form-control-sm" placeholder="Destination address"
+            <input type="text" class="form-control destination-input" placeholder="Destination address"
                    @bind="_destination" @bind:event="oninput" />
             <button class="btn btn-sm btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
                 Get Directions

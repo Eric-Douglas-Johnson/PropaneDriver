@@ -38,6 +38,14 @@
     border: 1px solid #2a2a4a;
 }
 
+.nav-controls .destination-input {
+    font-size: 1.25rem;
+    font-weight: 500;
+    padding: 0.75rem 1rem;
+    min-height: 3rem;
+    letter-spacing: 0.01em;
+}
+
 .nav-controls input::placeholder {
     color: #8892b0;
 }
