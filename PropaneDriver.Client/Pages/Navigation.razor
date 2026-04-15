@@ -15,7 +15,7 @@
 <div class="nav-page">
     <div class="nav-header">
         <input type="text" class="form-control destination-input" placeholder="Destination address"
-               @bind="_destination" @bind:event="oninput" />
+               value="@_destination" @oninput="OnDestinationInput" />
         <div class="nav-buttons">
             <button class="btn btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
                 Get Directions
@@ -45,7 +45,8 @@
     private const double DefaultLat = 47.4273;
     private const double DefaultLon = -92.9378;
 
-    private string _destination = string.Empty;
+    private string _destination = string.Empty;      // shown in the input (street only when arriving via query)
+    private string _fullDestination = string.Empty;   // full address used for routing
     private string _mapUrl = $"https://www.google.com/maps?q={DefaultLat},{DefaultLon}&z=11&output=embed";
     private string? _status;
 
@@ -64,9 +65,13 @@
         }
 
         // If arrived via ?destination=..., pre-fill and auto-route.
+        // Show only the street portion in the input but keep the full
+        // address for accurate routing.
         if (!string.IsNullOrWhiteSpace(DestinationQuery))
         {
-            _destination = DestinationQuery;
+            _fullDestination = DestinationQuery;
+            var firstComma = DestinationQuery.IndexOf(',');
+            _destination = firstComma > 0 ? DestinationQuery[..firstComma].Trim() : DestinationQuery;
             GetDirections();
         }
     }
@@ -92,16 +97,26 @@
         _mapUrl = $"https://www.google.com/maps?q={lat},{lon}&z=15&output=embed";
     }
 
+    private void OnDestinationInput(ChangeEventArgs e)
+    {
+        _destination = e.Value?.ToString() ?? string.Empty;
+        // Manual edit invalidates the cached full address; route by what's typed.
+        _fullDestination = string.Empty;
+    }
+
+    private string RoutingDestination =>
+        !string.IsNullOrWhiteSpace(_fullDestination) ? _fullDestination : _destination;
+
     private void GetDirections()
     {
-        if (string.IsNullOrWhiteSpace(_destination)) return;
+        if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
         var origin = GeolocationService.IsWatching
                      && (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0)
             ? $"{GeolocationService.CurrentLatitude},{GeolocationService.CurrentLongitude}"
             : "Current+Location";
 
-        var dest = Uri.EscapeDataString(_destination);
+        var dest = Uri.EscapeDataString(RoutingDestination);
         // Unofficial but widely-used directions embed; works without an API key.
         _mapUrl = $"https://www.google.com/maps?saddr={origin}&daddr={dest}&output=embed";
         _status = $"Routing to {_destination}…";
@@ -109,9 +124,9 @@
 
     private async Task OpenInGoogleMaps()
     {
-        if (string.IsNullOrWhiteSpace(_destination)) return;
+        if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
-        var dest = Uri.EscapeDataString(_destination);
+        var dest = Uri.EscapeDataString(RoutingDestination);
         var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
