@@ -82,7 +82,8 @@
 .route-content {
     display: flex;
     gap: 1rem;
-    min-height: calc(100vh - 14rem);
+    min-height: calc(100vh - 26rem);
+    max-height: calc(100vh - 26rem);
 }
 
 /* ===== Delivery List (Left Panel) ===== */
@@ -93,7 +94,7 @@
     border-radius: 8px;
     padding: 1rem;
     overflow-y: auto;
-    max-height: calc(100vh - 14rem);
+    max-height: calc(100vh - 26rem);
 }
 
 .delivery-list h5 {
@@ -191,6 +192,7 @@
     border: 1px solid #2a2a4a;
     border-radius: 8px;
     padding: 1.25rem;
+    overflow-y: auto;
 }
 
 .delivery-detail h5 {
