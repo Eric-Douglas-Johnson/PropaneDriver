@@ -1,3 +1,31 @@
+/* ===== Top Deliveries Menu ===== */
+.deliveries-menu {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.menu-btn {
+    background-color: #1a1a2e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.menu-btn:hover {
+    background-color: #252545;
+    border-color: #4a6cf7;
+}
+
+.menu-btn:active {
+    background-color: #1e3a5f;
+}
+
 /* ===== Route Summary (Top Bar) ===== */
 .route-summary {
     display: flex;

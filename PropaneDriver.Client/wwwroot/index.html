@@ -90,6 +90,13 @@
                 window._geoWatchId = null;
             }
         };
+
+        window.scrollToElement = function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
     </script>
 </body>
 

@@ -6,10 +6,18 @@
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
+@inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Route</PageTitle>
+
+<!-- Top Button Menu -->
+<div class="deliveries-menu">
+    <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
+    <button class="menu-btn" @onclick="MenuAction2">Action 2</button>
+    <button class="menu-btn" @onclick="MenuAction3">Action 3</button>
+</div>
 
 <!-- Route Summary -->
 <div class="route-summary">
@@ -112,7 +120,7 @@
 </div>
 
 <!-- GPS Debug -->
-<div class="gps-debug mt-3 p-3" style="background: #1a1a2e; border-radius: 8px; border: 1px solid #2a2a4a;">
+<div id="gps-check" class="gps-debug mt-3 p-3" style="background: #1a1a2e; border-radius: 8px; border: 1px solid #2a2a4a;">
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="m-0" style="color: #e2e8f0;">GPS Check</h5>
         <button class="btn btn-sm btn-outline-info" @onclick="CheckGpsLocation" disabled="@_gpsChecking">
@@ -197,6 +205,21 @@
 
         // Auto-start GPS monitoring
         await GeolocationService.StartWatchingAsync();
+    }
+
+    private async Task ScrollToGpsCheck()
+    {
+        await JS.InvokeVoidAsync("scrollToElement", "gps-check");
+    }
+
+    private void MenuAction2()
+    {
+        // TODO: wire up second menu action
+    }
+
+    private void MenuAction3()
+    {
+        // TODO: wire up third menu action
     }
 
     private void SelectDelivery(DeliveryDto delivery)
