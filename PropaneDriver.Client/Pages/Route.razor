@@ -7,6 +7,7 @@
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
 @inject DeliveryStatusApiService DeliveryStatusApi
+@inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
@@ -16,7 +17,7 @@
 <!-- Top Button Menu -->
 <div class="deliveries-menu">
     <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
-    <button class="menu-btn" @onclick="MenuAction2">Action 2</button>
+    <button class="menu-btn" @onclick="NavigateToActive" disabled="@(_activeDelivery is null)">Navigate to Active</button>
     <button class="menu-btn" @onclick="MenuAction3">Action 3</button>
 </div>
 
@@ -116,6 +117,9 @@
                     <label>Avg Delivery Time</label>
                     <span>@_selectedDelivery.AvgDeliveryTimeMinutes min</span>
                 </div>
+            </div>
+            <div class="detail-actions">
+                <button class="btn btn-sm btn-primary" @onclick="NavigateToSelected">Navigate</button>
             </div>
         }
     </div>
@@ -225,9 +229,23 @@
         await JS.InvokeVoidAsync("scrollToElement", "gps-check");
     }
 
-    private void MenuAction2()
+    private void NavigateToActive()
     {
-        // TODO: wire up second menu action
+        if (_activeDelivery is null) return;
+        NavigateToDelivery(_activeDelivery);
+    }
+
+    private void NavigateToSelected()
+    {
+        if (_selectedDelivery is null) return;
+        NavigateToDelivery(_selectedDelivery);
+    }
+
+    private void NavigateToDelivery(DeliveryDto delivery)
+    {
+        var address = delivery.Location.FullAddress;
+        if (string.IsNullOrWhiteSpace(address)) return;
+        Nav.NavigateTo($"/navigation?destination={Uri.EscapeDataString(address)}");
     }
 
     private void MenuAction3()

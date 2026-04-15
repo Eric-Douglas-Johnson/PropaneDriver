@@ -1,7 +1,14 @@
 @page "/navigation"
 @using PropaneDriver.Client.Services
 @inject GeolocationService GeolocationService
+@inject Microsoft.JSInterop.IJSRuntime JS
+@implements IDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+@code {
+    [SupplyParameterFromQuery(Name = "destination")]
+    public string? DestinationQuery { get; set; }
+}
 
 <PageTitle>Navigation</PageTitle>
 
@@ -56,6 +63,13 @@
             // Already have a fix — center on it immediately.
             UpdateMapToCurrentLocation();
         }
+
+        // If arrived via ?destination=..., pre-fill and auto-route.
+        if (!string.IsNullOrWhiteSpace(DestinationQuery))
+        {
+            _destination = DestinationQuery;
+            GetDirections();
+        }
     }
 
     private void HandlePositionChanged(double lat, double lon, double accuracy)
@@ -102,8 +116,6 @@
         var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
-
-    [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
 
     public void Dispose()
     {

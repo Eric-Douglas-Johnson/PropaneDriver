@@ -34,6 +34,15 @@
             </AuthorizeView>
         </div>
         <div class="nav-item px-3">
+            <AuthorizeView Roles="driver">
+                <Authorized>
+                    <NavLink class="nav-link" href="navigation">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Navigation
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <div class="nav-item px-3">
             <AuthorizeView>
                 <Authorized>
                     <label class="text-white">
