@@ -56,9 +56,7 @@
     min-height: 400px;
 }
 
-.nav-map iframe {
+#leaflet-map {
     width: 100%;
     height: 100%;
-    border: 0;
-    display: block;
 }

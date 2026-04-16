@@ -1,8 +1,9 @@
 @page "/navigation"
 @using PropaneDriver.Client.Services
 @inject GeolocationService GeolocationService
+@inject GeocodingService Geocoder
 @inject Microsoft.JSInterop.IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 @code {
@@ -17,8 +18,8 @@
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
         <div class="nav-buttons">
-            <button class="btn btn-primary" @onclick="GetDirections" disabled="@string.IsNullOrWhiteSpace(_destination)">
-                Get Directions
+            <button class="btn btn-primary" @onclick="GetDirections" disabled="@(_routing || string.IsNullOrWhiteSpace(_destination))">
+                @(_routing ? "Routing…" : "Get Directions")
             </button>
             <button class="btn btn-outline-secondary" @onclick="OpenInGoogleMaps" disabled="@string.IsNullOrWhiteSpace(_destination)">
                 Open in Maps
@@ -32,107 +33,193 @@
     }
 
     <div class="nav-map">
-        <iframe src="@_mapUrl"
-                allowfullscreen=""
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
+        <div id="leaflet-map"></div>
     </div>
 </div>
 
 @code {
-    // Default view — Hibbing, MN area. Replaced once we have a GPS fix.
     private const double DefaultLat = 47.4273;
     private const double DefaultLon = -92.9378;
 
-    private string _destination = string.Empty;      // shown in the input (street only when arriving via query)
-    private string _fullDestination = string.Empty;   // full address used for routing
-    private string _mapUrl = $"https://www.google.com/maps?q={DefaultLat},{DefaultLon}&z=11&output=embed";
+    private string _destination = string.Empty;
+    private string _fullDestination = string.Empty;
     private string? _status;
+    private bool _mapInitialized;
+    private bool _routing;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        GeolocationService.OnPositionChanged += HandlePositionChanged;
+        if (firstRender)
+        {
+            // Initialize the Leaflet map
+            var lat = GeolocationService.CurrentLatitude;
+            var lon = GeolocationService.CurrentLongitude;
+            if (lat == 0 && lon == 0) { lat = DefaultLat; lon = DefaultLon; }
 
-        if (!GeolocationService.IsWatching)
-        {
-            await GeolocationService.StartWatchingAsync();
-        }
-        else if (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0)
-        {
-            // Already have a fix — center on it immediately.
-            UpdateMapToCurrentLocation();
-        }
+            await JS.InvokeVoidAsync("navMapInit", "leaflet-map", lat, lon, 13);
+            _mapInitialized = true;
 
-        // If arrived via ?destination=..., pre-fill and auto-route.
-        // Show only the street portion in the input but keep the full
-        // address for accurate routing.
-        if (!string.IsNullOrWhiteSpace(DestinationQuery))
-        {
-            _fullDestination = DestinationQuery;
-            var firstComma = DestinationQuery.IndexOf(',');
-            _destination = firstComma > 0 ? DestinationQuery[..firstComma].Trim() : DestinationQuery;
-            GetDirections();
+            // Subscribe to GPS updates
+            GeolocationService.OnPositionChanged += HandlePositionChanged;
+
+            if (!GeolocationService.IsWatching)
+            {
+                await GeolocationService.StartWatchingAsync();
+            }
+
+            // If arrived with a destination query, auto-route
+            if (!string.IsNullOrWhiteSpace(DestinationQuery))
+            {
+                _fullDestination = DestinationQuery;
+                var firstComma = DestinationQuery.IndexOf(',');
+                _destination = firstComma > 0 ? DestinationQuery[..firstComma].Trim() : DestinationQuery;
+                StateHasChanged();
+                await FetchAndDrawRoute();
+            }
         }
     }
 
-    private void HandlePositionChanged(double lat, double lon, double accuracy)
+    private async void HandlePositionChanged(double lat, double lon, double accuracy)
     {
-        // Only auto-center on the first fix so the user's manual navigation/zoom isn't stomped on.
-        if (!_hasCenteredOnGps)
+        if (!_mapInitialized) return;
+        try
         {
-            _hasCenteredOnGps = true;
-            UpdateMapToCurrentLocation();
-            InvokeAsync(StateHasChanged);
+            await JS.InvokeVoidAsync("navMapUpdateDriver", lat, lon);
         }
-    }
-
-    private bool _hasCenteredOnGps;
-
-    private void UpdateMapToCurrentLocation()
-    {
-        var lat = GeolocationService.CurrentLatitude;
-        var lon = GeolocationService.CurrentLongitude;
-        if (lat == 0 && lon == 0) return;
-        _mapUrl = $"https://www.google.com/maps?q={lat},{lon}&z=15&output=embed";
+        catch { }
     }
 
     private void OnDestinationInput(ChangeEventArgs e)
     {
         _destination = e.Value?.ToString() ?? string.Empty;
-        // Manual edit invalidates the cached full address; route by what's typed.
         _fullDestination = string.Empty;
     }
 
     private string RoutingDestination =>
         !string.IsNullOrWhiteSpace(_fullDestination) ? _fullDestination : _destination;
 
-    private void GetDirections()
+    private async Task GetDirections()
+    {
+        await FetchAndDrawRoute();
+    }
+
+    private async Task FetchAndDrawRoute()
     {
         if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
-        var origin = GeolocationService.IsWatching
-                     && (GeolocationService.CurrentLatitude != 0 || GeolocationService.CurrentLongitude != 0)
-            ? $"{GeolocationService.CurrentLatitude},{GeolocationService.CurrentLongitude}"
-            : "Current+Location";
-
-        var dest = Uri.EscapeDataString(RoutingDestination);
-        // Unofficial but widely-used directions embed; works without an API key.
-        _mapUrl = $"https://www.google.com/maps?saddr={origin}&daddr={dest}&output=embed";
+        _routing = true;
         _status = $"Routing to {_destination}…";
+        StateHasChanged();
+
+        // Geocode the destination to get lat/lon
+        var parts = RoutingDestination.Split(',');
+        string street = "", city = "", state = "", zip = "";
+        if (parts.Length >= 1) street = parts[0].Trim();
+        if (parts.Length >= 2) city = parts[1].Trim();
+        if (parts.Length >= 3) state = parts[2].Trim();
+        if (parts.Length >= 4) zip = parts[3].Trim();
+
+        var geocodeResult = await Geocoder.GeocodeAsync(street, city, state, zip);
+
+        if (geocodeResult is null)
+        {
+            _status = "Could not geocode destination address.";
+            _routing = false;
+            return;
+        }
+
+        var destLat = geocodeResult.Latitude;
+        var destLon = geocodeResult.Longitude;
+
+        // Place destination marker
+        await JS.InvokeVoidAsync("navMapSetDestination", destLat, destLon, _destination);
+
+        // Get current position for origin
+        var originLat = GeolocationService.CurrentLatitude;
+        var originLon = GeolocationService.CurrentLongitude;
+
+        if (originLat == 0 && originLon == 0)
+        {
+            _status = $"Destination set. Waiting for GPS fix to draw route…";
+            _routing = false;
+            return;
+        }
+
+        // Fetch route from OSRM (free, no API key)
+        try
+        {
+            var osrmUrl = $"https://router.project-osrm.org/route/v1/driving/{originLon},{originLat};{destLon},{destLat}?overview=full&geometries=geojson";
+            using var http = new HttpClient();
+            var response = await http.GetAsync(osrmUrl);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<OsrmResponse>();
+                if (json?.Routes?.Length > 0)
+                {
+                    var coords = json.Routes[0].Geometry.Coordinates;
+                    // OSRM returns [lon, lat] — Leaflet wants [lat, lon]
+                    var latLngs = coords.Select(c => new double[] { c[1], c[0] }).ToArray();
+                    await JS.InvokeVoidAsync("navMapDrawRoute", (object)latLngs);
+
+                    var distMiles = json.Routes[0].Distance / 1609.34;
+                    var durMin = json.Routes[0].Duration / 60.0;
+                    _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
+                }
+                else
+                {
+                    _status = "No route found.";
+                }
+            }
+            else
+            {
+                _status = "Routing service unavailable.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = $"Routing error: {ex.Message}";
+        }
+
+        _routing = false;
     }
 
     private async Task OpenInGoogleMaps()
     {
         if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
-
         var dest = Uri.EscapeDataString(RoutingDestination);
         var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
         await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         GeolocationService.OnPositionChanged -= HandlePositionChanged;
+        try { await JS.InvokeVoidAsync("navMapDestroy"); } catch { }
+    }
+
+    // OSRM response models
+    private class OsrmResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("routes")]
+        public OsrmRoute[] Routes { get; set; } = Array.Empty<OsrmRoute>();
+    }
+
+    private class OsrmRoute
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("distance")]
+        public double Distance { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("duration")]
+        public double Duration { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("geometry")]
+        public OsrmGeometry Geometry { get; set; } = new();
+    }
+
+    private class OsrmGeometry
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("coordinates")]
+        public double[][] Coordinates { get; set; } = Array.Empty<double[]>();
     }
 }

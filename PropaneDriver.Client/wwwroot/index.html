@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="PropaneDriver.Client.styles.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
 <body>
@@ -95,6 +97,75 @@
             var el = document.getElementById(id);
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
+        // ===== Leaflet map interop =====
+        window._navMap = null;
+        window._navDriverMarker = null;
+        window._navDestMarker = null;
+        window._navRouteLine = null;
+
+        window.navMapInit = function (elementId, lat, lon, zoom) {
+            if (window._navMap) {
+                window._navMap.remove();
+                window._navMap = null;
+            }
+            var map = L.map(elementId).setView([lat, lon], zoom);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            window._navMap = map;
+
+            // driver marker (blue circle)
+            window._navDriverMarker = L.circleMarker([lat, lon], {
+                radius: 10, fillColor: '#3b82f6', fillOpacity: 1,
+                color: '#1e3a5f', weight: 2
+            }).addTo(map).bindPopup('You');
+        };
+
+        window.navMapUpdateDriver = function (lat, lon) {
+            if (!window._navMap || !window._navDriverMarker) return;
+            var latlng = L.latLng(lat, lon);
+            window._navDriverMarker.setLatLng(latlng);
+            window._navMap.panTo(latlng);
+        };
+
+        window.navMapSetDestination = function (lat, lon, label) {
+            if (!window._navMap) return;
+            if (window._navDestMarker) {
+                window._navMap.removeLayer(window._navDestMarker);
+            }
+            window._navDestMarker = L.marker([lat, lon])
+                .addTo(window._navMap)
+                .bindPopup(label || 'Destination');
+        };
+
+        window.navMapDrawRoute = function (coordPairs) {
+            if (!window._navMap) return;
+            if (window._navRouteLine) {
+                window._navMap.removeLayer(window._navRouteLine);
+            }
+            var latlngs = coordPairs.map(function (c) { return [c[0], c[1]]; });
+            window._navRouteLine = L.polyline(latlngs, {
+                color: '#4a6cf7', weight: 5, opacity: 0.8
+            }).addTo(window._navMap);
+
+            // Fit the map to show the full route
+            var group = L.featureGroup([window._navRouteLine]);
+            if (window._navDriverMarker) group.addLayer(window._navDriverMarker);
+            if (window._navDestMarker) group.addLayer(window._navDestMarker);
+            window._navMap.fitBounds(group.getBounds().pad(0.1));
+        };
+
+        window.navMapDestroy = function () {
+            if (window._navMap) {
+                window._navMap.remove();
+                window._navMap = null;
+                window._navDriverMarker = null;
+                window._navDestMarker = null;
+                window._navRouteLine = null;
             }
         };
     </script>
