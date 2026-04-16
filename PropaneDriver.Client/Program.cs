@@ -22,7 +22,6 @@ builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
 
 builder.Services.AddScoped<ErrorLogService>();
 builder.Services.AddScoped<DeliveryTimeApiService>();
-builder.Services.AddScoped<DeliveryStatusApiService>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeoFenceService>();
 

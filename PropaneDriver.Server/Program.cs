@@ -51,14 +51,45 @@ using (var scope = app.Services.CreateScope())
                 CREATE INDEX [IX_ErrorLog_Timestamp] ON [ErrorLog] ([Timestamp]);
             END
 
-            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryStatus')
+            IF EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryStatus')
             BEGIN
-                CREATE TABLE [DeliveryStatus] (
-                    [DeliveryId] nvarchar(100) NOT NULL PRIMARY KEY,
-                    [Status] int NOT NULL,
-                    [UpdatedAt] datetime2 NOT NULL
+                DROP TABLE [DeliveryStatus];
+            END
+
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Routes')
+            BEGIN
+                CREATE TABLE [Routes] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [DriverId] uniqueidentifier NOT NULL,
+                    [Date] date NOT NULL,
+                    [CreatedAt] datetime2 NOT NULL
                 );
-                CREATE INDEX [IX_DeliveryStatus_UpdatedAt] ON [DeliveryStatus] ([UpdatedAt]);
+                CREATE INDEX [IX_Routes_DriverId] ON [Routes] ([DriverId]);
+                CREATE INDEX [IX_Routes_Date] ON [Routes] ([Date]);
+                CREATE INDEX [IX_Routes_DriverId_Date] ON [Routes] ([DriverId], [Date]);
+            END
+
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')
+            BEGIN
+                CREATE TABLE [Deliveries] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [RouteId] uniqueidentifier NOT NULL,
+                    [CustomerName] nvarchar(200) NOT NULL,
+                    [Street] nvarchar(200) NOT NULL,
+                    [City] nvarchar(100) NOT NULL,
+                    [State] nvarchar(50) NOT NULL,
+                    [ZipCode] nvarchar(20) NOT NULL,
+                    [Latitude] float NOT NULL,
+                    [Longitude] float NOT NULL,
+                    [Status] int NOT NULL,
+                    [AvgDeliveryTimeMinutes] float NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [CreatedAt] datetime2 NOT NULL,
+                    CONSTRAINT [FK_Deliveries_Routes_RouteId] FOREIGN KEY ([RouteId])
+                        REFERENCES [Routes] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_Deliveries_RouteId] ON [Deliveries] ([RouteId]);
+                CREATE INDEX [IX_Deliveries_RouteId_SortOrder] ON [Deliveries] ([RouteId], [SortOrder]);
             END
         ");
     }
@@ -284,40 +315,6 @@ app.MapGet("api/delivery-times/average/{address}", async (string address, Propan
 
     var avg = times.Average();
     return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
-});
-
-// Update (upsert) a delivery's status
-app.MapPut("api/deliveries/{id}/status", async (string id, DeliveryStatusUpdateDto dto, PropaneDriverDbContext db) =>
-{
-    if (string.IsNullOrWhiteSpace(id))
-        return Results.BadRequest(new { Message = "Delivery id is required." });
-
-    try
-    {
-        var existing = await db.DeliveryStatuses.FindAsync(id);
-        if (existing is null)
-        {
-            db.DeliveryStatuses.Add(new DeliveryStatusEntity
-            {
-                DeliveryId = id,
-                Status = dto.Status,
-                UpdatedAt = DateTime.UtcNow
-            });
-        }
-        else
-        {
-            existing.Status = dto.Status;
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await db.SaveChangesAsync();
-        return Results.Ok(new { DeliveryId = id, dto.Status });
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "Failed to update status for delivery {Id}", id);
-        return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
-    }
 });
 
 // Log a client-side error

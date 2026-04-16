@@ -6,7 +6,6 @@
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
-@inject DeliveryStatusApiService DeliveryStatusApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
@@ -285,10 +284,6 @@
             {
                 var completedDelivery = _activeDelivery;
                 completedDelivery.Status = 2; // Complete
-
-                // Persist the status change (fire-and-forget-safe; the API
-                // service catches and logs its own errors).
-                _ = DeliveryStatusApi.UpdateStatusAsync(completedDelivery.Id, 2);
 
                 var next = FindNextDelivery();
                 if (next is not null && next.Id != completedDelivery.Id)

@@ -13,7 +13,8 @@ namespace PropaneDriver.Server.Data
         public DbSet<DriverEntity> Drivers => Set<DriverEntity>();
         public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
         public DbSet<ErrorLogEntity> ErrorLogs => Set<ErrorLogEntity>();
-        public DbSet<DeliveryStatusEntity> DeliveryStatuses => Set<DeliveryStatusEntity>();
+        public DbSet<RouteEntity> Routes => Set<RouteEntity>();
+        public DbSet<DeliveryEntity> Deliveries => Set<DeliveryEntity>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -47,12 +48,23 @@ namespace PropaneDriver.Server.Data
                 entity.HasIndex(e => e.Timestamp);
             });
 
-            modelBuilder.Entity<DeliveryStatusEntity>(entity =>
+            modelBuilder.Entity<RouteEntity>(entity =>
             {
-                entity.ToTable("DeliveryStatus");
-                entity.HasKey(e => e.DeliveryId);
-                entity.Property(e => e.DeliveryId).HasMaxLength(100);
-                entity.HasIndex(e => e.UpdatedAt);
+                entity.ToTable("Routes");
+                entity.HasIndex(e => e.DriverId);
+                entity.HasIndex(e => e.Date);
+                entity.HasIndex(e => new { e.DriverId, e.Date });
+            });
+
+            modelBuilder.Entity<DeliveryEntity>(entity =>
+            {
+                entity.ToTable("Deliveries");
+                entity.HasIndex(e => e.RouteId);
+                entity.HasIndex(e => new { e.RouteId, e.SortOrder });
+                entity.HasOne(e => e.Route)
+                      .WithMany(r => r.Deliveries)
+                      .HasForeignKey(e => e.RouteId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }
