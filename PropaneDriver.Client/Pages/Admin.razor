@@ -1,0 +1,357 @@
+@page "/admin"
+@using PropaneDriver.Client.Services
+@using PropaneDriver.Shared.Dtos
+@inject RouteApiService RouteApi
+@inject HttpClient Http
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+<PageTitle>Route Admin</PageTitle>
+
+<div class="admin-page">
+    <h4 class="admin-title">Route Admin</h4>
+
+    <!-- Driver + Date picker -->
+    <div class="admin-card">
+        <h5>Select Route</h5>
+        <div class="admin-row">
+            <div class="admin-field">
+                <label>Driver</label>
+                <select class="form-select form-select-sm" @bind="_selectedDriverId">
+                    <option value="">-- Select a driver --</option>
+                    @foreach (var d in _drivers)
+                    {
+                        <option value="@d.Id">@d.FirstName @d.LastName (@d.UserName)</option>
+                    }
+                </select>
+            </div>
+            <div class="admin-field">
+                <label>Date</label>
+                <input type="date" class="form-control form-control-sm" @bind="_selectedDate" />
+            </div>
+            <div class="admin-field" style="align-self: flex-end;">
+                <button class="btn btn-sm btn-primary" @onclick="LoadRoute"
+                        disabled="@(string.IsNullOrEmpty(_selectedDriverId))">
+                    Load Route
+                </button>
+            </div>
+        </div>
+        @if (!string.IsNullOrEmpty(_routeStatus))
+        {
+            <div class="@(_routeStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                @_routeStatus
+            </div>
+        }
+    </div>
+
+    <!-- Existing Route -->
+    @if (_loadedRoute is not null)
+    {
+        <div class="admin-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
+                <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
+            </div>
+            @if (_loadedRoute.Deliveries.Count > 0)
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Customer</th>
+                            <th>Address</th>
+                            <th>GPS</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var idx = 0; }
+                        @foreach (var del in _loadedRoute.Deliveries)
+                        {
+                            idx++;
+                            <tr>
+                                <td>@idx</td>
+                                <td>@del.CustomerName</td>
+                                <td>@del.Location.FullAddress</td>
+                                <td>
+                                    @if (del.Location.HasCoordinates)
+                                    {
+                                        <span>@del.Location.Latitude.ToString("F4"), @del.Location.Longitude.ToString("F4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:#8892b0;">None</span>
+                                    }
+                                </td>
+                                <td>@StatusText(del.Status)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+
+    <!-- Create New Route -->
+    <div class="admin-card">
+        <h5>Create New Route</h5>
+
+        <!-- Add delivery form -->
+        <div class="add-delivery-form">
+            <div class="admin-row">
+                <div class="admin-field flex-2">
+                    <label>Customer Name</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newCustomer" />
+                </div>
+                <div class="admin-field flex-2">
+                    <label>Street</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newStreet" />
+                </div>
+            </div>
+            <div class="admin-row">
+                <div class="admin-field">
+                    <label>City</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newCity" />
+                </div>
+                <div class="admin-field" style="max-width:80px;">
+                    <label>State</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newState" />
+                </div>
+                <div class="admin-field" style="max-width:110px;">
+                    <label>Zip</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newZip" />
+                </div>
+                <div class="admin-field" style="max-width:130px;">
+                    <label>Latitude</label>
+                    <input type="number" step="any" class="form-control form-control-sm" @bind="_newLat" />
+                </div>
+                <div class="admin-field" style="max-width:130px;">
+                    <label>Longitude</label>
+                    <input type="number" step="any" class="form-control form-control-sm" @bind="_newLon" />
+                </div>
+                <div class="admin-field" style="max-width:100px;">
+                    <label>Avg Min</label>
+                    <input type="number" class="form-control form-control-sm" @bind="_newAvgMin" />
+                </div>
+            </div>
+            <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
+                    disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet))">
+                Add Delivery
+            </button>
+        </div>
+
+        <!-- Pending deliveries -->
+        @if (_pendingDeliveries.Count > 0)
+        {
+            <h6 class="mt-3">Pending Deliveries (@_pendingDeliveries.Count)</h6>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Customer</th>
+                        <th>Address</th>
+                        <th>GPS</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < _pendingDeliveries.Count; i++)
+                    {
+                        var delivery = _pendingDeliveries[i];
+                        var capturedIndex = i;
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@delivery.CustomerName</td>
+                            <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
+                            <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RemovePending(capturedIndex)">X</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <button class="btn btn-primary mt-2" @onclick="CreateRoute"
+                    disabled="@(string.IsNullOrEmpty(_selectedDriverId) || _creating)">
+                @(_creating ? "Creating…" : "Create Route")
+            </button>
+        }
+
+        @if (!string.IsNullOrEmpty(_createStatus))
+        {
+            <div class="@(_createSuccess ? "text-success" : "text-danger") mt-2" style="font-size:0.85rem;">
+                @_createStatus
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<DriverDto> _drivers = new();
+    private string _selectedDriverId = string.Empty;
+    private DateTime _selectedDate = DateTime.Today;
+
+    private RouteDto? _loadedRoute;
+    private string? _routeStatus;
+    private bool _routeStatusSuccess;
+
+    // New delivery form fields
+    private string _newCustomer = string.Empty;
+    private string _newStreet = string.Empty;
+    private string _newCity = string.Empty;
+    private string _newState = "MN";
+    private string _newZip = string.Empty;
+    private double _newLat;
+    private double _newLon;
+    private double _newAvgMin = 20;
+
+    private List<CreateDeliveryDto> _pendingDeliveries = new();
+    private string? _createStatus;
+    private bool _createSuccess;
+    private bool _creating;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _drivers = await Http.GetFromJsonAsync<List<DriverDto>>("api/drivers") ?? new();
+        }
+        catch { }
+    }
+
+    private async Task LoadRoute()
+    {
+        if (string.IsNullOrEmpty(_selectedDriverId)) return;
+
+        _loadedRoute = null;
+        _routeStatus = null;
+
+        try
+        {
+            var date = DateOnly.FromDateTime(_selectedDate);
+            var response = await Http.GetAsync($"api/routes/{_selectedDriverId}/{date}");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _routeStatus = $"No route found for {date}.";
+                _routeStatusSuccess = false;
+                return;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedRoute = await response.Content.ReadFromJsonAsync<RouteDto>();
+                _routeStatus = $"Route loaded — {_loadedRoute?.Deliveries.Count ?? 0} deliveries.";
+                _routeStatusSuccess = true;
+            }
+            else
+            {
+                _routeStatus = $"Error loading route: {(int)response.StatusCode}";
+                _routeStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _routeStatus = $"Error: {ex.Message}";
+            _routeStatusSuccess = false;
+        }
+    }
+
+    private async Task DeleteRoute()
+    {
+        if (_loadedRoute is null) return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/routes/{_loadedRoute.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedRoute = null;
+                _routeStatus = "Route deleted.";
+                _routeStatusSuccess = true;
+            }
+            else
+            {
+                _routeStatus = $"Delete failed: {(int)response.StatusCode}";
+                _routeStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _routeStatus = $"Error: {ex.Message}";
+            _routeStatusSuccess = false;
+        }
+    }
+
+    private void AddDeliveryToList()
+    {
+        if (string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet)) return;
+
+        _pendingDeliveries.Add(new CreateDeliveryDto
+        {
+            CustomerName = _newCustomer.Trim(),
+            Street = _newStreet.Trim(),
+            City = _newCity.Trim(),
+            State = _newState.Trim(),
+            ZipCode = _newZip.Trim(),
+            Latitude = _newLat,
+            Longitude = _newLon,
+            AvgDeliveryTimeMinutes = _newAvgMin,
+            SortOrder = _pendingDeliveries.Count
+        });
+
+        // Reset form (keep city/state/zip since they're often the same)
+        _newCustomer = string.Empty;
+        _newStreet = string.Empty;
+        _newLat = 0;
+        _newLon = 0;
+    }
+
+    private void RemovePending(int index)
+    {
+        if (index >= 0 && index < _pendingDeliveries.Count)
+            _pendingDeliveries.RemoveAt(index);
+    }
+
+    private async Task CreateRoute()
+    {
+        if (string.IsNullOrEmpty(_selectedDriverId) || _pendingDeliveries.Count == 0) return;
+
+        _creating = true;
+        _createStatus = null;
+
+        var dto = new CreateRouteDto
+        {
+            DriverId = _selectedDriverId,
+            Date = DateOnly.FromDateTime(_selectedDate),
+            Deliveries = _pendingDeliveries
+        };
+
+        var success = await RouteApi.CreateRouteAsync(dto);
+
+        if (success)
+        {
+            _createStatus = $"Route created with {_pendingDeliveries.Count} deliveries.";
+            _createSuccess = true;
+            _pendingDeliveries.Clear();
+
+            // Auto-reload to show the new route
+            await LoadRoute();
+        }
+        else
+        {
+            _createStatus = "Failed to create route. Check error logs.";
+            _createSuccess = false;
+        }
+
+        _creating = false;
+    }
+
+    private static string StatusText(int status) => status switch
+    {
+        0 => "Pending",
+        2 => "Complete",
+        3 => "Unable",
+        _ => "Unknown"
+    };
+}

@@ -43,6 +43,8 @@ namespace PropaneDriver.Client.Authentication
                 {
                     new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                     new Claim(ClaimTypes.Name, user.UserName),
+                    new Claim(ClaimTypes.GivenName, user.FirstName),
+                    new Claim(ClaimTypes.Surname, user.LastName),
                     new Claim(ClaimTypes.Role, user.Role)
                 };
 
@@ -79,6 +81,8 @@ namespace PropaneDriver.Client.Authentication
                 {
                     new Claim(ClaimTypes.NameIdentifier, driver.Id.ToString()),
                     new Claim(ClaimTypes.Name, driver.UserName),
+                    new Claim(ClaimTypes.GivenName, driver.FirstName),
+                    new Claim(ClaimTypes.Surname, driver.LastName),
                     new Claim(ClaimTypes.Role, driver.Role)
                 };
 

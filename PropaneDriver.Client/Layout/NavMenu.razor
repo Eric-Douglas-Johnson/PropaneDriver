@@ -43,6 +43,15 @@
             </AuthorizeView>
         </div>
         <div class="nav-item px-3">
+            <AuthorizeView Roles="driver">
+                <Authorized>
+                    <NavLink class="nav-link" href="admin">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Route Admin
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <div class="nav-item px-3">
             <AuthorizeView>
                 <Authorized>
                     <label class="text-white">

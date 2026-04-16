@@ -6,6 +6,8 @@
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
+@inject RouteApiService RouteApi
+@inject DeliveryApiService DeliveryApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
@@ -63,6 +65,18 @@
         @if (!string.IsNullOrEmpty(_saveStatus))
         {
             <div class="@(_saveSuccess ? "text-success" : "text-danger") mb-2" style="font-size:0.8rem;">@_saveStatus</div>
+        }
+        @if (!_loaded)
+        {
+            <div style="color:#8892b0;font-size:0.85rem;">Loading route…</div>
+        }
+        else if (!string.IsNullOrEmpty(_loadError))
+        {
+            <div class="text-danger" style="font-size:0.85rem;">@_loadError</div>
+        }
+        else if (_deliveries.Count == 0)
+        {
+            <div style="color:#8892b0;font-size:0.85rem;">No deliveries for today.</div>
         }
         @foreach (var delivery in _deliveries)
         {
@@ -197,25 +211,86 @@
 
     private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
 
+    private string? _loadError;
+    private bool _loaded;
+
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
         : 0;
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Replace with real API calls
-        LoadMockData();
-
         GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick += HandleTimerTick;
         GeoFenceService.OnSaveResult += HandleSaveResult;
         GeolocationService.OnError += HandleGpsError;
+
+        await LoadTodayRouteAsync();
 
         // Set the initial active delivery (used by the geofence)
         SetActiveDelivery(FindNextDelivery());
 
         // Auto-start GPS monitoring
         await GeolocationService.StartWatchingAsync();
+    }
+
+    private async Task LoadTodayRouteAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var driverId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var firstName = user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+        var lastName = user.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+        var userName = user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+        if (string.IsNullOrWhiteSpace(driverId))
+        {
+            _loadError = "No authenticated driver.";
+            _loaded = true;
+            return;
+        }
+
+        var route = await RouteApi.GetTodayRouteAsync(driverId);
+
+        var driver = new DriverDto
+        {
+            Id = driverId,
+            UserName = userName ?? string.Empty,
+            FirstName = firstName ?? string.Empty,
+            LastName = lastName ?? string.Empty,
+            Role = "driver"
+        };
+
+        if (route is null)
+        {
+            _deliveries = [];
+            _routeSummary = new RouteSummaryDto
+            {
+                Date = DateOnly.FromDateTime(DateTime.Today),
+                Driver = driver,
+                TotalStops = 0,
+                CompletedStops = 0,
+                Alerts = new List<string> { "No route assigned for today." }
+            };
+        }
+        else
+        {
+            _deliveries = route.Deliveries;
+            _routeSummary = new RouteSummaryDto
+            {
+                Date = route.Date,
+                Driver = driver,
+                TotalStops = _deliveries.Count,
+                CompletedStops = _deliveries.Count(d => d.Status == 2),
+                TotalGallonsDelivered = 0,
+                TotalGallonsRemaining = 0,
+                EstimatedCompletionTime = string.Empty,
+                Alerts = new List<string>()
+            };
+        }
+
+        _selectedDelivery = _deliveries.FirstOrDefault();
+        _loaded = true;
     }
 
     private void AdjustFenceRadius(double deltaFeet)
@@ -284,6 +359,11 @@
             {
                 var completedDelivery = _activeDelivery;
                 completedDelivery.Status = 2; // Complete
+                _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+
+                // Persist the status change server-side. Fire-and-forget
+                // (the API service logs its own errors).
+                _ = DeliveryApi.UpdateStatusAsync(completedDelivery.Id, 2);
 
                 var next = FindNextDelivery();
                 if (next is not null && next.Id != completedDelivery.Id)
@@ -393,75 +473,4 @@
         _ => "Unknown"
     };
 
-    private void LoadMockData()
-    {
-        var driver = new DriverDto
-        {
-            Id = "1",
-            FirstName = "Eric",
-            LastName = "Johnson",
-            UserName = "ejohnson",
-            Role = "driver",
-        };
-
-        _deliveries = new List<DeliveryDto>
-        {
-            new() {
-                Id = "1", 
-                Date = DateOnly.FromDateTime(DateTime.Today),
-                CustomerName = "Rubin Rusco", 
-                AvgDeliveryTimeMinutes = 20,
-
-                Location = new() 
-                { 
-                    Street = "10292 Hwy 37", City = "Hibbing", State = "MN", ZipCode = "55746", 
-                    Latitude = 47.3998786634559, Longitude = -92.7751257839519
-                },
-
-                Status = 0
-            },
-            new() {
-                Id = "2",
-                Date = DateOnly.FromDateTime(DateTime.Today),
-                CustomerName = "Lyle Goerdt",
-                AvgDeliveryTimeMinutes = 20,
-
-                Location = new()
-                {
-                    Street = "3904 Gerzin Road", City = "Hibbing", State = "MN", ZipCode = "55746",
-                    Latitude = 47.40141396164016, Longitude = -92.73815967346705
-                },
-
-                Status = 0
-            },
-            new() {
-                Id = "3",
-                Date = DateOnly.FromDateTime(DateTime.Today),
-                CustomerName = "Clinton Lind",
-                AvgDeliveryTimeMinutes = 20,
-
-                Location = new()
-                {
-                    Street = "9960 Hwy 37", City = "Mountain Iron", State = "MN", ZipCode = "55746",
-                    Latitude = 47.398928904866324, Longitude = -92.73094427346714
-                },
-
-                Status = 0
-            }
-        };
-
-        _routeSummary = new RouteSummaryDto
-        {
-            Date = DateOnly.FromDateTime(DateTime.Today),
-            TotalStops = _deliveries.Count,
-            CompletedStops = 0,
-            TotalGallonsDelivered = 0,
-            TotalGallonsRemaining = 2500,
-            EstimatedCompletionTime = "10:30 AM",
-            Driver = driver,
-            Alerts = new List<string>()
-        };
-
-        _selectedDelivery = _deliveries.FirstOrDefault();
-    }
 }

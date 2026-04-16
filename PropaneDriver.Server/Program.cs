@@ -116,6 +116,75 @@ app.UseRouting();
 app.MapRazorPages();
 app.MapControllers();
 
+// List all drivers (for admin route-builder)
+app.MapGet("api/drivers", async (PropaneDriverDbContext db) =>
+{
+    var drivers = await db.Drivers
+        .AsNoTracking()
+        .OrderBy(d => d.LastName).ThenBy(d => d.FirstName)
+        .Select(d => new DriverDto
+        {
+            Id = d.Id.ToString(),
+            UserName = d.UserName,
+            FirstName = d.FirstName,
+            MiddleName = d.MiddleName,
+            LastName = d.LastName,
+            Email = d.Email,
+            PhoneNumber = d.PhoneNumber,
+            Role = d.Role
+        })
+        .ToListAsync();
+    return Results.Ok(drivers);
+});
+
+// Get a route (with deliveries) for a driver on a specific date
+app.MapGet("api/routes/{driverId:guid}/{date}", async (Guid driverId, DateOnly date, PropaneDriverDbContext db) =>
+{
+    var route = await db.Routes
+        .AsNoTracking()
+        .Where(r => r.DriverId == driverId && r.Date == date)
+        .Select(r => new RouteDto
+        {
+            Id = r.Id.ToString(),
+            DriverId = r.DriverId.ToString(),
+            Date = r.Date,
+            Deliveries = r.Deliveries
+                .OrderBy(d => d.SortOrder)
+                .Select(d => new DeliveryDto
+                {
+                    Id = d.Id.ToString(),
+                    CustomerName = d.CustomerName,
+                    Date = r.Date,
+                    Location = new GeoAddressDto
+                    {
+                        Street = d.Street,
+                        City = d.City,
+                        State = d.State,
+                        ZipCode = d.ZipCode,
+                        Latitude = d.Latitude,
+                        Longitude = d.Longitude
+                    },
+                    AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                    Status = d.Status
+                })
+                .ToList()
+        })
+        .FirstOrDefaultAsync();
+
+    return route is null ? Results.NotFound() : Results.Ok(route);
+});
+
+// Delete a route and its deliveries
+app.MapDelete("api/routes/{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
+{
+    var route = await db.Routes.FindAsync(id);
+    if (route is null) return Results.NotFound();
+
+    db.Routes.Remove(route); // cascade deletes deliveries
+    await db.SaveChangesAsync();
+    return Results.Ok(new { Deleted = true, RouteId = id });
+});
+
 // Authenticate a driver
 app.MapPost("api/Authenticate", async (CredsDto creds, PropaneDriverDbContext db) =>
 {
@@ -315,6 +384,107 @@ app.MapGet("api/delivery-times/average/{address}", async (string address, Propan
 
     var avg = times.Average();
     return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
+});
+
+// Get today's route (with deliveries) for a driver
+app.MapGet("api/routes/today/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
+{
+    var today = DateOnly.FromDateTime(DateTime.Today);
+    var route = await db.Routes
+        .AsNoTracking()
+        .Where(r => r.DriverId == driverId && r.Date == today)
+        .Select(r => new RouteDto
+        {
+            Id = r.Id.ToString(),
+            DriverId = r.DriverId.ToString(),
+            Date = r.Date,
+            Deliveries = r.Deliveries
+                .OrderBy(d => d.SortOrder)
+                .Select(d => new DeliveryDto
+                {
+                    Id = d.Id.ToString(),
+                    CustomerName = d.CustomerName,
+                    Date = r.Date,
+                    Location = new GeoAddressDto
+                    {
+                        Street = d.Street,
+                        City = d.City,
+                        State = d.State,
+                        ZipCode = d.ZipCode,
+                        Latitude = d.Latitude,
+                        Longitude = d.Longitude
+                    },
+                    AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                    Status = d.Status
+                })
+                .ToList()
+        })
+        .FirstOrDefaultAsync();
+
+    return route is null ? Results.NotFound() : Results.Ok(route);
+});
+
+// Create a route with deliveries
+app.MapPost("api/routes", async (CreateRouteDto dto, PropaneDriverDbContext db) =>
+{
+    if (!Guid.TryParse(dto.DriverId, out var driverId))
+        return Results.BadRequest(new { Message = "DriverId must be a valid GUID." });
+
+    try
+    {
+        var route = new RouteEntity
+        {
+            Id = Guid.NewGuid(),
+            DriverId = driverId,
+            Date = dto.Date,
+            CreatedAt = DateTime.UtcNow,
+            Deliveries = dto.Deliveries.Select((d, i) => new DeliveryEntity
+            {
+                Id = Guid.NewGuid(),
+                CustomerName = d.CustomerName,
+                Street = d.Street,
+                City = d.City,
+                State = d.State,
+                ZipCode = d.ZipCode,
+                Latitude = d.Latitude,
+                Longitude = d.Longitude,
+                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
+                Status = 0,
+                CreatedAt = DateTime.UtcNow
+            }).ToList()
+        };
+
+        db.Routes.Add(route);
+        await db.SaveChangesAsync();
+
+        return Results.Ok(new { route.Id, DeliveryCount = route.Deliveries.Count });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to create route for driver {DriverId}", dto.DriverId);
+        return Results.Problem(detail: ex.Message, title: "Failed to create route", statusCode: 500);
+    }
+});
+
+// Update a delivery's status
+app.MapPut("api/deliveries/{id:guid}/status", async (Guid id, DeliveryStatusUpdateDto dto, PropaneDriverDbContext db) =>
+{
+    try
+    {
+        var delivery = await db.Deliveries.FindAsync(id);
+        if (delivery is null)
+            return Results.NotFound();
+
+        delivery.Status = dto.Status;
+        await db.SaveChangesAsync();
+        return Results.Ok(new { delivery.Id, delivery.Status });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to update status for delivery {Id}", id);
+        return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
+    }
 });
 
 // Log a client-side error
