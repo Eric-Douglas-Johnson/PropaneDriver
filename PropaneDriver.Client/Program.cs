@@ -25,6 +25,7 @@ builder.Services.AddScoped<DeliveryTimeApiService>();
 builder.Services.AddScoped<RouteApiService>();
 builder.Services.AddScoped<DeliveryApiService>();
 builder.Services.AddScoped<GeolocationService>();
+builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<GeoFenceService>();
 
 await builder.Build().RunAsync();

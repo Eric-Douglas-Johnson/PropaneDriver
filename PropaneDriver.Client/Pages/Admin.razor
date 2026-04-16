@@ -2,6 +2,7 @@
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Shared.Dtos
 @inject RouteApiService RouteApi
+@inject GeocodingService Geocoder
 @inject HttpClient Http
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
@@ -104,35 +105,47 @@
                 </div>
                 <div class="admin-field flex-2">
                     <label>Street</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_newStreet" />
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newStreet" @onfocusout="TryGeocode" />
                 </div>
             </div>
             <div class="admin-row">
                 <div class="admin-field">
                     <label>City</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_newCity" />
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newCity" @onfocusout="TryGeocode" />
                 </div>
                 <div class="admin-field" style="max-width:80px;">
                     <label>State</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_newState" />
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newState" @onfocusout="TryGeocode" />
                 </div>
                 <div class="admin-field" style="max-width:110px;">
                     <label>Zip</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_newZip" />
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newZip" @onfocusout="TryGeocode" />
                 </div>
-                <div class="admin-field" style="max-width:130px;">
+                <div class="admin-field" style="max-width:160px;">
                     <label>Latitude</label>
-                    <input type="number" step="any" class="form-control form-control-sm" @bind="_newLat" />
+                    <input type="text" class="form-control form-control-sm" @bind="_newLatStr" />
                 </div>
-                <div class="admin-field" style="max-width:130px;">
+                <div class="admin-field" style="max-width:160px;">
                     <label>Longitude</label>
-                    <input type="number" step="any" class="form-control form-control-sm" @bind="_newLon" />
+                    <input type="text" class="form-control form-control-sm" @bind="_newLonStr" />
                 </div>
                 <div class="admin-field" style="max-width:100px;">
                     <label>Avg Min</label>
                     <input type="number" class="form-control form-control-sm" @bind="_newAvgMin" />
                 </div>
             </div>
+            @if (_geocoding)
+            {
+                <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">Looking up coordinates…</div>
+            }
+            else if (!string.IsNullOrEmpty(_geocodeStatus))
+            {
+                <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
+            }
             <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
                     disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet))">
                 Add Delivery
@@ -201,9 +214,12 @@
     private string _newCity = string.Empty;
     private string _newState = "MN";
     private string _newZip = string.Empty;
-    private double _newLat;
-    private double _newLon;
+    private string _newLatStr = string.Empty;
+    private string _newLonStr = string.Empty;
     private double _newAvgMin = 20;
+    private bool _geocoding;
+    private string? _geocodeStatus;
+    private string _lastGeocodedAddress = string.Empty;
 
     private List<CreateDeliveryDto> _pendingDeliveries = new();
     private string? _createStatus;
@@ -283,9 +299,43 @@
         }
     }
 
+    private async Task TryGeocode()
+    {
+        if (string.IsNullOrWhiteSpace(_newStreet)) return;
+
+        // Build a key from current address to avoid re-geocoding the same thing
+        var addressKey = $"{_newStreet}|{_newCity}|{_newState}|{_newZip}";
+        if (addressKey == _lastGeocodedAddress) return;
+        _lastGeocodedAddress = addressKey;
+
+        _geocoding = true;
+        _geocodeStatus = null;
+        StateHasChanged();
+
+        var result = await Geocoder.GeocodeAsync(_newStreet, _newCity, _newState, _newZip);
+
+        if (result is not null)
+        {
+            _newLatStr = result.Latitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            _newLonStr = result.Longitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            _geocodeStatus = $"Geocoded: {result.DisplayName}";
+        }
+        else
+        {
+            _geocodeStatus = "Could not find coordinates for this address.";
+        }
+
+        _geocoding = false;
+    }
+
     private void AddDeliveryToList()
     {
         if (string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet)) return;
+
+        double.TryParse(_newLatStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lat);
+        double.TryParse(_newLonStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lon);
 
         _pendingDeliveries.Add(new CreateDeliveryDto
         {
@@ -294,8 +344,8 @@
             City = _newCity.Trim(),
             State = _newState.Trim(),
             ZipCode = _newZip.Trim(),
-            Latitude = _newLat,
-            Longitude = _newLon,
+            Latitude = lat,
+            Longitude = lon,
             AvgDeliveryTimeMinutes = _newAvgMin,
             SortOrder = _pendingDeliveries.Count
         });
@@ -303,8 +353,10 @@
         // Reset form (keep city/state/zip since they're often the same)
         _newCustomer = string.Empty;
         _newStreet = string.Empty;
-        _newLat = 0;
-        _newLon = 0;
+        _newLatStr = string.Empty;
+        _newLonStr = string.Empty;
+        _geocodeStatus = null;
+        _lastGeocodedAddress = string.Empty;
     }
 
     private void RemovePending(int index)
