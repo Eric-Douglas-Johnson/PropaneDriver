@@ -303,23 +303,25 @@
         await JS.InvokeVoidAsync("scrollToElement", "gps-check");
     }
 
-    private void NavigateToActive()
+    private async Task NavigateToActive()
     {
         if (_activeDelivery is null) return;
-        NavigateToDelivery(_activeDelivery);
+        await OpenGoogleMapsDirections(_activeDelivery);
     }
 
-    private void NavigateToSelected()
+    private async Task NavigateToSelected()
     {
         if (_selectedDelivery is null) return;
-        NavigateToDelivery(_selectedDelivery);
+        await OpenGoogleMapsDirections(_selectedDelivery);
     }
 
-    private void NavigateToDelivery(DeliveryDto delivery)
+    private async Task OpenGoogleMapsDirections(DeliveryDto delivery)
     {
         var address = delivery.Location.FullAddress;
         if (string.IsNullOrWhiteSpace(address)) return;
-        Nav.NavigateTo($"/navigation?destination={Uri.EscapeDataString(address)}");
+        var dest = Uri.EscapeDataString(address);
+        var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
+        await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
     private void MenuAction3()
