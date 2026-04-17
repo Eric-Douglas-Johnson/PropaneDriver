@@ -554,11 +554,15 @@ app.MapGet("api/geocode", async (
 
     GoogleGeocodeResult? best = null;
     string? geocodeStatus = null;
+    string? geocodeError = null;
+    string? placesStatus = null;
+    string? placesError = null;
 
     try
     {
         var resp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(geocodeUrl);
         geocodeStatus = resp?.Status;
+        geocodeError = resp?.ErrorMessage;
 
         if (resp is not null && resp.Status == "OK" && resp.Results.Length > 0)
         {
@@ -571,6 +575,7 @@ app.MapGet("api/geocode", async (
     }
     catch (Exception ex)
     {
+        geocodeError = ex.Message;
         app.Logger.LogError(ex, "Google geocoding request failed");
     }
 
@@ -585,6 +590,8 @@ app.MapGet("api/geocode", async (
         try
         {
             var placesResp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(placesUrl);
+            placesStatus = placesResp?.Status;
+            placesError = placesResp?.ErrorMessage;
 
             if (placesResp is not null && placesResp.Status == "OK" && placesResp.Results.Length > 0)
             {
@@ -599,12 +606,28 @@ app.MapGet("api/geocode", async (
         }
         catch (Exception ex)
         {
+            placesError = ex.Message;
             app.Logger.LogError(ex, "Google Places Text Search request failed");
         }
     }
 
     if (best is null)
-        return Results.NotFound();
+    {
+        // Include Google's status codes in the response so the client can
+        // surface them — makes it easy to tell whether the key is
+        // misconfigured, the API isn't enabled, or the address truly
+        // doesn't exist in Google's index.
+        return Results.Json(
+            new
+            {
+                Query = rawAddress,
+                GeocodeStatus = geocodeStatus,
+                GeocodeError = geocodeError,
+                PlacesStatus = placesStatus,
+                PlacesError = placesError
+            },
+            statusCode: 404);
+    }
 
     return Results.Ok(new GeocodingResultDto
     {
