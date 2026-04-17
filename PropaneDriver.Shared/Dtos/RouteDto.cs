@@ -13,6 +13,14 @@ namespace PropaneDriver.Shared.Dtos
         public int Status { get; set; }
     }
 
+    public class RouteListItemDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public DateOnly Date { get; set; }
+        public int DeliveryCount { get; set; }
+        public int CompletedCount { get; set; }
+    }
+
     public class CreateRouteDto
     {
         public string DriverId { get; set; } = string.Empty;

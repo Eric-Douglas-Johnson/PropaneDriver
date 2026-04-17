@@ -174,6 +174,25 @@ app.MapGet("api/routes/{driverId:guid}/{date}", async (Guid driverId, DateOnly d
     return route is null ? Results.NotFound() : Results.Ok(route);
 });
 
+// List all routes for a driver (summary info)
+app.MapGet("api/routes/driver/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
+{
+    var routes = await db.Routes
+        .AsNoTracking()
+        .Where(r => r.DriverId == driverId)
+        .OrderByDescending(r => r.Date)
+        .Select(r => new RouteListItemDto
+        {
+            Id = r.Id.ToString(),
+            Date = r.Date,
+            DeliveryCount = r.Deliveries.Count(),
+            CompletedCount = r.Deliveries.Count(d => d.Status == 2)
+        })
+        .ToListAsync();
+
+    return Results.Ok(routes);
+});
+
 // Delete a route and its deliveries
 app.MapDelete("api/routes/{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
 {

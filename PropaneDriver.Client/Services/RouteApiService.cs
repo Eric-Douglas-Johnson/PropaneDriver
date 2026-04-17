@@ -43,6 +43,59 @@ namespace PropaneDriver.Client.Services
             }
         }
 
+        public async Task<List<RouteListItemDto>> GetRoutesForDriverAsync(string driverId)
+        {
+            if (string.IsNullOrWhiteSpace(driverId)) return new();
+
+            try
+            {
+                var response = await _http.GetAsync($"api/routes/driver/{driverId}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "RouteApiService.GetRoutesForDriverAsync",
+                        $"GET api/routes/driver/{driverId} returned {(int)response.StatusCode}: {body}");
+                    return new();
+                }
+
+                return await response.Content.ReadFromJsonAsync<List<RouteListItemDto>>() ?? new();
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "RouteApiService.GetRoutesForDriverAsync",
+                    $"Exception loading routes for {driverId}: {ex.Message}");
+                return new();
+            }
+        }
+
+        public async Task<bool> DeleteRouteAsync(string routeId)
+        {
+            if (string.IsNullOrWhiteSpace(routeId)) return false;
+
+            try
+            {
+                var response = await _http.DeleteAsync($"api/routes/{routeId}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "RouteApiService.DeleteRouteAsync",
+                        $"DELETE api/routes/{routeId} returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "RouteApiService.DeleteRouteAsync",
+                    $"Exception deleting route {routeId}: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<bool> CreateRouteAsync(CreateRouteDto dto)
         {
             try
