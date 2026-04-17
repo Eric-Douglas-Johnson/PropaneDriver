@@ -26,6 +26,7 @@ namespace PropaneDriver.Client.Services
 
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
+        private readonly DeliveryApiService _deliveryApi;
 
         private DeliveryDto? _activeDelivery;
         private bool _lastCheckWasInsideGeoFence;
@@ -34,15 +35,17 @@ namespace PropaneDriver.Client.Services
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
+        public event Action<DeliveryDto>? OnDeliveryCompleted;
 
         public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
         public bool IsMonitoring => _activeDelivery != null;
 
-        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService)
+        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService, DeliveryApiService deliveryApi)
         {
             _geolocationService = geolocationService;
             _apiService = apiService;
+            _deliveryApi = deliveryApi;
             _geolocationService.OnPositionChanged += HandlePositionChanged;
         }
 
@@ -140,6 +143,31 @@ namespace PropaneDriver.Client.Services
                 {
                     await ErrorLogService   .LogErrorAsync("GeoFenceService", $"StopTimerAndSaveAsync failed: {ex.Message}");
                     OnSaveResult?.Invoke(new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message });
+                }
+
+                // Mark the delivery Complete (status = 2) if it isn't already.
+                // This lives here (not in the page) so it still fires when the
+                // user is on the Navigation page or anywhere else.
+                if (_activeDelivery.Status != 2)
+                {
+                    var completed = _activeDelivery;
+                    completed.Status = 2;
+
+                    try
+                    {
+                        await _deliveryApi.UpdateStatusAsync(completed.Id, 2);
+                    }
+                    catch (Exception ex)
+                    {
+                        await ErrorLogService.LogErrorAsync("GeoFenceService", $"UpdateStatusAsync failed: {ex.Message}");
+                    }
+
+                    OnDeliveryCompleted?.Invoke(completed);
+
+                    // Clear the active delivery so we don't re-complete it on
+                    // the next fence crossing. The next target is set by the
+                    // page when it handles OnDeliveryCompleted.
+                    _activeDelivery = null;
                 }
             }
 

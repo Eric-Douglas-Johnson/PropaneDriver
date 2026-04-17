@@ -223,6 +223,7 @@
         GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick += HandleTimerTick;
         GeoFenceService.OnSaveResult += HandleSaveResult;
+        GeoFenceService.OnDeliveryCompleted += HandleDeliveryCompleted;
         GeolocationService.OnError += HandleGpsError;
 
         await LoadTodayRouteAsync();
@@ -344,40 +345,30 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private async void HandleFenceStatusChanged(GeoFenceEventArgs args)
+    private void HandleFenceStatusChanged(GeoFenceEventArgs args)
     {
         _geoFenceStatus = args;
-
-        if (_wasInsideFence && !args.IsInsideFence)
-        {
-            if (_activeDelivery is null)
-            {
-                await ErrorLogService.LogErrorAsync("Route.HandleFenceStatusChanged", "_activeDelivery is null");
-                return;
-            }
-
-            if (_activeDelivery.Status == 2)
-            {
-                await ErrorLogService.LogErrorAsync("Route.HandleFenceStatusChanged", "_activeDelivery status is 2/completed");
-                return;
-            }
-
-            var completedDelivery = _activeDelivery;
-            completedDelivery.Status = 2; // Complete
-            _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
-
-            // Persist the status change server-side.
-            _ = DeliveryApi.UpdateStatusAsync(completedDelivery.Id, 2);
-
-            var next = FindNextDelivery();
-            if (next is not null && next.Id != completedDelivery.Id)
-            {
-                SetActiveDelivery(next);
-            }
-        }
         _wasInsideFence = args.IsInsideFence;
+        InvokeAsync(StateHasChanged);
+    }
 
-        await InvokeAsync(StateHasChanged);
+    private void HandleDeliveryCompleted(DeliveryDto completed)
+    {
+        // The GeoFenceService has already set completed.Status = 2 and
+        // persisted it server-side. We just need to update UI state and
+        // advance to the next pending delivery.
+        var localMatch = _deliveries.FirstOrDefault(d => d.Id == completed.Id);
+        if (localMatch is not null) localMatch.Status = 2;
+
+        _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+
+        var next = FindNextDelivery();
+        if (next is not null && next.Id != completed.Id)
+        {
+            SetActiveDelivery(next);
+        }
+
+        InvokeAsync(StateHasChanged);
     }
 
     private DeliveryDto? FindNextDelivery()
@@ -454,6 +445,7 @@
         GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick -= HandleTimerTick;
         GeoFenceService.OnSaveResult -= HandleSaveResult;
+        GeoFenceService.OnDeliveryCompleted -= HandleDeliveryCompleted;
         GeolocationService.OnError -= HandleGpsError;
 
         // Do NOT dispose GeolocationService — it is a shared singleton.
