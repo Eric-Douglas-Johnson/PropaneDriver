@@ -518,7 +518,10 @@ app.MapPut("api/deliveries/{id:guid}/status", async (Guid id, DeliveryStatusUpda
     }
 });
 
-// Geocode an address via Google Geocoding API (proxied so the API key stays server-side)
+// Geocode an address via Google (proxied so the API key stays server-side).
+// Tries the Geocoding API first (structured, cheap). On ZERO_RESULTS falls
+// back to Places Text Search, which behaves like the maps.google.com search
+// box and handles rural / colloquial addresses much better.
 app.MapGet("api/geocode", async (
     string? street, string? city, string? state, string? zip,
     IHttpClientFactory httpFactory, IConfiguration config) =>
@@ -542,41 +545,73 @@ app.MapGet("api/geocode", async (
     if (parts.Count == 0)
         return Results.BadRequest(new { Message = "No address parts provided." });
 
-    var address = Uri.EscapeDataString(string.Join(", ", parts));
-    var url = $"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={apiKey}";
+    var rawAddress = string.Join(", ", parts);
+    var encodedAddress = Uri.EscapeDataString(rawAddress);
+    var http = httpFactory.CreateClient();
+
+    // --- Attempt 1: Geocoding API -----------------------------------------
+    var geocodeUrl = $"https://maps.googleapis.com/maps/api/geocode/json?address={encodedAddress}&region=us&key={apiKey}";
+
+    GoogleGeocodeResult? best = null;
+    string? geocodeStatus = null;
 
     try
     {
-        var http = httpFactory.CreateClient();
-        var resp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(url);
+        var resp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(geocodeUrl);
+        geocodeStatus = resp?.Status;
 
-        if (resp is null)
-            return Results.Problem("Empty response from Google Geocoding API.", statusCode: 502);
-
-        if (resp.Status == "ZERO_RESULTS" || resp.Results.Length == 0)
-            return Results.NotFound();
-
-        if (resp.Status != "OK")
+        if (resp is not null && resp.Status == "OK" && resp.Results.Length > 0)
+        {
+            best = resp.Results[0];
+        }
+        else if (resp is not null && resp.Status != "OK" && resp.Status != "ZERO_RESULTS")
         {
             app.Logger.LogWarning("Google Geocoding returned status {Status}: {Error}", resp.Status, resp.ErrorMessage);
-            return Results.Problem(
-                detail: $"Google Geocoding status: {resp.Status}. {resp.ErrorMessage}",
-                statusCode: 502);
         }
-
-        var best = resp.Results[0];
-        return Results.Ok(new GeocodingResultDto
-        {
-            Latitude = best.Geometry.Location.Lat,
-            Longitude = best.Geometry.Location.Lng,
-            DisplayName = best.FormattedAddress
-        });
     }
     catch (Exception ex)
     {
         app.Logger.LogError(ex, "Google geocoding request failed");
-        return Results.Problem(detail: ex.Message, title: "Geocoding failed", statusCode: 500);
     }
+
+    // --- Attempt 2: Places Text Search fallback ---------------------------
+    // Used when Geocoding says ZERO_RESULTS (or fails). Text Search is what
+    // the Maps search box uses and handles rural / partial addresses much
+    // better — at the cost of a slightly more expensive API call.
+    if (best is null)
+    {
+        var placesUrl = $"https://maps.googleapis.com/maps/api/place/textsearch/json?query={encodedAddress}&region=us&key={apiKey}";
+
+        try
+        {
+            var placesResp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(placesUrl);
+
+            if (placesResp is not null && placesResp.Status == "OK" && placesResp.Results.Length > 0)
+            {
+                best = placesResp.Results[0];
+            }
+            else if (placesResp is not null && placesResp.Status != "OK" && placesResp.Status != "ZERO_RESULTS")
+            {
+                app.Logger.LogWarning(
+                    "Google Places Text Search returned status {Status}: {Error}",
+                    placesResp.Status, placesResp.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Google Places Text Search request failed");
+        }
+    }
+
+    if (best is null)
+        return Results.NotFound();
+
+    return Results.Ok(new GeocodingResultDto
+    {
+        Latitude = best.Geometry.Location.Lat,
+        Longitude = best.Geometry.Location.Lng,
+        DisplayName = string.IsNullOrWhiteSpace(best.FormattedAddress) ? rawAddress : best.FormattedAddress
+    });
 });
 
 // Log a client-side error
