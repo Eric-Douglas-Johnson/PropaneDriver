@@ -17,6 +17,7 @@ namespace PropaneDriver.Client.Services
             try
             {
                 var response = await _http.PostAsJsonAsync("api/delivery-times", dto);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();

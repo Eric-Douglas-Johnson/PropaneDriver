@@ -7,12 +7,10 @@ namespace PropaneDriver.Client.Services
     public class RouteApiService
     {
         private readonly HttpClient _http;
-        private readonly ErrorLogService _errorLog;
 
-        public RouteApiService(HttpClient http, ErrorLogService errorLog)
+        public RouteApiService(HttpClient http)
         {
             _http = http;
-            _errorLog = errorLog;
         }
 
         public async Task<RouteDto?> GetTodayRouteAsync(string driverId)
@@ -28,7 +26,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await _errorLog.LogErrorAsync(
+                    await ErrorLogService.LogErrorAsync(
                         "RouteApiService.GetTodayRouteAsync",
                         $"GET api/routes/today/{driverId} returned {(int)response.StatusCode}: {body}");
                     return null;
@@ -38,7 +36,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await _errorLog.LogErrorAsync(
+                await ErrorLogService.LogErrorAsync(
                     "RouteApiService.GetTodayRouteAsync",
                     $"Exception loading route for {driverId}: {ex.Message}");
                 return null;
@@ -53,7 +51,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await _errorLog.LogErrorAsync(
+                    await ErrorLogService.LogErrorAsync(
                         "RouteApiService.CreateRouteAsync",
                         $"POST api/routes returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -62,7 +60,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await _errorLog.LogErrorAsync(
+                await ErrorLogService.LogErrorAsync(
                     "RouteApiService.CreateRouteAsync",
                     $"Exception creating route: {ex.Message}");
                 return false;

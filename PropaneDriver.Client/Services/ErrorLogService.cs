@@ -3,33 +3,21 @@ using System.Net.Http.Json;
 
 namespace PropaneDriver.Client.Services
 {
-    public class ErrorLogService
+    public static class ErrorLogService
     {
-        private readonly HttpClient _http;
+        private static readonly HttpClient _http = new HttpClient();
 
-        public ErrorLogService(HttpClient http)
+        public static async Task LogErrorAsync(string source, string message)
         {
-            _http = http;
-        }
-
-        public async Task LogErrorAsync(string source, string message)
-        {
-            try
+            var payload = new
             {
-                var payload = new
-                {
-                    Source = source,
-                    Level = "Error",
-                    Message = message,
-                    Timestamp = DateTime.UtcNow
-                };
+                Source = source,
+                Level = "Error",
+                Message = message,
+                Timestamp = DateTime.UtcNow
+            };
 
-                await _http.PostAsJsonAsync("api/client-logs", payload);
-            }
-            catch
-            {
-                // Don't let error logging itself cause failures
-            }
+            await _http.PostAsJsonAsync("api/client-logs", payload);
         }
     }
 }

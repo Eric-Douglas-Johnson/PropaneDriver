@@ -6,12 +6,10 @@ namespace PropaneDriver.Client.Services
     public class DeliveryApiService
     {
         private readonly HttpClient _http;
-        private readonly ErrorLogService _errorLog;
 
-        public DeliveryApiService(HttpClient http, ErrorLogService errorLog)
+        public DeliveryApiService(HttpClient http)
         {
             _http = http;
-            _errorLog = errorLog;
         }
 
         public async Task<bool> UpdateStatusAsync(string deliveryId, int status)
@@ -27,7 +25,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await _errorLog.LogErrorAsync(
+                    await ErrorLogService.LogErrorAsync(
                         "DeliveryApiService.UpdateStatusAsync",
                         $"PUT api/deliveries/{deliveryId}/status returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -36,7 +34,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await _errorLog.LogErrorAsync(
+                await ErrorLogService.LogErrorAsync(
                     "DeliveryApiService.UpdateStatusAsync",
                     $"Exception updating status for {deliveryId}: {ex.Message}");
                 return false;

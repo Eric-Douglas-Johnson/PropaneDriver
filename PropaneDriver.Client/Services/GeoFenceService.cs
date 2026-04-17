@@ -26,9 +26,8 @@ namespace PropaneDriver.Client.Services
 
         private readonly GeolocationService _geolocationService;
         private readonly DeliveryTimeApiService _apiService;
-        private readonly ErrorLogService _errorLog;
 
-        private DeliveryDto? _currentDelivery;
+        private DeliveryDto? _activeDelivery;
         private bool _lastCheckWasInsideGeoFence;
         private readonly Stopwatch _timer = new();
 
@@ -38,25 +37,18 @@ namespace PropaneDriver.Client.Services
 
         public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
-        public bool IsMonitoring => _currentDelivery != null;
+        public bool IsMonitoring => _activeDelivery != null;
 
-        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService, ErrorLogService errorLog)
+        public GeoFenceService(GeolocationService geolocationService, DeliveryTimeApiService apiService)
         {
             _geolocationService = geolocationService;
             _apiService = apiService;
-            _errorLog = errorLog;
             _geolocationService.OnPositionChanged += HandlePositionChanged;
         }
 
         public async Task SetTargetAsync(DeliveryDto? delivery)
         {
-            // If we were inside a fence for a previous target, stop the timer
-            if (_lastCheckWasInsideGeoFence && _currentDelivery != null)
-            {
-                await StopTimerAndSaveAsync();
-            }
-
-            _currentDelivery = delivery;
+            _activeDelivery = delivery;
             _lastCheckWasInsideGeoFence = false;
             _timer.Reset();
         }
@@ -64,35 +56,24 @@ namespace PropaneDriver.Client.Services
         // Backwards-compatible sync wrapper
         public void SetTarget(DeliveryDto? delivery) => _ = SetTargetAsync(delivery);
 
-        /// <summary>
-        /// Force a save of the current timer if inside the fence. Safe to call at any time.
-        /// </summary>
-        public async Task FlushAsync()
-        {
-            if (_lastCheckWasInsideGeoFence && _currentDelivery != null)
-            {
-                await StopTimerAndSaveAsync();
-            }
-        }
-
         private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
         {
             try
             {
-                if (_currentDelivery == null)
+                if (_activeDelivery == null)
                 {
-                    await _errorLog.LogErrorAsync("GeoFenceService", "HandlePositionChanged called with no current delivery");
+                    await ErrorLogService.LogErrorAsync("GeoFenceService", "HandlePositionChanged called with no active delivery");
                     return;
                 }
 
-                if (!_currentDelivery.Location.HasCoordinates)
+                if (!_activeDelivery.Location.HasCoordinates)
                 {
-                    await _errorLog.LogErrorAsync("GeoFenceService", $"Delivery '{_currentDelivery.CustomerName}' has no GPS coordinates");
+                    await ErrorLogService.LogErrorAsync("GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no GPS coordinates");
                     return;
                 }
 
-                var distance = HaversineDistance(latitude, longitude, _currentDelivery.Location.Latitude,
-                    _currentDelivery.Location.Longitude);
+                var distance = HaversineDistance(latitude, longitude, _activeDelivery.Location.Latitude,
+                    _activeDelivery.Location.Longitude);
 
                 var insideGeoFence = distance <= FenceRadiusMeters;
 
@@ -113,8 +94,8 @@ namespace PropaneDriver.Client.Services
 
                 OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
                 {
-                    DeliveryId = _currentDelivery.Id,
-                    Address = _currentDelivery.Location.FullAddress,
+                    DeliveryId = _activeDelivery.Id,
+                    Address = _activeDelivery.Location.FullAddress,
                     Latitude = latitude,
                     Longitude = longitude,
                     IsInsideFence = _lastCheckWasInsideGeoFence,
@@ -123,7 +104,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await _errorLog.LogErrorAsync("GeoFenceService", $"HandlePositionChanged failed: {ex.Message}");
+                await ErrorLogService.LogErrorAsync("GeoFenceService", $"HandlePositionChanged failed: {ex.Message}");
             }
         }
 
@@ -131,22 +112,22 @@ namespace PropaneDriver.Client.Services
         {
             _timer.Stop();
 
-            if (_currentDelivery == null)
+            if (_activeDelivery == null)
             {
-                await _errorLog.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_currentDelivery is null");
+                await ErrorLogService.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_currentDelivery is null");
             }
             else if (_timer.Elapsed.TotalSeconds <= 0)
             {
-                await _errorLog.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_timer.Elapsed.TotalSeconds <= 0");
+                await ErrorLogService.LogErrorAsync("GeoFenceService.StopTimerAndSaveAsync", "_timer.Elapsed.TotalSeconds <= 0");
             }
             else
             {
                 var dto = new DeliveryTimeDto
                 {
-                    DeliveryId = _currentDelivery.Id,
-                    Address = _currentDelivery.Location.FullAddress,
-                    Latitude = _currentDelivery.Location.Latitude,
-                    Longitude = _currentDelivery.Location.Longitude,
+                    DeliveryId = _activeDelivery.Id,
+                    Address = _activeDelivery.Location.FullAddress,
+                    Latitude = _activeDelivery.Location.Latitude,
+                    Longitude = _activeDelivery.Location.Longitude,
                     TimeIntervalSeconds = _timer.Elapsed.TotalSeconds
                 };
 
@@ -157,7 +138,7 @@ namespace PropaneDriver.Client.Services
                 }
                 catch (Exception ex)
                 {
-                    await _errorLog.LogErrorAsync("GeoFenceService", $"StopTimerAndSaveAsync failed: {ex.Message}");
+                    await ErrorLogService   .LogErrorAsync("GeoFenceService", $"StopTimerAndSaveAsync failed: {ex.Message}");
                     OnSaveResult?.Invoke(new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message });
                 }
             }

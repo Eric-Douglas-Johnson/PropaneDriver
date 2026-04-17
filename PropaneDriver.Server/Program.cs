@@ -382,6 +382,16 @@ app.MapGet("api/delivery-times/average/{address}", async (string address, Propan
     if (times.Count == 0)
         return Results.Ok(new { Address = decodedAddress, AverageSeconds = 0.0, Count = 0 });
 
+    times.Sort();
+
+    //Once we have at least 5 data points, remove the shortest and longest times
+    //in order to remove outliers
+    if (times.Count > 4)
+    {
+        times.RemoveAt(times.Count - 1);
+        times.RemoveAt(0);
+    }
+
     var avg = times.Average();
     return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
 });

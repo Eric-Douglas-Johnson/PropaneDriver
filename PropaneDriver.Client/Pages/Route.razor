@@ -335,9 +335,6 @@
         _selectedDelivery = delivery;
     }
 
-    private DeliveryDto? FindNextDelivery()
-        => _deliveries.FirstOrDefault(d => d.Status == 0);
-
     private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
     {
         _saveSuccess = result.Success;
@@ -351,32 +348,40 @@
     {
         _geoFenceStatus = args;
 
-        // Detect inside -> outside transition. If the active delivery was
-        // never marked completed/unable, mark it complete, persist the
-        // status, and auto-advance to the next delivery.
         if (_wasInsideFence && !args.IsInsideFence)
         {
-            if (_activeDelivery is not null && _activeDelivery.Status < 2)
+            if (_activeDelivery is null)
             {
-                var completedDelivery = _activeDelivery;
-                completedDelivery.Status = 2; // Complete
-                _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+                await ErrorLogService.LogErrorAsync("Route.HandleFenceStatusChanged", "_activeDelivery is null");
+                return;
+            }
 
-                // Persist the status change server-side. Fire-and-forget
-                // (the API service logs its own errors).
-                _ = DeliveryApi.UpdateStatusAsync(completedDelivery.Id, 2);
+            if (_activeDelivery.Status == 2)
+            {
+                await ErrorLogService.LogErrorAsync("Route.HandleFenceStatusChanged", "_activeDelivery status is 2/completed");
+                return;
+            }
 
-                var next = FindNextDelivery();
-                if (next is not null && next.Id != completedDelivery.Id)
-                {
-                    SetActiveDelivery(next);
-                }
+            var completedDelivery = _activeDelivery;
+            completedDelivery.Status = 2; // Complete
+            _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+
+            // Persist the status change server-side.
+            _ = DeliveryApi.UpdateStatusAsync(completedDelivery.Id, 2);
+
+            var next = FindNextDelivery();
+            if (next is not null && next.Id != completedDelivery.Id)
+            {
+                SetActiveDelivery(next);
             }
         }
         _wasInsideFence = args.IsInsideFence;
 
         await InvokeAsync(StateHasChanged);
     }
+
+    private DeliveryDto? FindNextDelivery()
+    => _deliveries.FirstOrDefault(d => d.Status == 0);
 
     private void SetActiveDelivery(DeliveryDto? delivery)
     {
@@ -446,9 +451,6 @@
 
     public async ValueTask DisposeAsync()
     {
-        // Flush any in-progress timer before tearing down
-        try { await GeoFenceService.FlushAsync(); } catch { }
-
         GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
         GeoFenceService.OnTimerTick -= HandleTimerTick;
         GeoFenceService.OnSaveResult -= HandleSaveResult;
