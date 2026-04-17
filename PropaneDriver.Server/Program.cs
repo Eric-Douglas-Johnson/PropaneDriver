@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Server.Services;
 using PropaneDriver.Shared.Dtos;
+using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,7 @@ builder.Services.AddDbContext<PropaneDriverDbContext>(options =>
 });
 
 builder.Services.AddSingleton<EmailService>();
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
@@ -513,6 +515,67 @@ app.MapPut("api/deliveries/{id:guid}/status", async (Guid id, DeliveryStatusUpda
     {
         app.Logger.LogError(ex, "Failed to update status for delivery {Id}", id);
         return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
+    }
+});
+
+// Geocode an address via Google Geocoding API (proxied so the API key stays server-side)
+app.MapGet("api/geocode", async (
+    string? street, string? city, string? state, string? zip,
+    IHttpClientFactory httpFactory, IConfiguration config) =>
+{
+    var apiKey = config["GoogleGeocoding:ApiKey"]
+        ?? Environment.GetEnvironmentVariable("GOOGLE_GEOCODING_API_KEY");
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        app.Logger.LogError("Google Geocoding API key is not configured.");
+        return Results.Problem(
+            detail: "Geocoding is not configured.",
+            statusCode: 500);
+    }
+
+    var parts = new List<string>();
+    if (!string.IsNullOrWhiteSpace(street)) parts.Add(street.Trim());
+    if (!string.IsNullOrWhiteSpace(city)) parts.Add(city.Trim());
+    if (!string.IsNullOrWhiteSpace(state)) parts.Add(state.Trim());
+    if (!string.IsNullOrWhiteSpace(zip)) parts.Add(zip.Trim());
+
+    if (parts.Count == 0)
+        return Results.BadRequest(new { Message = "No address parts provided." });
+
+    var address = Uri.EscapeDataString(string.Join(", ", parts));
+    var url = $"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={apiKey}";
+
+    try
+    {
+        var http = httpFactory.CreateClient();
+        var resp = await http.GetFromJsonAsync<GoogleGeocodeResponse>(url);
+
+        if (resp is null)
+            return Results.Problem("Empty response from Google Geocoding API.", statusCode: 502);
+
+        if (resp.Status == "ZERO_RESULTS" || resp.Results.Length == 0)
+            return Results.NotFound();
+
+        if (resp.Status != "OK")
+        {
+            app.Logger.LogWarning("Google Geocoding returned status {Status}: {Error}", resp.Status, resp.ErrorMessage);
+            return Results.Problem(
+                detail: $"Google Geocoding status: {resp.Status}. {resp.ErrorMessage}",
+                statusCode: 502);
+        }
+
+        var best = resp.Results[0];
+        return Results.Ok(new GeocodingResultDto
+        {
+            Latitude = best.Geometry.Location.Lat,
+            Longitude = best.Geometry.Location.Lng,
+            DisplayName = best.FormattedAddress
+        });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Google geocoding request failed");
+        return Results.Problem(detail: ex.Message, title: "Geocoding failed", statusCode: 500);
     }
 });
 
