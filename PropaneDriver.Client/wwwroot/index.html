@@ -150,13 +150,27 @@
                 return;
             }
 
-            // If the container has zero height at init time (e.g. flex layout
-            // hasn't settled yet), Google Maps will render blank with no tiles.
-            // Log this so it's obvious in the console.
+            // Wait for the container to actually have dimensions before
+            // constructing the map. Flex layout + percentage heights can
+            // leave the element at 0 height on the first animation frame.
+            await new Promise(function (resolve) {
+                var tries = 0;
+                function check() {
+                    var r = el.getBoundingClientRect();
+                    if ((r.width >= 10 && r.height >= 10) || tries > 60) {
+                        resolve();
+                    } else {
+                        tries++;
+                        requestAnimationFrame(check);
+                    }
+                }
+                check();
+            });
+
             var rect = el.getBoundingClientRect();
             console.log('[navMapInit] container size:', rect.width, 'x', rect.height);
             if (rect.height < 10 || rect.width < 10) {
-                console.warn('[navMapInit] map container has near-zero size; tiles will not render until it has dimensions.');
+                console.warn('[navMapInit] map container still has near-zero size after waiting; tiles may not render.');
             }
 
             var center = { lat: lat, lng: lon };

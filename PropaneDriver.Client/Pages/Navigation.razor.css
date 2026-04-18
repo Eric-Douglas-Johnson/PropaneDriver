@@ -54,9 +54,14 @@
     border-radius: 8px;
     overflow: hidden;
     min-height: 400px;
+    /* Establish a positioning context so the absolutely-positioned
+       map child can fill this box reliably — percentage heights are
+       unreliable when the parent's height comes from min-height in
+       a flex layout. */
+    position: relative;
 }
 
 #google-map {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
 }
