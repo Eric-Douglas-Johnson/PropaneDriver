@@ -102,6 +102,9 @@
         align-items: center;
         line-height: 3rem;
         width: 100%;
+        /* Keep labels on one line so the sidebar's max-content width
+           reflects the actual longest menu item. */
+        white-space: nowrap;
     }
 
 .nav-item ::deep a.active {

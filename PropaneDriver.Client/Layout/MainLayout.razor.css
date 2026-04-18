@@ -54,7 +54,13 @@ main {
     }
 
     .sidebar {
-        width: 250px;
+        /* Shrink-to-fit the widest menu item so the main content area
+           gets as much horizontal space as possible. min-width keeps
+           it from getting absurdly narrow if all labels are short;
+           max-width prevents a long username from ballooning it. */
+        width: max-content;
+        min-width: 9rem;
+        max-width: 18rem;
         height: 100vh;
         position: sticky;
         top: 0;
