@@ -389,7 +389,11 @@
         try
         {
             var date = DateOnly.FromDateTime(_selectedDate);
-            var response = await Http.GetAsync($"api/routes/{_selectedDriverId}/{date}");
+            // ISO-8601 (yyyy-MM-dd) so the server route `{date}` parameter
+            // binds correctly regardless of client culture. A bare
+            // DateOnly.ToString() uses the current culture's short date,
+            // which on en-US inserts slashes and creates extra path segments.
+            var response = await Http.GetAsync($"api/routes/{_selectedDriverId}/{date:yyyy-MM-dd}");
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
