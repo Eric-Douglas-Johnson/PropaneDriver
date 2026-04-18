@@ -137,10 +137,27 @@
         };
 
         window.navMapInit = async function (elementId, lat, lon, zoom) {
-            await window._ensureGoogleMapsLoaded();
+            try {
+                await window._ensureGoogleMapsLoaded();
+            } catch (e) {
+                console.error('[navMapInit] Google Maps failed to load:', e);
+                throw e;
+            }
 
             var el = document.getElementById(elementId);
-            if (!el) return;
+            if (!el) {
+                console.error('[navMapInit] Element not found:', elementId);
+                return;
+            }
+
+            // If the container has zero height at init time (e.g. flex layout
+            // hasn't settled yet), Google Maps will render blank with no tiles.
+            // Log this so it's obvious in the console.
+            var rect = el.getBoundingClientRect();
+            console.log('[navMapInit] container size:', rect.width, 'x', rect.height);
+            if (rect.height < 10 || rect.width < 10) {
+                console.warn('[navMapInit] map container has near-zero size; tiles will not render until it has dimensions.');
+            }
 
             var center = { lat: lat, lng: lon };
             window._navMap = new google.maps.Map(el, {
@@ -176,6 +193,23 @@
                     strokeOpacity: 0.85
                 }
             });
+
+            // Re-trigger a resize pass once the map is idle in case the
+            // container grew between Map construction and tile fetch.
+            google.maps.event.addListenerOnce(window._navMap, 'idle', function () {
+                google.maps.event.trigger(window._navMap, 'resize');
+                window._navMap.setCenter(center);
+            });
+
+            // Also re-trigger resize when the viewport changes (mobile rotate,
+            // browser resize, DevTools opening) so tiles re-fill the area.
+            window.addEventListener('resize', function () {
+                if (window._navMap) {
+                    google.maps.event.trigger(window._navMap, 'resize');
+                }
+            });
+
+            console.log('[navMapInit] map created at', lat, lon);
         };
 
         window.navMapUpdateDriver = function (lat, lon) {
@@ -197,9 +231,12 @@
         window.navMapDrawRoute = function (originLat, originLon, destinationAddress) {
             return new Promise(function (resolve, reject) {
                 if (!window._navDirectionsService || !window._navDirectionsRenderer) {
+                    console.error('[navMapDrawRoute] Map not initialized. service=',
+                        !!window._navDirectionsService, 'renderer=', !!window._navDirectionsRenderer);
                     reject(new Error('Map not initialized.'));
                     return;
                 }
+                console.log('[navMapDrawRoute] requesting route', originLat, originLon, '->', destinationAddress);
                 window._navDirectionsService.route({
                     origin: { lat: originLat, lng: originLon },
                     destination: destinationAddress,
@@ -207,17 +244,41 @@
                     region: 'us'
                 }, function (result, status) {
                     if (status !== 'OK' || !result || !result.routes || result.routes.length === 0) {
+                        console.error('[navMapDrawRoute] Directions failed:', status);
                         reject(new Error('Directions failed: ' + status));
                         return;
                     }
-                    window._navDirectionsRenderer.setDirections(result);
+                    try {
+                        // Make sure the renderer is still attached to the map,
+                        // then feed it the directions result.
+                        window._navDirectionsRenderer.setMap(window._navMap);
+                        window._navDirectionsRenderer.setDirections(result);
 
-                    var leg = result.routes[0].legs[0];
-                    resolve({
-                        distanceMeters: leg.distance ? leg.distance.value : 0,
-                        durationSeconds: leg.duration ? leg.duration.value : 0,
-                        destinationAddress: leg.end_address || destinationAddress
-                    });
+                        // Explicitly fit the map to the route bounds; the
+                        // renderer normally does this but can skip it if the
+                        // container size was wrong at init time.
+                        var route = result.routes[0];
+                        if (route.bounds && window._navMap) {
+                            window._navMap.fitBounds(route.bounds);
+                        }
+
+                        // Force a tile re-layout in case the container size
+                        // has changed since init.
+                        google.maps.event.trigger(window._navMap, 'resize');
+
+                        var leg = route.legs[0];
+                        console.log('[navMapDrawRoute] rendered route',
+                            leg.distance && leg.distance.text,
+                            leg.duration && leg.duration.text);
+                        resolve({
+                            distanceMeters: leg.distance ? leg.distance.value : 0,
+                            durationSeconds: leg.duration ? leg.duration.value : 0,
+                            destinationAddress: leg.end_address || destinationAddress
+                        });
+                    } catch (err) {
+                        console.error('[navMapDrawRoute] error rendering directions:', err);
+                        reject(err);
+                    }
                 });
             });
         };

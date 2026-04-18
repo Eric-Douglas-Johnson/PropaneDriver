@@ -20,9 +20,6 @@
             <button class="btn btn-primary" @onclick="GetDirections" disabled="@(_routing || string.IsNullOrWhiteSpace(_destination))">
                 @(_routing ? "Routing…" : "Get Directions")
             </button>
-            <button class="btn btn-outline-secondary" @onclick="OpenInGoogleMaps" disabled="@string.IsNullOrWhiteSpace(_destination)">
-                Open in Maps
-            </button>
         </div>
     </div>
 
@@ -152,14 +149,6 @@
 
         [System.Text.Json.Serialization.JsonPropertyName("destinationAddress")]
         public string DestinationAddress { get; set; } = string.Empty;
-    }
-
-    private async Task OpenInGoogleMaps()
-    {
-        if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
-        var dest = Uri.EscapeDataString(RoutingDestination);
-        var url = $"https://www.google.com/maps/dir/?api=1&destination={dest}&travelmode=driving";
-        await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
     public async ValueTask DisposeAsync()
