@@ -10,6 +10,7 @@
 @inject DeliveryApiService DeliveryApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject HttpClient Http
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
@@ -43,15 +44,27 @@
     </div>
     <div class="summary-section alerts-info">
         <h6>Alerts</h6>
-        @if (_routeSummary.Alerts.Count == 0)
+        @{
+            // Flatten alerts from all deliveries so we can render each
+            // AlertDto directly — this lets us track per-alert Seen state
+            // and mark it seen on click.
+            var allAlerts = _deliveries
+                .SelectMany(d => d.Alerts.Select(a => (Customer: d.CustomerName, Alert: a)))
+                .ToList();
+        }
+        @if (allAlerts.Count == 0)
         {
             <span class="alert-badge alert-ok">No alerts</span>
         }
         else
         {
-            @foreach (var alert in _routeSummary.Alerts)
+            @foreach (var entry in allAlerts)
             {
-                <span class="alert-badge alert-warning">@alert</span>
+                var captured = entry.Alert;
+                <span class="alert-badge alert-warning @(captured.Seen ? "alert-seen" : "alert-flashing")"
+                      @onclick="() => MarkAlertSeen(captured)">
+                    @entry.Customer: @entry.Alert.Message
+                </span>
             }
         }
     </div>
@@ -286,12 +299,11 @@
                 TotalGallonsDelivered = 0,
                 TotalGallonsRemaining = 0,
                 EstimatedCompletionTime = string.Empty,
-                // Flatten per-delivery alerts into the route-level summary
-                // so the Alerts section shows "<customer>: <message>" for
-                // every alert across the day's deliveries.
-                Alerts = _deliveries
-                    .SelectMany(d => d.Alerts.Select(a => $"{d.CustomerName}: {a.Message}"))
-                    .ToList()
+                // The UI renders alerts directly from _deliveries so that
+                // per-alert Seen state can be tracked and clicked; the
+                // RouteSummaryDto.Alerts string list is no longer used for
+                // this page's Alerts section.
+                Alerts = new List<string>()
             };
         }
 
@@ -455,6 +467,31 @@
 
         // Do NOT dispose GeolocationService — it is a shared singleton.
         try { await GeolocationService.StopWatchingAsync(); } catch { }
+    }
+
+    private async Task MarkAlertSeen(AlertDto alert)
+    {
+        if (alert.Seen) return;
+
+        // Optimistically mark seen so the badge stops flashing immediately;
+        // if the server call fails, roll back.
+        alert.Seen = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PutAsync($"api/alerts/{alert.Id}/seen", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                alert.Seen = false;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            alert.Seen = false;
+            StateHasChanged();
+        }
     }
 
     private static string GetStatusClass(int status) => status switch

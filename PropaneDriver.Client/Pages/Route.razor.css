@@ -106,6 +106,31 @@
     color: #f59e0b;
 }
 
+/* Unseen alerts flash to draw the driver's eye; clicking them marks
+   them seen which removes this class and stops the animation. */
+.alert-flashing {
+    cursor: pointer;
+    animation: alert-flash 1s ease-in-out infinite;
+}
+
+.alert-seen {
+    cursor: default;
+    opacity: 0.65;
+}
+
+@keyframes alert-flash {
+    0%, 100% {
+        background-color: #3b2a10;
+        color: #f59e0b;
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    }
+    50% {
+        background-color: #f59e0b;
+        color: #1a1a2e;
+        box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.65);
+    }
+}
+
 /* ===== Main Content (List + Detail) ===== */
 .route-content {
     display: flex;

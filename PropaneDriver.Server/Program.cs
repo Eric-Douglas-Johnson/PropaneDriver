@@ -101,10 +101,18 @@ using (var scope = app.Services.CreateScope())
                     [DeliveryId] uniqueidentifier NOT NULL,
                     [Message] nvarchar(500) NOT NULL,
                     [CreatedAt] datetime2 NOT NULL,
+                    [Seen] bit NOT NULL CONSTRAINT [DF_Alerts_Seen] DEFAULT 0,
                     CONSTRAINT [FK_Alerts_Deliveries_DeliveryId] FOREIGN KEY ([DeliveryId])
                         REFERENCES [Deliveries] ([Id]) ON DELETE CASCADE
                 );
                 CREATE INDEX [IX_Alerts_DeliveryId] ON [Alerts] ([DeliveryId]);
+            END
+            ELSE IF NOT EXISTS (
+                SELECT 1 FROM sys.columns
+                WHERE Name = N'Seen' AND Object_ID = Object_ID(N'[dbo].[Alerts]'))
+            BEGIN
+                ALTER TABLE [Alerts]
+                    ADD [Seen] bit NOT NULL CONSTRAINT [DF_Alerts_Seen] DEFAULT 0;
             END
         ");
     }
@@ -188,7 +196,8 @@ app.MapGet("api/routes/{driverId:guid}/{date}", async (Guid driverId, DateOnly d
                             Id = a.Id.ToString(),
                             DeliveryId = a.DeliveryId.ToString(),
                             Message = a.Message,
-                            CreatedAt = a.CreatedAt
+                            CreatedAt = a.CreatedAt,
+                            Seen = a.Seen
                         })
                         .ToList()
                 })
@@ -477,7 +486,8 @@ app.MapGet("api/routes/today/{driverId:guid}", async (Guid driverId, PropaneDriv
                             Id = a.Id.ToString(),
                             DeliveryId = a.DeliveryId.ToString(),
                             Message = a.Message,
-                            CreatedAt = a.CreatedAt
+                            CreatedAt = a.CreatedAt,
+                            Seen = a.Seen
                         })
                         .ToList()
                 })
@@ -546,7 +556,8 @@ app.MapGet("api/deliveries/{id:guid}/alerts", async (Guid id, PropaneDriverDbCon
             Id = a.Id.ToString(),
             DeliveryId = a.DeliveryId.ToString(),
             Message = a.Message,
-            CreatedAt = a.CreatedAt
+            CreatedAt = a.CreatedAt,
+            Seen = a.Seen
         })
         .ToListAsync();
 
@@ -591,6 +602,21 @@ app.MapDelete("api/alerts/{id:guid}", async (Guid id, PropaneDriverDbContext db)
     db.Alerts.Remove(alert);
     await db.SaveChangesAsync();
     return Results.Ok(new { Deleted = true, AlertId = id });
+});
+
+// Mark an alert as seen (idempotent)
+app.MapPut("api/alerts/{id:guid}/seen", async (Guid id, PropaneDriverDbContext db) =>
+{
+    var alert = await db.Alerts.FindAsync(id);
+    if (alert is null) return Results.NotFound();
+
+    if (!alert.Seen)
+    {
+        alert.Seen = true;
+        await db.SaveChangesAsync();
+    }
+
+    return Results.Ok(new { alert.Id, alert.Seen });
 });
 
 // Update a delivery's status
