@@ -286,7 +286,12 @@
                 TotalGallonsDelivered = 0,
                 TotalGallonsRemaining = 0,
                 EstimatedCompletionTime = string.Empty,
-                Alerts = new List<string>()
+                // Flatten per-delivery alerts into the route-level summary
+                // so the Alerts section shows "<customer>: <message>" for
+                // every alert across the day's deliveries.
+                Alerts = _deliveries
+                    .SelectMany(d => d.Alerts.Select(a => $"{d.CustomerName}: {a.Message}"))
+                    .ToList()
             };
         }
 

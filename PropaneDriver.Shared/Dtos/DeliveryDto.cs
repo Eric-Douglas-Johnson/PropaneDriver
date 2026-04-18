@@ -8,6 +8,7 @@ namespace PropaneDriver.Shared.Dtos
         public GeoAddressDto Location { get; set; } = new();
         public double AvgDeliveryTimeMinutes { get; set; }
         public int Status { get; set; }
+        public List<AlertDto> Alerts { get; set; } = new();
 
         public override string ToString()
         {

@@ -93,6 +93,19 @@ using (var scope = app.Services.CreateScope())
                 CREATE INDEX [IX_Deliveries_RouteId] ON [Deliveries] ([RouteId]);
                 CREATE INDEX [IX_Deliveries_RouteId_SortOrder] ON [Deliveries] ([RouteId], [SortOrder]);
             END
+
+            IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Alerts')
+            BEGIN
+                CREATE TABLE [Alerts] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [DeliveryId] uniqueidentifier NOT NULL,
+                    [Message] nvarchar(500) NOT NULL,
+                    [CreatedAt] datetime2 NOT NULL,
+                    CONSTRAINT [FK_Alerts_Deliveries_DeliveryId] FOREIGN KEY ([DeliveryId])
+                        REFERENCES [Deliveries] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_Alerts_DeliveryId] ON [Alerts] ([DeliveryId]);
+            END
         ");
     }
     catch (Exception ex)
@@ -167,7 +180,17 @@ app.MapGet("api/routes/{driverId:guid}/{date}", async (Guid driverId, DateOnly d
                         Longitude = d.Longitude
                     },
                     AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                    Status = d.Status
+                    Status = d.Status,
+                    Alerts = d.Alerts
+                        .OrderBy(a => a.CreatedAt)
+                        .Select(a => new AlertDto
+                        {
+                            Id = a.Id.ToString(),
+                            DeliveryId = a.DeliveryId.ToString(),
+                            Message = a.Message,
+                            CreatedAt = a.CreatedAt
+                        })
+                        .ToList()
                 })
                 .ToList()
         })
@@ -446,7 +469,17 @@ app.MapGet("api/routes/today/{driverId:guid}", async (Guid driverId, PropaneDriv
                         Longitude = d.Longitude
                     },
                     AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                    Status = d.Status
+                    Status = d.Status,
+                    Alerts = d.Alerts
+                        .OrderBy(a => a.CreatedAt)
+                        .Select(a => new AlertDto
+                        {
+                            Id = a.Id.ToString(),
+                            DeliveryId = a.DeliveryId.ToString(),
+                            Message = a.Message,
+                            CreatedAt = a.CreatedAt
+                        })
+                        .ToList()
                 })
                 .ToList()
         })
@@ -496,6 +529,68 @@ app.MapPost("api/routes", async (CreateRouteDto dto, PropaneDriverDbContext db) 
         app.Logger.LogError(ex, "Failed to create route for driver {DriverId}", dto.DriverId);
         return Results.Problem(detail: ex.Message, title: "Failed to create route", statusCode: 500);
     }
+});
+
+// List alerts for a delivery
+app.MapGet("api/deliveries/{id:guid}/alerts", async (Guid id, PropaneDriverDbContext db) =>
+{
+    var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
+    if (!deliveryExists) return Results.NotFound();
+
+    var alerts = await db.Alerts
+        .AsNoTracking()
+        .Where(a => a.DeliveryId == id)
+        .OrderBy(a => a.CreatedAt)
+        .Select(a => new AlertDto
+        {
+            Id = a.Id.ToString(),
+            DeliveryId = a.DeliveryId.ToString(),
+            Message = a.Message,
+            CreatedAt = a.CreatedAt
+        })
+        .ToListAsync();
+
+    return Results.Ok(alerts);
+});
+
+// Create an alert for a delivery
+app.MapPost("api/deliveries/{id:guid}/alerts", async (Guid id, CreateAlertDto dto, PropaneDriverDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Message))
+        return Results.BadRequest(new { Message = "Alert message is required." });
+
+    var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
+    if (!deliveryExists) return Results.NotFound();
+
+    var alert = new AlertEntity
+    {
+        Id = Guid.NewGuid(),
+        DeliveryId = id,
+        Message = dto.Message.Trim(),
+        CreatedAt = DateTime.UtcNow
+    };
+
+    db.Alerts.Add(alert);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new AlertDto
+    {
+        Id = alert.Id.ToString(),
+        DeliveryId = alert.DeliveryId.ToString(),
+        Message = alert.Message,
+        CreatedAt = alert.CreatedAt
+    });
+});
+
+// Delete an alert
+app.MapDelete("api/alerts/{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
+{
+    var alert = await db.Alerts.FindAsync(id);
+    if (alert is null) return Results.NotFound();
+
+    db.Alerts.Remove(alert);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { Deleted = true, AlertId = id });
 });
 
 // Update a delivery's status

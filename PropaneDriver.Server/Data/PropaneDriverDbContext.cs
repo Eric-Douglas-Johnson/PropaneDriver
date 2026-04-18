@@ -15,6 +15,7 @@ namespace PropaneDriver.Server.Data
         public DbSet<ErrorLogEntity> ErrorLogs => Set<ErrorLogEntity>();
         public DbSet<RouteEntity> Routes => Set<RouteEntity>();
         public DbSet<DeliveryEntity> Deliveries => Set<DeliveryEntity>();
+        public DbSet<AlertEntity> Alerts => Set<AlertEntity>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -64,6 +65,16 @@ namespace PropaneDriver.Server.Data
                 entity.HasOne(e => e.Route)
                       .WithMany(r => r.Deliveries)
                       .HasForeignKey(e => e.RouteId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AlertEntity>(entity =>
+            {
+                entity.ToTable("Alerts");
+                entity.HasIndex(e => e.DeliveryId);
+                entity.HasOne(e => e.Delivery)
+                      .WithMany(d => d.Alerts)
+                      .HasForeignKey(e => e.DeliveryId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
         }

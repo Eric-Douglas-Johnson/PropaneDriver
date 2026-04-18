@@ -40,5 +40,6 @@ namespace PropaneDriver.Server.Data
 
         // Navigation
         public RouteEntity? Route { get; set; }
+        public List<AlertEntity> Alerts { get; set; } = new();
     }
 }
