@@ -10,8 +10,6 @@
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="PropaneDriver.Client.styles.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
 <body>
@@ -100,73 +98,141 @@
             }
         };
 
-        // ===== Leaflet map interop =====
+        // ===== Google Maps interop =====
         window._navMap = null;
         window._navDriverMarker = null;
-        window._navDestMarker = null;
-        window._navRouteLine = null;
+        window._navDirectionsService = null;
+        window._navDirectionsRenderer = null;
+        window._googleMapsLoadPromise = null;
 
-        window.navMapInit = function (elementId, lat, lon, zoom) {
-            if (window._navMap) {
-                window._navMap.remove();
-                window._navMap = null;
+        // Lazy-load the Google Maps JS API. The key is fetched from the server
+        // on first use (referrer-restricted, so exposure is fine). Resolves
+        // once `google.maps` is ready to use.
+        window._ensureGoogleMapsLoaded = function () {
+            if (window.google && window.google.maps) {
+                return Promise.resolve();
             }
-            var map = L.map(elementId).setView([lat, lon], zoom);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
-            window._navMap = map;
+            if (window._googleMapsLoadPromise) {
+                return window._googleMapsLoadPromise;
+            }
+            window._googleMapsLoadPromise = fetch('/api/config/maps-key')
+                .then(function (r) {
+                    if (!r.ok) throw new Error('Failed to fetch maps key: ' + r.status);
+                    return r.json();
+                })
+                .then(function (data) {
+                    return new Promise(function (resolve, reject) {
+                        window.__googleMapsReady = function () { resolve(); };
+                        var s = document.createElement('script');
+                        s.src = 'https://maps.googleapis.com/maps/api/js?key='
+                            + encodeURIComponent(data.key)
+                            + '&loading=async&callback=__googleMapsReady';
+                        s.async = true;
+                        s.defer = true;
+                        s.onerror = function () { reject(new Error('Google Maps script failed to load.')); };
+                        document.head.appendChild(s);
+                    });
+                });
+            return window._googleMapsLoadPromise;
+        };
 
-            // driver marker (blue circle)
-            window._navDriverMarker = L.circleMarker([lat, lon], {
-                radius: 10, fillColor: '#3b82f6', fillOpacity: 1,
-                color: '#1e3a5f', weight: 2
-            }).addTo(map).bindPopup('You');
+        window.navMapInit = async function (elementId, lat, lon, zoom) {
+            await window._ensureGoogleMapsLoaded();
+
+            var el = document.getElementById(elementId);
+            if (!el) return;
+
+            var center = { lat: lat, lng: lon };
+            window._navMap = new google.maps.Map(el, {
+                center: center,
+                zoom: zoom,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false
+            });
+
+            window._navDriverMarker = new google.maps.Marker({
+                position: center,
+                map: window._navMap,
+                title: 'You',
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 9,
+                    fillColor: '#3b82f6',
+                    fillOpacity: 1,
+                    strokeColor: '#1e3a5f',
+                    strokeWeight: 2
+                }
+            });
+
+            window._navDirectionsService = new google.maps.DirectionsService();
+            window._navDirectionsRenderer = new google.maps.DirectionsRenderer({
+                map: window._navMap,
+                suppressMarkers: false,
+                preserveViewport: false,
+                polylineOptions: {
+                    strokeColor: '#4a6cf7',
+                    strokeWeight: 5,
+                    strokeOpacity: 0.85
+                }
+            });
         };
 
         window.navMapUpdateDriver = function (lat, lon) {
             if (!window._navMap || !window._navDriverMarker) return;
-            var latlng = L.latLng(lat, lon);
-            window._navDriverMarker.setLatLng(latlng);
-            window._navMap.panTo(latlng);
+            var pos = { lat: lat, lng: lon };
+            window._navDriverMarker.setPosition(pos);
+            window._navMap.panTo(pos);
         };
 
+        // No-op kept for backwards compatibility; Google DirectionsRenderer
+        // plants its own destination marker when a route is drawn.
         window.navMapSetDestination = function (lat, lon, label) {
-            if (!window._navMap) return;
-            if (window._navDestMarker) {
-                window._navMap.removeLayer(window._navDestMarker);
-            }
-            window._navDestMarker = L.marker([lat, lon])
-                .addTo(window._navMap)
-                .bindPopup(label || 'Destination');
+            return;
         };
 
-        window.navMapDrawRoute = function (coordPairs) {
-            if (!window._navMap) return;
-            if (window._navRouteLine) {
-                window._navMap.removeLayer(window._navRouteLine);
-            }
-            var latlngs = coordPairs.map(function (c) { return [c[0], c[1]]; });
-            window._navRouteLine = L.polyline(latlngs, {
-                color: '#4a6cf7', weight: 5, opacity: 0.8
-            }).addTo(window._navMap);
+        // Route from (originLat, originLon) to a destination address string.
+        // DirectionsService geocodes the destination internally, so we don't
+        // need a separate geocoding step on the client for navigation.
+        window.navMapDrawRoute = function (originLat, originLon, destinationAddress) {
+            return new Promise(function (resolve, reject) {
+                if (!window._navDirectionsService || !window._navDirectionsRenderer) {
+                    reject(new Error('Map not initialized.'));
+                    return;
+                }
+                window._navDirectionsService.route({
+                    origin: { lat: originLat, lng: originLon },
+                    destination: destinationAddress,
+                    travelMode: google.maps.TravelMode.DRIVING,
+                    region: 'us'
+                }, function (result, status) {
+                    if (status !== 'OK' || !result || !result.routes || result.routes.length === 0) {
+                        reject(new Error('Directions failed: ' + status));
+                        return;
+                    }
+                    window._navDirectionsRenderer.setDirections(result);
 
-            // Fit the map to show the full route
-            var group = L.featureGroup([window._navRouteLine]);
-            if (window._navDriverMarker) group.addLayer(window._navDriverMarker);
-            if (window._navDestMarker) group.addLayer(window._navDestMarker);
-            window._navMap.fitBounds(group.getBounds().pad(0.1));
+                    var leg = result.routes[0].legs[0];
+                    resolve({
+                        distanceMeters: leg.distance ? leg.distance.value : 0,
+                        durationSeconds: leg.duration ? leg.duration.value : 0,
+                        destinationAddress: leg.end_address || destinationAddress
+                    });
+                });
+            });
         };
 
         window.navMapDestroy = function () {
-            if (window._navMap) {
-                window._navMap.remove();
-                window._navMap = null;
-                window._navDriverMarker = null;
-                window._navDestMarker = null;
-                window._navRouteLine = null;
+            if (window._navDirectionsRenderer) {
+                window._navDirectionsRenderer.setMap(null);
+                window._navDirectionsRenderer = null;
             }
+            if (window._navDriverMarker) {
+                window._navDriverMarker.setMap(null);
+                window._navDriverMarker = null;
+            }
+            window._navDirectionsService = null;
+            window._navMap = null;
         };
     </script>
 </body>

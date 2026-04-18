@@ -518,6 +518,25 @@ app.MapPut("api/deliveries/{id:guid}/status", async (Guid id, DeliveryStatusUpda
     }
 });
 
+// Return the browser-facing Google Maps JS API key. This key is HTTP-referrer
+// restricted in the Google Cloud Console, so exposing it here is acceptable.
+// Separate from the server-side Geocoding key, which never leaves the server.
+app.MapGet("api/config/maps-key", (IConfiguration config) =>
+{
+    var key = config["GoogleMaps:JsApiKey"]
+        ?? Environment.GetEnvironmentVariable("GOOGLE_MAPS_JS_API_KEY");
+
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        app.Logger.LogError("Google Maps JS API key is not configured.");
+        return Results.Problem(
+            detail: "Maps key is not configured.",
+            statusCode: 500);
+    }
+
+    return Results.Ok(new { key });
+});
+
 // Geocode an address via Google (proxied so the API key stays server-side).
 // Tries the Geocoding API first (structured, cheap). On ZERO_RESULTS falls
 // back to Places Text Search, which behaves like the maps.google.com search

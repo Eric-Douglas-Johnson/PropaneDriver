@@ -1,7 +1,6 @@
 @page "/navigation"
 @using PropaneDriver.Client.Services
 @inject GeolocationService GeolocationService
-@inject GeocodingService Geocoder
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
@@ -33,7 +32,7 @@
     }
 
     <div class="nav-map">
-        <div id="leaflet-map"></div>
+        <div id="google-map"></div>
     </div>
 </div>
 
@@ -51,12 +50,13 @@
     {
         if (firstRender)
         {
-            // Initialize the Leaflet map
+            // Initialize the Google Maps map (lazy-loads the JS API via our
+            // server endpoint on first call).
             var lat = GeolocationService.CurrentLatitude;
             var lon = GeolocationService.CurrentLongitude;
             if (lat == 0 && lon == 0) { lat = DefaultLat; lon = DefaultLon; }
 
-            await JS.InvokeVoidAsync("navMapInit", "leaflet-map", lat, lon, 13);
+            await JS.InvokeVoidAsync("navMapInit", "google-map", lat, lon, 13);
             _mapInitialized = true;
 
             // Subscribe to GPS updates
@@ -111,70 +111,28 @@
         _status = $"Routing to {_destination}…";
         StateHasChanged();
 
-        // Geocode the destination to get lat/lon
-        var parts = RoutingDestination.Split(',');
-        string street = "", city = "", state = "", zip = "";
-        if (parts.Length >= 1) street = parts[0].Trim();
-        if (parts.Length >= 2) city = parts[1].Trim();
-        if (parts.Length >= 3) state = parts[2].Trim();
-        if (parts.Length >= 4) zip = parts[3].Trim();
-
-        var geocodeResult = await Geocoder.GeocodeAsync(street, city, state, zip);
-
-        if (geocodeResult is null)
-        {
-            _status = "Could not geocode destination address.";
-            _routing = false;
-            return;
-        }
-
-        var destLat = geocodeResult.Latitude;
-        var destLon = geocodeResult.Longitude;
-
-        // Place destination marker
-        await JS.InvokeVoidAsync("navMapSetDestination", destLat, destLon, _destination);
-
-        // Get current position for origin
+        // Origin = current GPS position.
         var originLat = GeolocationService.CurrentLatitude;
         var originLon = GeolocationService.CurrentLongitude;
 
         if (originLat == 0 && originLon == 0)
         {
-            _status = $"Destination set. Waiting for GPS fix to draw route…";
+            _status = "Waiting for GPS fix to draw route…";
             _routing = false;
             return;
         }
 
-        // Fetch route from OSRM (free, no API key)
         try
         {
-            var osrmUrl = $"https://router.project-osrm.org/route/v1/driving/{originLon},{originLat};{destLon},{destLat}?overview=full&geometries=geojson";
-            using var http = new HttpClient();
-            var response = await http.GetAsync(osrmUrl);
+            // Google's DirectionsService geocodes the destination address
+            // internally, so we pass the raw address string instead of
+            // doing a separate geocode call.
+            var result = await JS.InvokeAsync<NavRouteResult>(
+                "navMapDrawRoute", originLat, originLon, RoutingDestination);
 
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadFromJsonAsync<OsrmResponse>();
-                if (json?.Routes?.Length > 0)
-                {
-                    var coords = json.Routes[0].Geometry.Coordinates;
-                    // OSRM returns [lon, lat] — Leaflet wants [lat, lon]
-                    var latLngs = coords.Select(c => new double[] { c[1], c[0] }).ToArray();
-                    await JS.InvokeVoidAsync("navMapDrawRoute", (object)latLngs);
-
-                    var distMiles = json.Routes[0].Distance / 1609.34;
-                    var durMin = json.Routes[0].Duration / 60.0;
-                    _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
-                }
-                else
-                {
-                    _status = "No route found.";
-                }
-            }
-            else
-            {
-                _status = "Routing service unavailable.";
-            }
+            var distMiles = result.DistanceMeters / 1609.34;
+            var durMin = result.DurationSeconds / 60.0;
+            _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
         }
         catch (Exception ex)
         {
@@ -182,6 +140,18 @@
         }
 
         _routing = false;
+    }
+
+    private class NavRouteResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("distanceMeters")]
+        public double DistanceMeters { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("durationSeconds")]
+        public double DurationSeconds { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("destinationAddress")]
+        public string DestinationAddress { get; set; } = string.Empty;
     }
 
     private async Task OpenInGoogleMaps()
@@ -196,30 +166,5 @@
     {
         GeolocationService.OnPositionChanged -= HandlePositionChanged;
         try { await JS.InvokeVoidAsync("navMapDestroy"); } catch { }
-    }
-
-    // OSRM response models
-    private class OsrmResponse
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("routes")]
-        public OsrmRoute[] Routes { get; set; } = Array.Empty<OsrmRoute>();
-    }
-
-    private class OsrmRoute
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("distance")]
-        public double Distance { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("duration")]
-        public double Duration { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("geometry")]
-        public OsrmGeometry Geometry { get; set; } = new();
-    }
-
-    private class OsrmGeometry
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("coordinates")]
-        public double[][] Coordinates { get; set; } = Array.Empty<double[]>();
     }
 }
