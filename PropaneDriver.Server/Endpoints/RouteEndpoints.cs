@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
+using PropaneDriver.Server.Services;
 
 namespace PropaneDriver.Server.Endpoints
 {
@@ -147,27 +148,33 @@ namespace PropaneDriver.Server.Endpoints
 
                 try
                 {
+                    //create a list of deliveries that will be used to calculate the estimated route time
+                    var deliveries = dto.Deliveries.Select((d, i) => new DeliveryEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        CustomerName = d.CustomerName,
+                        Street = d.Street,
+                        City = d.City,
+                        State = d.State,
+                        ZipCode = d.ZipCode,
+                        Latitude = d.Latitude,
+                        Longitude = d.Longitude,
+                        AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                        SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
+                        Status = 0,
+                        CreatedAt = DateTime.UtcNow
+                    }).ToList();
+
+                    var estimatedRouteTime = GPSHelperService.GetEstimatedRouteTime(deliveries);
+
                     var route = new RouteEntity
                     {
                         Id = Guid.NewGuid(),
                         DriverId = driverId,
                         Date = dto.Date,
                         CreatedAt = DateTime.UtcNow,
-                        Deliveries = dto.Deliveries.Select((d, i) => new DeliveryEntity
-                        {
-                            Id = Guid.NewGuid(),
-                            CustomerName = d.CustomerName,
-                            Street = d.Street,
-                            City = d.City,
-                            State = d.State,
-                            ZipCode = d.ZipCode,
-                            Latitude = d.Latitude,
-                            Longitude = d.Longitude,
-                            AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                            SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
-                            Status = 0,
-                            CreatedAt = DateTime.UtcNow
-                        }).ToList()
+                        EstimatedRouteTime = estimatedRouteTime,
+                        Deliveries = deliveries
                     };
 
                     db.Routes.Add(route);
