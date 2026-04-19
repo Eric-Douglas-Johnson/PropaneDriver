@@ -3,7 +3,7 @@ using PropaneDriver.Server.Services;
 
 namespace PropaneDriver.Tests;
 
-// Verifies the pure math in GPSHelperService.GetEstimatedRouteTime:
+// Verifies the math in GPSHelperService.GetEstimatedRouteTime:
 // servicing-time summation (with the 10-minute default for unstored),
 // ordering by SortOrder, and the Haversine+winding+speed drive-leg
 // estimate. Values use real-ish rural-MN coordinates to catch regressions
@@ -28,26 +28,26 @@ public class GPSHelperServiceTests
         };
 
     [Fact]
-    public void GetEstimatedRouteTime_EmptyList_ReturnsZero()
+    public async Task GetEstimatedRouteTime_EmptyList_ReturnsZero()
     {
-        Assert.Equal(0, GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity>()));
+        Assert.Equal(0, await GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity>()));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_NullList_ReturnsZero()
+    public async Task GetEstimatedRouteTime_NullList_ReturnsZero()
     {
-        Assert.Equal(0, GPSHelperService.GetEstimatedRouteTime(null!));
+        Assert.Equal(0, await GPSHelperService.GetEstimatedRouteTime(null!));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_SingleDelivery_NoDriveLeg_OnlyServicingTime()
+    public async Task GetEstimatedRouteTime_SingleDelivery_NoDriveLeg_OnlyServicingTime()
     {
         var stops = new List<DeliveryEntity> { Stop(0, 47.42, -92.93, avgMinutes: 15) };
-        Assert.Equal(15, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(15, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_MissingAvgTime_DefaultsTo10Minutes()
+    public async Task GetEstimatedRouteTime_MissingAvgTime_DefaultsTo10Minutes()
     {
         var stops = new List<DeliveryEntity>
         {
@@ -55,21 +55,21 @@ public class GPSHelperServiceTests
             Stop(1, 47.42, -92.93, avgMinutes: 0) // identical coords → 0 drive time
         };
         // 10 + 10 = 20 min
-        Assert.Equal(20, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(20, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_NegativeAvgTime_TreatedAsUnsetAndDefaulted()
+    public async Task GetEstimatedRouteTime_NegativeAvgTime_TreatedAsUnsetAndDefaulted()
     {
         var stops = new List<DeliveryEntity>
         {
             Stop(0, 47.0, -93.0, avgMinutes: -5) // invalid sentinel
         };
-        Assert.Equal(10, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(10, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_TwoStops_AddsHaversineDriveLeg()
+    public async Task GetEstimatedRouteTime_TwoStops_AddsHaversineDriveLeg()
     {
         // Hibbing, MN ≈ (47.4271, -92.9377)
         // Chisholm, MN ≈ (47.4893, -92.8838) — about 5.2 mi straight-line
@@ -83,22 +83,22 @@ public class GPSHelperServiceTests
         var expectedDriveMinutes = expectedDriveMiles / AverageMph * 60.0;
         var expectedTotal = (int)Math.Round(12 + 8 + expectedDriveMinutes);
 
-        Assert.Equal(expectedTotal, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(expectedTotal, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_IdenticalCoordinates_ZeroDriveLeg()
+    public async Task GetEstimatedRouteTime_IdenticalCoordinates_ZeroDriveLeg()
     {
         var stops = new List<DeliveryEntity>
         {
             Stop(0, 47.0, -93.0, avgMinutes: 5),
             Stop(1, 47.0, -93.0, avgMinutes: 5)
         };
-        Assert.Equal(10, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(10, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_RespectsSortOrder_NotInputOrder()
+    public async Task GetEstimatedRouteTime_RespectsSortOrder_NotInputOrder()
     {
         // Input deliberately out of order; ordered sequence should be A → B → C.
         // With distinct coords, different orderings would yield different
@@ -108,14 +108,14 @@ public class GPSHelperServiceTests
         var B = Stop(1, 47.2, -93.0, avgMinutes: 10);
         var C = Stop(2, 47.4, -93.0, avgMinutes: 10);
 
-        var inOrder = GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity> { A, B, C });
-        var shuffled = GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity> { C, A, B });
+        var inOrder = await GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity> { A, B, C });
+        var shuffled = await GPSHelperService.GetEstimatedRouteTime(new List<DeliveryEntity> { C, A, B });
 
         Assert.Equal(inOrder, shuffled);
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_StopWithZeroCoords_SkipsLegDoesNotDoubleCountServicing()
+    public async Task GetEstimatedRouteTime_StopWithZeroCoords_SkipsLegDoesNotDoubleCountServicing()
     {
         // Middle stop has no GPS. We should still count its servicing time,
         // but the two drive-legs touching it should be skipped rather than
@@ -127,11 +127,11 @@ public class GPSHelperServiceTests
             Stop(2, 47.2, -93.0, avgMinutes: 5)
         };
 
-        Assert.Equal(15, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(15, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     [Fact]
-    public void GetEstimatedRouteTime_ThreeStops_SumsBothDriveLegs()
+    public async Task GetEstimatedRouteTime_ThreeStops_SumsBothDriveLegs()
     {
         var stops = new List<DeliveryEntity>
         {
@@ -144,7 +144,7 @@ public class GPSHelperServiceTests
         var leg2 = HaversineMiles(47.48, -92.88, 47.52, -92.82) * RoadWindingFactor / AverageMph * 60.0;
         var expected = (int)Math.Round(30 + leg1 + leg2);
 
-        Assert.Equal(expected, GPSHelperService.GetEstimatedRouteTime(stops));
+        Assert.Equal(expected, await GPSHelperService.GetEstimatedRouteTime(stops));
     }
 
     // Duplicate of the private helper so we can compute expected values.
