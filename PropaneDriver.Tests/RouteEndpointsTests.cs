@@ -245,6 +245,41 @@ public class RouteEndpointsTests
     }
 
     [Fact]
+    public async Task EstimatedRouteTime_RoundTripsThroughProjection()
+    {
+        using var db = TestDb.Create();
+        var driverId = Guid.NewGuid();
+        var date = DateOnly.FromDateTime(DateTime.Today);
+        var route = SeedRouteWithDeliveries(db, driverId, date);
+        route.EstimatedRouteTime = 127.5;
+        await db.SaveChangesAsync();
+
+        var dto = await db.Routes
+            .AsNoTracking()
+            .Where(r => r.Id == route.Id)
+            .Select(r => new RouteDto
+            {
+                Id = r.Id.ToString(),
+                DriverId = r.DriverId.ToString(),
+                Date = r.Date,
+                EstimatedRouteTime = r.EstimatedRouteTime
+            })
+            .FirstAsync();
+
+        Assert.Equal(127.5, dto.EstimatedRouteTime);
+    }
+
+    [Fact]
+    public async Task EstimatedRouteTime_DefaultsToZeroForNewRoute()
+    {
+        using var db = TestDb.Create();
+        var route = SeedRouteWithDeliveries(db, Guid.NewGuid(), DateOnly.FromDateTime(DateTime.Today));
+
+        var reloaded = await db.Routes.AsNoTracking().FirstAsync(r => r.Id == route.Id);
+        Assert.Equal(0.0, reloaded.EstimatedRouteTime);
+    }
+
+    [Fact]
     public async Task GetRouteByDriverAndDate_ProjectsAlertsOrderedByCreatedAt()
     {
         using var db = TestDb.Create();

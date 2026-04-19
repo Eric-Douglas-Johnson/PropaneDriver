@@ -21,6 +21,7 @@ namespace PropaneDriver.Server.Endpoints
                         Id = r.Id.ToString(),
                         DriverId = r.DriverId.ToString(),
                         Date = r.Date,
+                        EstimatedRouteTime = r.EstimatedRouteTime,
                         Deliveries = r.Deliveries
                             .OrderBy(d => d.SortOrder)
                             .Select(d => new DeliveryDto
@@ -100,6 +101,7 @@ namespace PropaneDriver.Server.Endpoints
                         Id = r.Id.ToString(),
                         DriverId = r.DriverId.ToString(),
                         Date = r.Date,
+                        EstimatedRouteTime = r.EstimatedRouteTime,
                         Deliveries = r.Deliveries
                             .OrderBy(d => d.SortOrder)
                             .Select(d => new DeliveryDto

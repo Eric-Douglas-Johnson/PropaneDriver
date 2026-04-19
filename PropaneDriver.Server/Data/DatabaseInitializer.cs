@@ -39,11 +39,19 @@ namespace PropaneDriver.Server.Data
                             [Id] uniqueidentifier NOT NULL PRIMARY KEY,
                             [DriverId] uniqueidentifier NOT NULL,
                             [Date] date NOT NULL,
+                            [EstimatedRouteTime] float NOT NULL CONSTRAINT [DF_Routes_EstimatedRouteTime] DEFAULT 0,
                             [CreatedAt] datetime2 NOT NULL
                         );
                         CREATE INDEX [IX_Routes_DriverId] ON [Routes] ([DriverId]);
                         CREATE INDEX [IX_Routes_Date] ON [Routes] ([Date]);
                         CREATE INDEX [IX_Routes_DriverId_Date] ON [Routes] ([DriverId], [Date]);
+                    END
+                    ELSE IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'EstimatedRouteTime' AND Object_ID = Object_ID(N'[dbo].[Routes]'))
+                    BEGIN
+                        ALTER TABLE [Routes]
+                            ADD [EstimatedRouteTime] float NOT NULL CONSTRAINT [DF_Routes_EstimatedRouteTime] DEFAULT 0;
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')
