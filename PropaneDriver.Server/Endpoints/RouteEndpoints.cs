@@ -165,7 +165,7 @@ namespace PropaneDriver.Server.Endpoints
                         CreatedAt = DateTime.UtcNow
                     }).ToList();
 
-                    var estimatedRouteTime = GPSHelperService.GetEstimatedRouteTime(deliveries);
+                    var estimatedRouteTime =  await GPSHelperService.GetEstimatedRouteTime(deliveries);
 
                     var route = new RouteEntity
                     {

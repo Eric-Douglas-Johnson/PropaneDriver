@@ -30,7 +30,7 @@ namespace PropaneDriver.Server.Services
         // stops are estimated from each stop's GPS coordinates. Stops with
         // unset coordinates (0,0) contribute their servicing time but no
         // drive leg — no silent cross-ocean legs.
-        public static int GetEstimatedRouteTime(List<DeliveryEntity> deliveryEntities)
+        public static async Task<int> GetEstimatedRouteTime(List<DeliveryEntity> deliveryEntities)
         {
             if (deliveryEntities is null || deliveryEntities.Count == 0)
                 return 0;
