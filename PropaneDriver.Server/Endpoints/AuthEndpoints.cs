@@ -1,0 +1,152 @@
+using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
+using PropaneDriver.Server.Data;
+using PropaneDriver.Server.Services;
+using PropaneDriver.Shared.Dtos;
+
+namespace PropaneDriver.Server.Endpoints
+{
+    public static class AuthEndpoints
+    {
+        public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
+        {
+            // Authenticate a driver. Route name casing preserved for existing clients.
+            app.MapPost("api/Authenticate", async (CredsDto creds, PropaneDriverDbContext db) =>
+            {
+                var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == creds.UserName);
+
+                if (driver is null)
+                {
+                    return Results.Ok(new AuthResponseDto
+                    {
+                        IsAuthenticated = false,
+                        Role = 0,
+                        UserId = Guid.Empty,
+                        StatusMessage = $"No driver found with user name '{creds.UserName}'."
+                    });
+                }
+
+                if (!BCrypt.Net.BCrypt.Verify(creds.Password, driver.PasswordHash))
+                {
+                    return Results.Ok(new AuthResponseDto
+                    {
+                        IsAuthenticated = false,
+                        Role = 0,
+                        UserId = Guid.Empty,
+                        StatusMessage = "Invalid password."
+                    });
+                }
+
+                return Results.Ok(new AuthResponseDto
+                {
+                    IsAuthenticated = true,
+                    Role = 1,
+                    UserId = driver.Id,
+                    StatusMessage = "Authenticated"
+                });
+            });
+
+            // Register a new driver
+            app.MapPost("api/Register", async (RegisterDriverDto registration, PropaneDriverDbContext db) =>
+            {
+                if (string.IsNullOrWhiteSpace(registration.UserName) || string.IsNullOrWhiteSpace(registration.Password))
+                    return Results.BadRequest(new { Message = "UserName and Password are required." });
+
+                var exists = await db.Drivers.AnyAsync(d => d.UserName == registration.UserName);
+                if (exists)
+                    return Results.Conflict(new { Message = "A driver with that user name already exists." });
+
+                var driver = new DriverEntity
+                {
+                    Id = Guid.NewGuid(),
+                    UserName = registration.UserName,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(registration.Password),
+                    Role = "driver",
+                    FirstName = registration.FirstName,
+                    MiddleName = registration.MiddleName,
+                    LastName = registration.LastName,
+                    Email = registration.Email,
+                    PhoneNumber = registration.PhoneNumber,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                db.Drivers.Add(driver);
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new { driver.Id, Message = "Driver registered successfully." });
+            });
+
+            // Request a password reset email. Always returns success to avoid
+            // leaking which emails are registered.
+            app.MapPost("api/ForgotPassword", async (
+                ForgotPasswordDto dto,
+                PropaneDriverDbContext db,
+                EmailService emailService,
+                IConfiguration config) =>
+            {
+                var driver = await db.Drivers.FirstOrDefaultAsync(d => d.Email == dto.Email);
+                if (driver is null)
+                    return Results.Ok(new { Message = "If that email is registered, a reset link has been sent." });
+
+                // Generate a cryptographically random token
+                var tokenBytes = RandomNumberGenerator.GetBytes(32);
+                var rawToken = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
+                var tokenHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawToken)));
+
+                // Invalidate any unused tokens for this driver
+                var existing = await db.PasswordResetTokens
+                    .Where(t => t.DriverId == driver.Id && t.UsedAt == null)
+                    .ToListAsync();
+                foreach (var t in existing)
+                    t.UsedAt = DateTime.UtcNow;
+
+                db.PasswordResetTokens.Add(new PasswordResetTokenEntity
+                {
+                    DriverId = driver.Id,
+                    TokenHash = tokenHash,
+                    CreatedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.AddHours(1)
+                });
+                await db.SaveChangesAsync();
+
+                var baseUrl = config["AppBaseUrl"] ?? "https://propane-driver.azurewebsites.net";
+                var resetUrl = $"{baseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
+
+                await emailService.SendPasswordResetAsync(driver.Email, $"{driver.FirstName} {driver.LastName}".Trim(), resetUrl);
+
+                return Results.Ok(new { Message = "If that email is registered, a reset link has been sent." });
+            });
+
+            // Reset the password using a token
+            app.MapPost("api/ResetPassword", async (ResetPasswordDto dto, PropaneDriverDbContext db) =>
+            {
+                if (string.IsNullOrWhiteSpace(dto.Token) || string.IsNullOrWhiteSpace(dto.NewPassword))
+                    return Results.BadRequest(new { Message = "Token and new password are required." });
+
+                if (dto.NewPassword.Length < 6)
+                    return Results.BadRequest(new { Message = "Password must be at least 6 characters." });
+
+                var tokenHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(dto.Token)));
+
+                var resetToken = await db.PasswordResetTokens
+                    .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+
+                if (resetToken is null || resetToken.UsedAt != null || resetToken.ExpiresAt < DateTime.UtcNow)
+                    return Results.BadRequest(new { Message = "This reset link is invalid or has expired." });
+
+                var driver = await db.Drivers.FindAsync(resetToken.DriverId);
+                if (driver is null)
+                    return Results.BadRequest(new { Message = "Driver not found." });
+
+                driver.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+                resetToken.UsedAt = DateTime.UtcNow;
+
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new { Message = "Password has been reset successfully." });
+            });
+
+            return app;
+        }
+    }
+}
