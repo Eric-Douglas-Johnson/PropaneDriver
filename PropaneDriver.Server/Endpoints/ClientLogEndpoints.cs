@@ -42,7 +42,7 @@ namespace PropaneDriver.Server.Endpoints
             });
 
             // Run each DeliveryTimes repair step individually and report results
-            app.MapPost("api/admin/repair-delivery-times", async (PropaneDriverDbContext db) =>
+            app.MapGet("api/admin/repair-delivery-times", async (PropaneDriverDbContext db) =>
             {
                 var conn = db.Database.GetDbConnection();
                 await conn.OpenAsync();
