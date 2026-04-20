@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
+// Projection type for the schema diagnostic query.
+file record SchemaColumnRow(string TableName, string ColumnName, string TypeName, bool IsNullable);
+
 namespace PropaneDriver.Server.Endpoints
 {
     public static class ClientLogEndpoints
@@ -16,6 +19,25 @@ namespace PropaneDriver.Server.Endpoints
                     .Take(50)
                     .ToListAsync();
                 return Results.Ok(logs);
+            });
+
+            // Return columns for key tables so we can diagnose live schema state
+            app.MapGet("api/admin/schema", async (PropaneDriverDbContext db) =>
+            {
+                var cols = await db.Database
+                    .SqlQueryRaw<SchemaColumnRow>(@"
+                        SELECT
+                            t.name   AS TableName,
+                            c.name   AS ColumnName,
+                            tp.name  AS TypeName,
+                            c.is_nullable AS IsNullable
+                        FROM sys.columns c
+                        JOIN sys.tables  t  ON t.object_id = c.object_id
+                        JOIN sys.types   tp ON tp.user_type_id = c.user_type_id
+                        WHERE t.name IN ('Deliveries','DeliveryTimes','Addresses')
+                        ORDER BY t.name, c.column_id")
+                    .ToListAsync();
+                return Results.Ok(cols);
             });
 
             // Log a client-side error
