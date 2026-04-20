@@ -298,7 +298,15 @@
                 CompletedStops = _deliveries.Count(d => d.Status == 2),
                 TotalGallonsDelivered = 0,
                 TotalGallonsRemaining = 0,
-                EstimatedCompletionTime = string.Empty,
+                // Server-side GPSHelperService stores expected route duration in
+                // minutes on the RouteEntity. Project it forward from "now" so
+                // the "Est. Completion" tile shows a clock time the driver can
+                // actually plan against (e.g. "3:47 PM") rather than a raw
+                // duration. If the server didn't compute one (missing GPS on
+                // every stop, for instance), leave it blank.
+                EstimatedCompletionTime = route.EstimatedRouteTime > 0
+                    ? DateTime.Now.AddMinutes(route.EstimatedRouteTime).ToString("h:mm tt")
+                    : string.Empty,
                 // The UI renders alerts directly from _deliveries so that
                 // per-alert Seen state can be tracked and clicked; the
                 // RouteSummaryDto.Alerts string list is no longer used for
