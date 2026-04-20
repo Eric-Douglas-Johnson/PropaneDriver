@@ -125,15 +125,16 @@ namespace PropaneDriver.Client.Services
             }
             else
             {
+                if (_activeDelivery.Location.Id == Guid.Empty)
+                {
+                    await ErrorLogService.LogErrorAsync("GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no AddressId — cannot save time");
+                    return;
+                }
+
                 var dto = new DeliveryTimeDto
                 {
                     DeliveryId = _activeDelivery.Id,
-                    Street = _activeDelivery.Location.Street,
-                    City = _activeDelivery.Location.City,
-                    State = _activeDelivery.Location.State,
-                    ZipCode = _activeDelivery.Location.ZipCode,
-                    Latitude = _activeDelivery.Location.Latitude,
-                    Longitude = _activeDelivery.Location.Longitude,
+                    AddressId = _activeDelivery.Location.Id,
                     TimeIntervalSeconds = _timer.Elapsed.TotalSeconds
                 };
 

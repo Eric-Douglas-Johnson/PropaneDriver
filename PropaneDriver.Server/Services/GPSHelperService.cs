@@ -27,15 +27,18 @@ namespace PropaneDriver.Server.Services
         //   sum(delivery servicing time)  +  sum(drive time between stops)
         //
         // Deliveries are visited in SortOrder. Drive legs between consecutive
-        // stops are estimated from each stop's GPS coordinates. Stops with
-        // unset coordinates (0,0) contribute their servicing time but no
-        // drive leg — no silent cross-ocean legs.
-        public static async Task<int> GetEstimatedRouteTime(List<DeliveryEntity> deliveryEntities)
+        // stops are estimated from each stop's GPS coordinates via the Addresses
+        // lookup. Stops with unset coordinates (0,0) contribute their servicing
+        // time but no drive leg — no silent cross-ocean legs.
+        public static async Task<int> GetEstimatedRouteTime(
+            List<DeliveryEntity> deliveries,
+            List<AddressEntity> addresses)
         {
-            if (deliveryEntities is null || deliveryEntities.Count == 0)
+            if (deliveries is null || deliveries.Count == 0)
                 return 0;
 
-            var ordered = deliveryEntities.OrderBy(d => d.SortOrder).ToList();
+            var addressById = addresses.ToDictionary(a => a.Id);
+            var ordered = deliveries.OrderBy(d => d.SortOrder).ToList();
 
             double deliveryMinutes = 0;
             foreach (var d in ordered)
@@ -51,19 +54,23 @@ namespace PropaneDriver.Server.Services
                 var prev = ordered[i - 1];
                 var curr = ordered[i];
 
-                if (!HasCoordinates(prev) || !HasCoordinates(curr))
+                if (!addressById.TryGetValue(prev.AddressId, out var prevAddr) ||
+                    !addressById.TryGetValue(curr.AddressId, out var currAddr))
+                    continue;
+
+                if (!HasCoordinates(prevAddr) || !HasCoordinates(currAddr))
                     continue;
 
                 driveMinutes += EstimateDriveMinutes(
-                    prev.Latitude, prev.Longitude,
-                    curr.Latitude, curr.Longitude);
+                    prevAddr.Latitude, prevAddr.Longitude,
+                    currAddr.Latitude, currAddr.Longitude);
             }
 
             return (int)Math.Round(deliveryMinutes + driveMinutes);
         }
 
-        private static bool HasCoordinates(DeliveryEntity d)
-            => d.Latitude != 0 || d.Longitude != 0;
+        private static bool HasCoordinates(AddressEntity a)
+            => a.Latitude != 0 || a.Longitude != 0;
 
         private static double EstimateDriveMinutes(double lat1, double lng1, double lat2, double lng2)
         {

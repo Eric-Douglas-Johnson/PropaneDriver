@@ -57,15 +57,25 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
     {
         if (_db is null) return;
 
-        var entity = new DeliveryTimeEntity
+        // Create a temporary Address to satisfy the FK.
+        var address = new AddressEntity
         {
-            DeliveryId = "test-integration",
+            Id = Guid.NewGuid(),
             Street = "INTEGRATION TEST",
             City = "TestCity",
             State = "MN",
             ZipCode = "00000",
             Latitude = 0.0,
             Longitude = 0.0,
+            AvgDeliveryTimeSeconds = 0
+        };
+        _db.Addresses.Add(address);
+        await _db.SaveChangesAsync();
+
+        var entity = new DeliveryTimeEntity
+        {
+            DeliveryId = "test-integration",
+            AddressId = address.Id,
             TimeIntervalSeconds = 1.23,
             RecordedAt = DateTime.UtcNow
         };
@@ -82,6 +92,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
 
         // Clean up
         _db.DeliveryTimes.Remove(saved);
+        _db.Addresses.Remove(address);
         await _db.SaveChangesAsync();
 
         var deleted = await _db.DeliveryTimes.FindAsync(entity.Id);
@@ -93,23 +104,34 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
     {
         if (_db is null) return;
 
-        var uniqueStreet = $"INTEGRATION TEST {Guid.NewGuid()}";
+        var address = new AddressEntity
+        {
+            Id = Guid.NewGuid(),
+            Street = $"INTEGRATION TEST {Guid.NewGuid()}",
+            City = "TestCity",
+            State = "MN",
+            ZipCode = "00000",
+            Latitude = 0,
+            Longitude = 0,
+            AvgDeliveryTimeSeconds = 0
+        };
+        _db.Addresses.Add(address);
+        await _db.SaveChangesAsync();
+
         _db.DeliveryTimes.Add(new DeliveryTimeEntity
         {
-            DeliveryId = "avg-test-1", Street = uniqueStreet, City = "TestCity", State = "MN", ZipCode = "00000",
-            Latitude = 0, Longitude = 0,
+            DeliveryId = "avg-test-1", AddressId = address.Id,
             TimeIntervalSeconds = 40, RecordedAt = DateTime.UtcNow
         });
         _db.DeliveryTimes.Add(new DeliveryTimeEntity
         {
-            DeliveryId = "avg-test-2", Street = uniqueStreet, City = "TestCity", State = "MN", ZipCode = "00000",
-            Latitude = 0, Longitude = 0,
+            DeliveryId = "avg-test-2", AddressId = address.Id,
             TimeIntervalSeconds = 60, RecordedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
 
         var times = await _db.DeliveryTimes
-            .Where(t => t.Street == uniqueStreet && t.City == "TestCity" && t.State == "MN" && t.ZipCode == "00000")
+            .Where(t => t.AddressId == address.Id)
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -117,8 +139,9 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         Assert.Equal(50.0, times.Average());
 
         // Clean up
-        var testRows = await _db.DeliveryTimes.Where(t => t.Street == uniqueStreet).ToListAsync();
+        var testRows = await _db.DeliveryTimes.Where(t => t.AddressId == address.Id).ToListAsync();
         _db.DeliveryTimes.RemoveRange(testRows);
+        _db.Addresses.Remove(address);
         await _db.SaveChangesAsync();
     }
 }

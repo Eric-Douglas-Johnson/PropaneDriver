@@ -14,16 +14,25 @@ public class DeliveryTimesEndpointTests
         return new PropaneDriverDbContext(options);
     }
 
-    private static DeliveryTimeEntity MakeEntity(string deliveryId, string street, string city, string state, string zip, double seconds) =>
-        new DeliveryTimeEntity
+    private static AddressEntity MakeAddress(string street = "123 Main St", string city = "Hibbing",
+        string state = "MN", string zip = "55746") =>
+        new AddressEntity
         {
-            DeliveryId = deliveryId,
+            Id = Guid.NewGuid(),
             Street = street,
             City = city,
             State = state,
             ZipCode = zip,
             Latitude = 47.0,
             Longitude = -93.0,
+            AvgDeliveryTimeSeconds = 0
+        };
+
+    private static DeliveryTimeEntity MakeEntity(Guid addressId, string deliveryId, double seconds) =>
+        new DeliveryTimeEntity
+        {
+            DeliveryId = deliveryId,
+            AddressId = addressId,
             TimeIntervalSeconds = seconds,
             RecordedAt = DateTime.UtcNow
         };
@@ -33,27 +42,21 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
+        var address = MakeAddress();
+        db.Addresses.Add(address);
+        await db.SaveChangesAsync();
+
         var dto = new DeliveryTimeDto
         {
             DeliveryId = "1",
-            Street = "123 Main St",
-            City = "Hibbing",
-            State = "MN",
-            ZipCode = "55746",
-            Latitude = 47.3856,
-            Longitude = -92.9888,
+            AddressId = address.Id,
             TimeIntervalSeconds = 45.5
         };
 
         var entity = new DeliveryTimeEntity
         {
             DeliveryId = dto.DeliveryId,
-            Street = dto.Street,
-            City = dto.City,
-            State = dto.State,
-            ZipCode = dto.ZipCode,
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
+            AddressId = dto.AddressId,
             TimeIntervalSeconds = dto.TimeIntervalSeconds,
             RecordedAt = DateTime.UtcNow
         };
@@ -65,12 +68,7 @@ public class DeliveryTimesEndpointTests
 
         var saved = await db.DeliveryTimes.FirstAsync(t => t.Id == entity.Id);
         Assert.Equal("1", saved.DeliveryId);
-        Assert.Equal("123 Main St", saved.Street);
-        Assert.Equal("Hibbing", saved.City);
-        Assert.Equal("MN", saved.State);
-        Assert.Equal("55746", saved.ZipCode);
-        Assert.Equal(47.3856, saved.Latitude);
-        Assert.Equal(-92.9888, saved.Longitude);
+        Assert.Equal(address.Id, saved.AddressId);
         Assert.Equal(45.5, saved.TimeIntervalSeconds);
         Assert.True(saved.RecordedAt <= DateTime.UtcNow);
     }
@@ -80,10 +78,13 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
+        var address = MakeAddress();
+        db.Addresses.Add(address);
+        await db.SaveChangesAsync();
+
         for (int i = 1; i <= 3; i++)
-        {
-            db.DeliveryTimes.Add(MakeEntity(i.ToString(), $"{i} Oak Ave", "Hibbing", "MN", "55746", 30.0 * i));
-        }
+            db.DeliveryTimes.Add(MakeEntity(address.Id, i.ToString(), 30.0 * i));
+
         await db.SaveChangesAsync();
 
         var count = await db.DeliveryTimes.CountAsync();
@@ -95,8 +96,11 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
-        var entity = MakeEntity("1", "1 Test St", "Hibbing", "MN", "55746", 0);
-        db.DeliveryTimes.Add(entity);
+        var address = MakeAddress();
+        db.Addresses.Add(address);
+        await db.SaveChangesAsync();
+
+        db.DeliveryTimes.Add(MakeEntity(address.Id, "1", 0));
         await db.SaveChangesAsync();
 
         var saved = await db.DeliveryTimes.FirstAsync();
@@ -108,8 +112,12 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
+        var address = MakeAddress();
+        db.Addresses.Add(address);
+        await db.SaveChangesAsync();
+
         var times = await db.DeliveryTimes
-            .Where(t => t.Street == "Nonexistent" && t.City == "Nowhere" && t.State == "XX" && t.ZipCode == "00000")
+            .Where(t => t.AddressId == address.Id)
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -121,13 +129,17 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
-        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 30));
-        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 60));
-        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 90));
+        var address = MakeAddress("12368 Jacobson Rd");
+        db.Addresses.Add(address);
+        await db.SaveChangesAsync();
+
+        db.DeliveryTimes.Add(MakeEntity(address.Id, "1", 30));
+        db.DeliveryTimes.Add(MakeEntity(address.Id, "2", 60));
+        db.DeliveryTimes.Add(MakeEntity(address.Id, "3", 90));
         await db.SaveChangesAsync();
 
         var times = await db.DeliveryTimes
-            .Where(t => t.Street == "12368 Jacobson Rd" && t.City == "Hibbing" && t.State == "MN" && t.ZipCode == "55746")
+            .Where(t => t.AddressId == address.Id)
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -140,12 +152,17 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
-        db.DeliveryTimes.Add(MakeEntity("1", "1 Alpha St", "Hibbing", "MN", "55746", 100));
-        db.DeliveryTimes.Add(MakeEntity("2", "2 Beta St", "Hibbing", "MN", "55746", 200));
+        var addrA = MakeAddress("1 Alpha St");
+        var addrB = MakeAddress("2 Beta St");
+        db.Addresses.AddRange(addrA, addrB);
+        await db.SaveChangesAsync();
+
+        db.DeliveryTimes.Add(MakeEntity(addrA.Id, "1", 100));
+        db.DeliveryTimes.Add(MakeEntity(addrB.Id, "2", 200));
         await db.SaveChangesAsync();
 
         var timesA = await db.DeliveryTimes
-            .Where(t => t.Street == "1 Alpha St" && t.City == "Hibbing" && t.State == "MN" && t.ZipCode == "55746")
+            .Where(t => t.AddressId == addrA.Id)
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -176,7 +193,6 @@ public class DeliveryTimesEndpointTests
     [Fact]
     public void AverageWithOutlierTrim_FourOrFewerSamples_NoTrim()
     {
-        // 4 samples → average of all 4, no trim.
         var avg = AverageWithOutlierTrim(new List<double> { 10, 20, 30, 40 });
         Assert.Equal(25.0, avg);
     }
@@ -184,9 +200,7 @@ public class DeliveryTimesEndpointTests
     [Fact]
     public void AverageWithOutlierTrim_FiveSamples_DropsMinAndMax()
     {
-        // With extreme outliers on both ends, trimmed average ignores them.
         var avg = AverageWithOutlierTrim(new List<double> { 5, 50, 55, 60, 9999 });
-        // After trim: {50, 55, 60} → 55.
         Assert.Equal(55.0, avg);
     }
 
@@ -194,7 +208,6 @@ public class DeliveryTimesEndpointTests
     public void AverageWithOutlierTrim_ManySamples_TrimsOnlyOneFromEachEnd()
     {
         var avg = AverageWithOutlierTrim(new List<double> { 1, 10, 20, 30, 40, 50, 999 });
-        // After trim: {10, 20, 30, 40, 50} → 30.
         Assert.Equal(30.0, avg);
     }
 }

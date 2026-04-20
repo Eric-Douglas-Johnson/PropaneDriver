@@ -24,17 +24,24 @@ public class RouteEndpointsTests
         };
         for (int i = 0; i < deliveryCount; i++)
         {
-            route.Deliveries.Add(new DeliveryEntity
+            var address = new AddressEntity
             {
                 Id = Guid.NewGuid(),
-                RouteId = route.Id,
-                CustomerName = $"Customer {i}",
                 Street = $"{i} Main St",
                 City = "Hibbing",
                 State = "MN",
                 ZipCode = "55746",
                 Latitude = 47.42 + i * 0.01,
-                Longitude = -92.93,
+                Longitude = -92.93
+            };
+            db.Addresses.Add(address);
+
+            route.Deliveries.Add(new DeliveryEntity
+            {
+                Id = Guid.NewGuid(),
+                RouteId = route.Id,
+                AddressId = address.Id,
+                CustomerName = $"Customer {i}",
                 Status = 0,
                 AvgDeliveryTimeMinutes = 15,
                 SortOrder = i,
@@ -201,28 +208,37 @@ public class RouteEndpointsTests
             }
         };
 
-        // Mirror endpoint body.
+        // Mirror endpoint body: upsert addresses, then create deliveries with AddressId.
+        var deliveries = dto.Deliveries.Select((d, i) =>
+        {
+            var address = new AddressEntity
+            {
+                Id = Guid.NewGuid(),
+                Street = string.IsNullOrWhiteSpace(d.Street) ? "1 Test St" : d.Street,
+                City = string.IsNullOrWhiteSpace(d.City) ? "Hibbing" : d.City,
+                State = string.IsNullOrWhiteSpace(d.State) ? "MN" : d.State,
+                ZipCode = string.IsNullOrWhiteSpace(d.ZipCode) ? "55746" : d.ZipCode
+            };
+            db.Addresses.Add(address);
+            return new DeliveryEntity
+            {
+                Id = Guid.NewGuid(),
+                AddressId = address.Id,
+                CustomerName = d.CustomerName,
+                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
+                Status = 0,
+                CreatedAt = DateTime.UtcNow
+            };
+        }).ToList();
+
         var route = new RouteEntity
         {
             Id = Guid.NewGuid(),
             DriverId = driverId,
             Date = dto.Date,
             CreatedAt = DateTime.UtcNow,
-            Deliveries = dto.Deliveries.Select((d, i) => new DeliveryEntity
-            {
-                Id = Guid.NewGuid(),
-                CustomerName = d.CustomerName,
-                Street = d.Street,
-                City = d.City,
-                State = d.State,
-                ZipCode = d.ZipCode,
-                Latitude = d.Latitude,
-                Longitude = d.Longitude,
-                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
-                Status = 0,
-                CreatedAt = DateTime.UtcNow
-            }).ToList()
+            Deliveries = deliveries
         };
         db.Routes.Add(route);
         await db.SaveChangesAsync();

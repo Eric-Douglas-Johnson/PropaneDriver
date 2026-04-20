@@ -21,17 +21,24 @@ public class DeliveryEndpointsTests
             CreatedAt = DateTime.UtcNow
         });
 
-        var delivery = new DeliveryEntity
+        var address = new AddressEntity
         {
             Id = Guid.NewGuid(),
-            RouteId = routeId,
-            CustomerName = "Ada Lovelace",
             Street = "100 Analytic Way",
             City = "Hibbing",
             State = "MN",
             ZipCode = "55746",
             Latitude = 47.42,
-            Longitude = -92.93,
+            Longitude = -92.93
+        };
+        db.Addresses.Add(address);
+
+        var delivery = new DeliveryEntity
+        {
+            Id = Guid.NewGuid(),
+            RouteId = routeId,
+            AddressId = address.Id,
+            CustomerName = "Ada Lovelace",
             Status = 0,
             AvgDeliveryTimeMinutes = 15,
             SortOrder = 0,

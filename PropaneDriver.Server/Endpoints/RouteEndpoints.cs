@@ -32,12 +32,14 @@ namespace PropaneDriver.Server.Endpoints
                                 Date = r.Date,
                                 Location = new GeoAddressDto
                                 {
-                                    Street = d.Street,
-                                    City = d.City,
-                                    State = d.State,
-                                    ZipCode = d.ZipCode,
-                                    Latitude = d.Latitude,
-                                    Longitude = d.Longitude
+                                    Id = d.Address!.Id,
+                                    Street = d.Address.Street,
+                                    City = d.Address.City,
+                                    State = d.Address.State,
+                                    ZipCode = d.Address.ZipCode,
+                                    Latitude = d.Address.Latitude,
+                                    Longitude = d.Address.Longitude,
+                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -112,12 +114,14 @@ namespace PropaneDriver.Server.Endpoints
                                 Date = r.Date,
                                 Location = new GeoAddressDto
                                 {
-                                    Street = d.Street,
-                                    City = d.City,
-                                    State = d.State,
-                                    ZipCode = d.ZipCode,
-                                    Latitude = d.Latitude,
-                                    Longitude = d.Longitude
+                                    Id = d.Address!.Id,
+                                    Street = d.Address.Street,
+                                    City = d.Address.City,
+                                    State = d.Address.State,
+                                    ZipCode = d.Address.ZipCode,
+                                    Latitude = d.Address.Latitude,
+                                    Longitude = d.Address.Longitude,
+                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -156,24 +160,68 @@ namespace PropaneDriver.Server.Endpoints
 
                 try
                 {
-                    //create a list of deliveries that will be used to calculate the estimated route time
-                    var deliveries = dto.Deliveries.Select((d, i) => new DeliveryEntity
+                    // Upsert an Address record for each unique address in this route.
+                    // Using a dictionary keyed on normalized address to avoid duplicate DB lookups
+                    // within the same batch.
+                    var addressCache = new Dictionary<string, AddressEntity>();
+
+                    foreach (var d in dto.Deliveries)
                     {
-                        Id = Guid.NewGuid(),
-                        CustomerName = d.CustomerName,
-                        Street = d.Street,
-                        City = d.City,
-                        State = d.State,
-                        ZipCode = d.ZipCode,
-                        Latitude = d.Latitude,
-                        Longitude = d.Longitude,
-                        AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                        SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
-                        Status = 0,
-                        CreatedAt = DateTime.UtcNow
+                        var street = d.Street.Trim();
+                        var city = d.City.Trim();
+                        var state = d.State.Trim();
+                        var zip = d.ZipCode.Trim();
+                        var key = $"{street}|{city}|{state}|{zip}";
+
+                        if (addressCache.ContainsKey(key)) continue;
+
+                        var address = await db.Addresses.FirstOrDefaultAsync(
+                            a => a.Street == street && a.City == city && a.State == state && a.ZipCode == zip);
+
+                        if (address is null)
+                        {
+                            address = new AddressEntity
+                            {
+                                Id = Guid.NewGuid(),
+                                Street = street,
+                                City = city,
+                                State = state,
+                                ZipCode = zip,
+                                Latitude = d.Latitude,
+                                Longitude = d.Longitude,
+                                AvgDeliveryTimeSeconds = 0
+                            };
+                            db.Addresses.Add(address);
+                        }
+                        else if (d.Latitude != 0 || d.Longitude != 0)
+                        {
+                            address.Latitude = d.Latitude;
+                            address.Longitude = d.Longitude;
+                        }
+
+                        addressCache[key] = address;
+                    }
+
+                    // Flush addresses first so their IDs are stable before deliveries reference them.
+                    await db.SaveChangesAsync();
+
+                    var deliveries = dto.Deliveries.Select((d, i) =>
+                    {
+                        var key = $"{d.Street.Trim()}|{d.City.Trim()}|{d.State.Trim()}|{d.ZipCode.Trim()}";
+                        return new DeliveryEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            AddressId = addressCache[key].Id,
+                            CustomerName = d.CustomerName,
+                            AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
+                            SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
+                            Status = 0,
+                            CreatedAt = DateTime.UtcNow
+                        };
                     }).ToList();
 
-                    var estimatedRouteTime =  await GPSHelperService.GetEstimatedRouteTime(deliveries);
+                    var estimatedRouteTime = await GPSHelperService.GetEstimatedRouteTime(
+                        deliveries, addressCache.Values.ToList());
 
                     var route = new RouteEntity
                     {

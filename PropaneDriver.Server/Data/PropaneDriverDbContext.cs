@@ -9,6 +9,7 @@ namespace PropaneDriver.Server.Data
         {
         }
 
+        public DbSet<AddressEntity> Addresses => Set<AddressEntity>();
         public DbSet<DeliveryTimeEntity> DeliveryTimes => Set<DeliveryTimeEntity>();
         public DbSet<DriverEntity> Drivers => Set<DriverEntity>();
         public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
@@ -21,11 +22,21 @@ namespace PropaneDriver.Server.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<AddressEntity>(entity =>
+            {
+                entity.ToTable("Addresses");
+                entity.HasIndex(e => new { e.Street, e.City, e.State, e.ZipCode }).IsUnique();
+            });
+
             modelBuilder.Entity<DeliveryTimeEntity>(entity =>
             {
                 entity.ToTable("DeliveryTimes");
-                entity.HasIndex(e => new { e.Street, e.City, e.State, e.ZipCode });
+                entity.HasIndex(e => e.AddressId);
                 entity.HasIndex(e => e.DeliveryId);
+                entity.HasOne(e => e.Address)
+                      .WithMany(a => a.DeliveryTimes)
+                      .HasForeignKey(e => e.AddressId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<DriverEntity>(entity =>
@@ -62,10 +73,15 @@ namespace PropaneDriver.Server.Data
                 entity.ToTable("Deliveries");
                 entity.HasIndex(e => e.RouteId);
                 entity.HasIndex(e => new { e.RouteId, e.SortOrder });
+                entity.HasIndex(e => e.AddressId);
                 entity.HasOne(e => e.Route)
                       .WithMany(r => r.Deliveries)
                       .HasForeignKey(e => e.RouteId)
                       .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Address)
+                      .WithMany(a => a.Deliveries)
+                      .HasForeignKey(e => e.AddressId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<AlertEntity>(entity =>

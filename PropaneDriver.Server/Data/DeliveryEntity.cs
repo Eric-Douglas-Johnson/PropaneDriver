@@ -11,32 +11,11 @@ namespace PropaneDriver.Server.Data
         public Guid RouteId { get; set; }
 
         [Required]
+        public Guid AddressId { get; set; }
+
+        [Required]
         [MaxLength(200)]
         public string CustomerName { get; set; } = string.Empty;
-
-        [Required]
-        [MinLength(1)]
-        [MaxLength(200)]
-        public string Street { get; set; } = string.Empty;
-
-        [Required]
-        [MinLength(1)]
-        [MaxLength(100)]
-        public string City { get; set; } = string.Empty;
-
-        [Required]
-        [MinLength(1)]
-        [MaxLength(50)]
-        public string State { get; set; } = string.Empty;
-
-        [Required]
-        [MinLength(1)]
-        [MaxLength(20)]
-        public string ZipCode { get; set; } = string.Empty;
-
-        public double Latitude { get; set; }
-
-        public double Longitude { get; set; }
 
         public int Status { get; set; }
 
@@ -48,6 +27,7 @@ namespace PropaneDriver.Server.Data
 
         // Navigation
         public RouteEntity? Route { get; set; }
+        public AddressEntity? Address { get; set; }
         public List<AlertEntity> Alerts { get; set; } = new();
     }
 }
