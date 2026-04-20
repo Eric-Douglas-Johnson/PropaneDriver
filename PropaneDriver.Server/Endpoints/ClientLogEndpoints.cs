@@ -41,7 +41,7 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(rows);
             });
 
-            // Run each DeliveryTimes repair step individually and report results
+            // Run full schema repair in order and report each step
             app.MapGet("api/admin/repair-delivery-times", async (PropaneDriverDbContext db) =>
             {
                 var conn = db.Database.GetDbConnection();
@@ -49,11 +49,70 @@ namespace PropaneDriver.Server.Endpoints
 
                 var steps = new[]
                 {
-                    "TRUNCATE TABLE [DeliveryTimes]",
-                    "IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]')) ALTER TABLE [DeliveryTimes] ADD [AddressId] uniqueidentifier NOT NULL CONSTRAINT [DF_DeliveryTimes_AddressId] DEFAULT '00000000-0000-0000-0000-000000000000'",
-                    "IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name=N'DF_DeliveryTimes_AddressId') ALTER TABLE [DeliveryTimes] DROP CONSTRAINT [DF_DeliveryTimes_AddressId]",
-                    "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_DeliveryTimes_Addresses_AddressId') ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId] FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id])",
-                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name=N'IX_DeliveryTimes_AddressId' AND object_id=OBJECT_ID(N'[dbo].[DeliveryTimes]')) CREATE INDEX [IX_DeliveryTimes_AddressId] ON [DeliveryTimes] ([AddressId])"
+                    // 1. Create Addresses table (root dependency for all FKs)
+                    @"IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='Addresses')
+                      CREATE TABLE [Addresses] (
+                          [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                          [Street] nvarchar(200) NOT NULL,
+                          [City] nvarchar(100) NOT NULL,
+                          [State] nvarchar(50) NOT NULL,
+                          [ZipCode] nvarchar(20) NOT NULL,
+                          [Latitude] float NOT NULL DEFAULT 0,
+                          [Longitude] float NOT NULL DEFAULT 0,
+                          [AvgDeliveryTimeSeconds] float NOT NULL DEFAULT 0,
+                          CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street],[City],[State],[ZipCode])
+                      )",
+
+                    // 2. Seed Addresses from Deliveries if Street column still exists
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      INSERT INTO [Addresses] ([Id],[Street],[City],[State],[ZipCode],[Latitude],[Longitude],[AvgDeliveryTimeSeconds])
+                      SELECT NEWID(),d.[Street],d.[City],d.[State],d.[ZipCode],AVG(d.[Latitude]),AVG(d.[Longitude]),0
+                      FROM [Deliveries] d
+                      WHERE LEN(TRIM(d.[Street]))>0 AND LEN(TRIM(d.[City]))>0 AND LEN(TRIM(d.[State]))>0 AND LEN(TRIM(d.[ZipCode]))>0
+                        AND NOT EXISTS (SELECT 1 FROM [Addresses] a WHERE a.[Street]=d.[Street] AND a.[City]=d.[City] AND a.[State]=d.[State] AND a.[ZipCode]=d.[ZipCode])
+                      GROUP BY d.[Street],d.[City],d.[State],d.[ZipCode]",
+
+                    // 3. Add AddressId to Deliveries if Street column still exists
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] ADD [AddressId] uniqueidentifier NULL",
+
+                    // 4. Link deliveries to addresses
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      UPDATE d SET d.[AddressId]=a.[Id] FROM [Deliveries] d
+                      JOIN [Addresses] a ON d.[Street]=a.[Street] AND d.[City]=a.[City] AND d.[State]=a.[State] AND d.[ZipCode]=a.[ZipCode]
+                      WHERE d.[AddressId] IS NULL",
+
+                    // 5. Drop unlinked deliveries
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      DELETE FROM [Deliveries] WHERE [AddressId] IS NULL",
+
+                    // 6. Make Deliveries.AddressId NOT NULL
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[Deliveries]') AND is_nullable=1)
+                      ALTER TABLE [Deliveries] ALTER COLUMN [AddressId] uniqueidentifier NOT NULL",
+
+                    // 7. Add FK Deliveries→Addresses
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_Deliveries_Addresses_AddressId')
+                      ALTER TABLE [Deliveries] ADD CONSTRAINT [FK_Deliveries_Addresses_AddressId] FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id])",
+
+                    // 8. Drop old Deliveries address columns
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [Street]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'City' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [City]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'State' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [State]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'ZipCode' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [ZipCode]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Latitude' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [Latitude]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Longitude' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
+                      ALTER TABLE [Deliveries] DROP COLUMN [Longitude]",
+
+                    // 9. Fix DeliveryTimes FK now that Addresses exists
+                    @"IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_DeliveryTimes_Addresses_AddressId')
+                      AND EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId] FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id])",
                 };
 
                 var results = new List<object>();
@@ -64,11 +123,11 @@ namespace PropaneDriver.Server.Endpoints
                         await using var cmd = conn.CreateCommand();
                         cmd.CommandText = sql;
                         await cmd.ExecuteNonQueryAsync();
-                        results.Add(new { sql = sql[..Math.Min(60, sql.Length)], ok = true });
+                        results.Add(new { sql = sql.Trim()[..Math.Min(60, sql.Trim().Length)], ok = true });
                     }
                     catch (Exception ex)
                     {
-                        results.Add(new { sql = sql[..Math.Min(60, sql.Length)], ok = false, error = ex.Message });
+                        results.Add(new { sql = sql.Trim()[..Math.Min(60, sql.Trim().Length)], ok = false, error = ex.Message });
                     }
                 }
 
