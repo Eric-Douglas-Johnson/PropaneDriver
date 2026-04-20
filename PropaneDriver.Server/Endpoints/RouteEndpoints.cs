@@ -146,6 +146,14 @@ namespace PropaneDriver.Server.Endpoints
                 if (!Guid.TryParse(dto.DriverId, out var driverId))
                     return Results.BadRequest(new { Message = "DriverId must be a valid GUID." });
 
+                var invalidDelivery = dto.Deliveries.FirstOrDefault(d =>
+                    string.IsNullOrWhiteSpace(d.Street) ||
+                    string.IsNullOrWhiteSpace(d.City) ||
+                    string.IsNullOrWhiteSpace(d.State) ||
+                    string.IsNullOrWhiteSpace(d.ZipCode));
+                if (invalidDelivery is not null)
+                    return Results.BadRequest(new { Message = $"All address fields are required for every delivery. Missing field on: {invalidDelivery.CustomerName}" });
+
                 try
                 {
                     //create a list of deliveries that will be used to calculate the estimated route time

@@ -16,12 +16,21 @@ namespace PropaneDriver.Server.Endpoints
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
+                if (string.IsNullOrWhiteSpace(dto.Street) ||
+                    string.IsNullOrWhiteSpace(dto.City) ||
+                    string.IsNullOrWhiteSpace(dto.State) ||
+                    string.IsNullOrWhiteSpace(dto.ZipCode))
+                    return Results.BadRequest(new { Message = "All address fields (Street, City, State, ZipCode) are required." });
+
                 try
                 {
                     var entity = new DeliveryTimeEntity
                     {
                         DeliveryId = dto.DeliveryId,
-                        Address = dto.Address,
+                        Street = dto.Street.Trim(),
+                        City = dto.City.Trim(),
+                        State = dto.State.Trim(),
+                        ZipCode = dto.ZipCode.Trim(),
                         Latitude = dto.Latitude,
                         Longitude = dto.Longitude,
                         TimeIntervalSeconds = dto.TimeIntervalSeconds,
@@ -36,7 +45,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to save delivery time for {Address}", dto.Address);
+                    logger.LogError(ex, "Failed to save delivery time for {Street}, {City}", dto.Street, dto.City);
                     return Results.Problem(
                         detail: ex.Message,
                         title: "Failed to save delivery time",
@@ -46,17 +55,24 @@ namespace PropaneDriver.Server.Endpoints
 
             // Get average delivery time for an address. Drops shortest + longest
             // samples once there's enough data to make outlier-trimming meaningful.
-            group.MapGet("average/{address}", async (string address, PropaneDriverDbContext db) =>
+            group.MapGet("average", async (string street, string city, string state, string zip, PropaneDriverDbContext db) =>
             {
-                var decodedAddress = Uri.UnescapeDataString(address);
+                if (string.IsNullOrWhiteSpace(street) || string.IsNullOrWhiteSpace(city) ||
+                    string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(zip))
+                    return Results.BadRequest(new { Message = "street, city, state, and zip query parameters are required." });
+
+                var s = street.Trim();
+                var c = city.Trim();
+                var st = state.Trim();
+                var z = zip.Trim();
 
                 var times = await db.DeliveryTimes
-                    .Where(t => t.Address == decodedAddress)
+                    .Where(t => t.Street == s && t.City == c && t.State == st && t.ZipCode == z)
                     .Select(t => t.TimeIntervalSeconds)
                     .ToListAsync();
 
                 if (times.Count == 0)
-                    return Results.Ok(new { Address = decodedAddress, AverageSeconds = 0.0, Count = 0 });
+                    return Results.Ok(new { Street = s, City = c, State = st, ZipCode = z, AverageSeconds = 0.0, Count = 0 });
 
                 times.Sort();
 
@@ -69,7 +85,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
 
                 var avg = times.Average();
-                return Results.Ok(new { Address = decodedAddress, AverageSeconds = avg, Count = times.Count });
+                return Results.Ok(new { Street = s, City = c, State = st, ZipCode = z, AverageSeconds = avg, Count = times.Count });
             });
 
             return app;

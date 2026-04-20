@@ -14,6 +14,20 @@ public class DeliveryTimesEndpointTests
         return new PropaneDriverDbContext(options);
     }
 
+    private static DeliveryTimeEntity MakeEntity(string deliveryId, string street, string city, string state, string zip, double seconds) =>
+        new DeliveryTimeEntity
+        {
+            DeliveryId = deliveryId,
+            Street = street,
+            City = city,
+            State = state,
+            ZipCode = zip,
+            Latitude = 47.0,
+            Longitude = -93.0,
+            TimeIntervalSeconds = seconds,
+            RecordedAt = DateTime.UtcNow
+        };
+
     [Fact]
     public async Task SaveDeliveryTime_InsertsRecord_And_ReturnsId()
     {
@@ -22,7 +36,10 @@ public class DeliveryTimesEndpointTests
         var dto = new DeliveryTimeDto
         {
             DeliveryId = "1",
-            Address = "123 Main St, Hibbing, MN",
+            Street = "123 Main St",
+            City = "Hibbing",
+            State = "MN",
+            ZipCode = "55746",
             Latitude = 47.3856,
             Longitude = -92.9888,
             TimeIntervalSeconds = 45.5
@@ -31,7 +48,10 @@ public class DeliveryTimesEndpointTests
         var entity = new DeliveryTimeEntity
         {
             DeliveryId = dto.DeliveryId,
-            Address = dto.Address,
+            Street = dto.Street,
+            City = dto.City,
+            State = dto.State,
+            ZipCode = dto.ZipCode,
             Latitude = dto.Latitude,
             Longitude = dto.Longitude,
             TimeIntervalSeconds = dto.TimeIntervalSeconds,
@@ -45,7 +65,10 @@ public class DeliveryTimesEndpointTests
 
         var saved = await db.DeliveryTimes.FirstAsync(t => t.Id == entity.Id);
         Assert.Equal("1", saved.DeliveryId);
-        Assert.Equal("123 Main St, Hibbing, MN", saved.Address);
+        Assert.Equal("123 Main St", saved.Street);
+        Assert.Equal("Hibbing", saved.City);
+        Assert.Equal("MN", saved.State);
+        Assert.Equal("55746", saved.ZipCode);
         Assert.Equal(47.3856, saved.Latitude);
         Assert.Equal(-92.9888, saved.Longitude);
         Assert.Equal(45.5, saved.TimeIntervalSeconds);
@@ -59,15 +82,7 @@ public class DeliveryTimesEndpointTests
 
         for (int i = 1; i <= 3; i++)
         {
-            db.DeliveryTimes.Add(new DeliveryTimeEntity
-            {
-                DeliveryId = i.ToString(),
-                Address = $"Address {i}",
-                Latitude = 47.0 + i * 0.01,
-                Longitude = -93.0 + i * 0.01,
-                TimeIntervalSeconds = 30.0 * i,
-                RecordedAt = DateTime.UtcNow
-            });
+            db.DeliveryTimes.Add(MakeEntity(i.ToString(), $"{i} Oak Ave", "Hibbing", "MN", "55746", 30.0 * i));
         }
         await db.SaveChangesAsync();
 
@@ -80,16 +95,7 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
-        var entity = new DeliveryTimeEntity
-        {
-            DeliveryId = "1",
-            Address = "Test Address",
-            Latitude = 47.0,
-            Longitude = -93.0,
-            TimeIntervalSeconds = 0,
-            RecordedAt = DateTime.UtcNow
-        };
-
+        var entity = MakeEntity("1", "1 Test St", "Hibbing", "MN", "55746", 0);
         db.DeliveryTimes.Add(entity);
         await db.SaveChangesAsync();
 
@@ -103,7 +109,7 @@ public class DeliveryTimesEndpointTests
         using var db = CreateInMemoryDb();
 
         var times = await db.DeliveryTimes
-            .Where(t => t.Address == "Nonexistent Address")
+            .Where(t => t.Street == "Nonexistent" && t.City == "Nowhere" && t.State == "XX" && t.ZipCode == "00000")
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -114,30 +120,14 @@ public class DeliveryTimesEndpointTests
     public async Task GetAverageTime_WithRecords_ReturnsCorrectAverage()
     {
         using var db = CreateInMemoryDb();
-        var address = "12368 Jacobson Rd, Hibbing, MN";
 
-        db.DeliveryTimes.Add(new DeliveryTimeEntity
-        {
-            DeliveryId = "1", Address = address,
-            Latitude = 47.0, Longitude = -93.0,
-            TimeIntervalSeconds = 30, RecordedAt = DateTime.UtcNow
-        });
-        db.DeliveryTimes.Add(new DeliveryTimeEntity
-        {
-            DeliveryId = "1", Address = address,
-            Latitude = 47.0, Longitude = -93.0,
-            TimeIntervalSeconds = 60, RecordedAt = DateTime.UtcNow
-        });
-        db.DeliveryTimes.Add(new DeliveryTimeEntity
-        {
-            DeliveryId = "1", Address = address,
-            Latitude = 47.0, Longitude = -93.0,
-            TimeIntervalSeconds = 90, RecordedAt = DateTime.UtcNow
-        });
+        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 30));
+        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 60));
+        db.DeliveryTimes.Add(MakeEntity("1", "12368 Jacobson Rd", "Hibbing", "MN", "55746", 90));
         await db.SaveChangesAsync();
 
         var times = await db.DeliveryTimes
-            .Where(t => t.Address == address)
+            .Where(t => t.Street == "12368 Jacobson Rd" && t.City == "Hibbing" && t.State == "MN" && t.ZipCode == "55746")
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -150,22 +140,12 @@ public class DeliveryTimesEndpointTests
     {
         using var db = CreateInMemoryDb();
 
-        db.DeliveryTimes.Add(new DeliveryTimeEntity
-        {
-            DeliveryId = "1", Address = "Address A",
-            Latitude = 47.0, Longitude = -93.0,
-            TimeIntervalSeconds = 100, RecordedAt = DateTime.UtcNow
-        });
-        db.DeliveryTimes.Add(new DeliveryTimeEntity
-        {
-            DeliveryId = "2", Address = "Address B",
-            Latitude = 47.1, Longitude = -93.1,
-            TimeIntervalSeconds = 200, RecordedAt = DateTime.UtcNow
-        });
+        db.DeliveryTimes.Add(MakeEntity("1", "1 Alpha St", "Hibbing", "MN", "55746", 100));
+        db.DeliveryTimes.Add(MakeEntity("2", "2 Beta St", "Hibbing", "MN", "55746", 200));
         await db.SaveChangesAsync();
 
         var timesA = await db.DeliveryTimes
-            .Where(t => t.Address == "Address A")
+            .Where(t => t.Street == "1 Alpha St" && t.City == "Hibbing" && t.State == "MN" && t.ZipCode == "55746")
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 

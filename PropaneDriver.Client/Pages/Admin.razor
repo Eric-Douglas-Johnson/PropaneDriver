@@ -283,7 +283,7 @@
                 <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
             }
             <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
-                    disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet))">
+                    disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
                 Add Delivery
             </button>
         </div>
@@ -560,7 +560,11 @@
 
     private void AddDeliveryToList()
     {
-        if (string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet)) return;
+        if (string.IsNullOrWhiteSpace(_newCustomer) ||
+            string.IsNullOrWhiteSpace(_newStreet) ||
+            string.IsNullOrWhiteSpace(_newCity) ||
+            string.IsNullOrWhiteSpace(_newState) ||
+            string.IsNullOrWhiteSpace(_newZip)) return;
 
         double.TryParse(_newLatStr, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var lat);

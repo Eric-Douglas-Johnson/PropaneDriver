@@ -35,12 +35,16 @@ namespace PropaneDriver.Client.Services
             }
         }
 
-        public async Task<DeliveryAverageResult> GetAverageTimeAsync(string address)
+        public async Task<DeliveryAverageResult> GetAverageTimeAsync(GeoAddressDto location)
         {
             try
             {
-                var encoded = Uri.EscapeDataString(address);
-                var result = await _http.GetFromJsonAsync<DeliveryAverageResult>($"api/delivery-times/average/{encoded}");
+                var street = Uri.EscapeDataString(location.Street);
+                var city = Uri.EscapeDataString(location.City);
+                var state = Uri.EscapeDataString(location.State);
+                var zip = Uri.EscapeDataString(location.ZipCode);
+                var result = await _http.GetFromJsonAsync<DeliveryAverageResult>(
+                    $"api/delivery-times/average?street={street}&city={city}&state={state}&zip={zip}");
                 return result ?? new DeliveryAverageResult();
             }
             catch (Exception ex)
@@ -59,7 +63,10 @@ namespace PropaneDriver.Client.Services
 
     public class DeliveryAverageResult
     {
-        public string Address { get; set; } = string.Empty;
+        public string Street { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
+        public string State { get; set; } = string.Empty;
+        public string ZipCode { get; set; } = string.Empty;
         public double AverageSeconds { get; set; }
         public int Count { get; set; }
     }

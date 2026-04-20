@@ -24,7 +24,7 @@ namespace PropaneDriver.Server.Data
             modelBuilder.Entity<DeliveryTimeEntity>(entity =>
             {
                 entity.ToTable("DeliveryTimes");
-                entity.HasIndex(e => e.Address);
+                entity.HasIndex(e => new { e.Street, e.City, e.State, e.ZipCode });
                 entity.HasIndex(e => e.DeliveryId);
             });
 

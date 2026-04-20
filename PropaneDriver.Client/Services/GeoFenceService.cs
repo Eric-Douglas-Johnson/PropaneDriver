@@ -128,7 +128,10 @@ namespace PropaneDriver.Client.Services
                 var dto = new DeliveryTimeDto
                 {
                     DeliveryId = _activeDelivery.Id,
-                    Address = _activeDelivery.Location.FullAddress,
+                    Street = _activeDelivery.Location.Street,
+                    City = _activeDelivery.Location.City,
+                    State = _activeDelivery.Location.State,
+                    ZipCode = _activeDelivery.Location.ZipCode,
                     Latitude = _activeDelivery.Location.Latitude,
                     Longitude = _activeDelivery.Location.Longitude,
                     TimeIntervalSeconds = _timer.Elapsed.TotalSeconds

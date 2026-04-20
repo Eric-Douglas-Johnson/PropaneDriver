@@ -60,7 +60,10 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         var entity = new DeliveryTimeEntity
         {
             DeliveryId = "test-integration",
-            Address = "INTEGRATION TEST — safe to delete",
+            Street = "INTEGRATION TEST",
+            City = "TestCity",
+            State = "MN",
+            ZipCode = "00000",
             Latitude = 0.0,
             Longitude = 0.0,
             TimeIntervalSeconds = 1.23,
@@ -90,23 +93,23 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
     {
         if (_db is null) return;
 
-        var address = $"INTEGRATION TEST {Guid.NewGuid()}";
+        var uniqueStreet = $"INTEGRATION TEST {Guid.NewGuid()}";
         _db.DeliveryTimes.Add(new DeliveryTimeEntity
         {
-            DeliveryId = "avg-test-1", Address = address,
+            DeliveryId = "avg-test-1", Street = uniqueStreet, City = "TestCity", State = "MN", ZipCode = "00000",
             Latitude = 0, Longitude = 0,
             TimeIntervalSeconds = 40, RecordedAt = DateTime.UtcNow
         });
         _db.DeliveryTimes.Add(new DeliveryTimeEntity
         {
-            DeliveryId = "avg-test-2", Address = address,
+            DeliveryId = "avg-test-2", Street = uniqueStreet, City = "TestCity", State = "MN", ZipCode = "00000",
             Latitude = 0, Longitude = 0,
             TimeIntervalSeconds = 60, RecordedAt = DateTime.UtcNow
         });
         await _db.SaveChangesAsync();
 
         var times = await _db.DeliveryTimes
-            .Where(t => t.Address == address)
+            .Where(t => t.Street == uniqueStreet && t.City == "TestCity" && t.State == "MN" && t.ZipCode == "00000")
             .Select(t => t.TimeIntervalSeconds)
             .ToListAsync();
 
@@ -114,7 +117,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         Assert.Equal(50.0, times.Average());
 
         // Clean up
-        var testRows = await _db.DeliveryTimes.Where(t => t.Address == address).ToListAsync();
+        var testRows = await _db.DeliveryTimes.Where(t => t.Street == uniqueStreet).ToListAsync();
         _db.DeliveryTimes.RemoveRange(testRows);
         await _db.SaveChangesAsync();
     }

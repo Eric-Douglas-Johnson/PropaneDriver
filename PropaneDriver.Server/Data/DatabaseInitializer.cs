@@ -71,10 +71,82 @@ namespace PropaneDriver.Server.Data
                             [SortOrder] int NOT NULL,
                             [CreatedAt] datetime2 NOT NULL,
                             CONSTRAINT [FK_Deliveries_Routes_RouteId] FOREIGN KEY ([RouteId])
-                                REFERENCES [Routes] ([Id]) ON DELETE CASCADE
+                                REFERENCES [Routes] ([Id]) ON DELETE CASCADE,
+                            CONSTRAINT [CK_Deliveries_Street] CHECK (LEN(TRIM([Street])) > 0),
+                            CONSTRAINT [CK_Deliveries_City] CHECK (LEN(TRIM([City])) > 0),
+                            CONSTRAINT [CK_Deliveries_State] CHECK (LEN(TRIM([State])) > 0),
+                            CONSTRAINT [CK_Deliveries_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0)
                         );
                         CREATE INDEX [IX_Deliveries_RouteId] ON [Deliveries] ([RouteId]);
                         CREATE INDEX [IX_Deliveries_RouteId_SortOrder] ON [Deliveries] ([RouteId], [SortOrder]);
+                    END
+                    ELSE
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_Street' AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] ADD CONSTRAINT [CK_Deliveries_Street] CHECK (LEN(TRIM([Street])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_City' AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] ADD CONSTRAINT [CK_Deliveries_City] CHECK (LEN(TRIM([City])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_State' AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] ADD CONSTRAINT [CK_Deliveries_State] CHECK (LEN(TRIM([State])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_ZipCode' AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] ADD CONSTRAINT [CK_Deliveries_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0);
+                    END
+
+                    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryTimes')
+                    BEGIN
+                        CREATE TABLE [DeliveryTimes] (
+                            [Id] int NOT NULL PRIMARY KEY IDENTITY(1,1),
+                            [DeliveryId] nvarchar(450) NOT NULL,
+                            [Street] nvarchar(200) NOT NULL,
+                            [City] nvarchar(100) NOT NULL,
+                            [State] nvarchar(50) NOT NULL,
+                            [ZipCode] nvarchar(20) NOT NULL,
+                            [Latitude] float NOT NULL,
+                            [Longitude] float NOT NULL,
+                            [TimeIntervalSeconds] float NOT NULL,
+                            [RecordedAt] datetime2 NOT NULL,
+                            CONSTRAINT [CK_DeliveryTimes_Street] CHECK (LEN(TRIM([Street])) > 0),
+                            CONSTRAINT [CK_DeliveryTimes_City] CHECK (LEN(TRIM([City])) > 0),
+                            CONSTRAINT [CK_DeliveryTimes_State] CHECK (LEN(TRIM([State])) > 0),
+                            CONSTRAINT [CK_DeliveryTimes_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0)
+                        );
+                        CREATE INDEX [IX_DeliveryTimes_DeliveryId] ON [DeliveryTimes] ([DeliveryId]);
+                        CREATE INDEX [IX_DeliveryTimes_Address] ON [DeliveryTimes] ([Street], [City], [State], [ZipCode]);
+                    END
+                    ELSE IF EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'Address' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                    BEGIN
+                        -- Migrate: split flat Address into individual fields.
+                        -- Timing history cannot be reliably parsed; truncate to start clean.
+                        TRUNCATE TABLE [DeliveryTimes];
+                        ALTER TABLE [DeliveryTimes] ADD [Street] nvarchar(200) NULL;
+                        ALTER TABLE [DeliveryTimes] ADD [City] nvarchar(100) NULL;
+                        ALTER TABLE [DeliveryTimes] ADD [State] nvarchar(50) NULL;
+                        ALTER TABLE [DeliveryTimes] ADD [ZipCode] nvarchar(20) NULL;
+                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [Street] nvarchar(200) NOT NULL;
+                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [City] nvarchar(100) NOT NULL;
+                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [State] nvarchar(50) NOT NULL;
+                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [ZipCode] nvarchar(20) NOT NULL;
+                        ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_Street] CHECK (LEN(TRIM([Street])) > 0);
+                        ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_City] CHECK (LEN(TRIM([City])) > 0);
+                        ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_State] CHECK (LEN(TRIM([State])) > 0);
+                        ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0);
+                        IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DeliveryTimes_Address' AND object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            DROP INDEX [IX_DeliveryTimes_Address] ON [DeliveryTimes];
+                        CREATE INDEX [IX_DeliveryTimes_Address] ON [DeliveryTimes] ([Street], [City], [State], [ZipCode]);
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [Address];
+                    END
+                    ELSE
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_DeliveryTimes_Street' AND parent_object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_Street] CHECK (LEN(TRIM([Street])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_DeliveryTimes_City' AND parent_object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_City] CHECK (LEN(TRIM([City])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_DeliveryTimes_State' AND parent_object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_State] CHECK (LEN(TRIM([State])) > 0);
+                        IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_DeliveryTimes_ZipCode' AND parent_object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [CK_DeliveryTimes_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0);
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Alerts')
