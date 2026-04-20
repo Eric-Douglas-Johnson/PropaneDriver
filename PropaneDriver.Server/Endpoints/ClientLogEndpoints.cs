@@ -41,6 +41,40 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(rows);
             });
 
+            // Run each DeliveryTimes repair step individually and report results
+            app.MapPost("api/admin/repair-delivery-times", async (PropaneDriverDbContext db) =>
+            {
+                var conn = db.Database.GetDbConnection();
+                await conn.OpenAsync();
+
+                var steps = new[]
+                {
+                    "TRUNCATE TABLE [DeliveryTimes]",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]')) ALTER TABLE [DeliveryTimes] ADD [AddressId] uniqueidentifier NOT NULL CONSTRAINT [DF_DeliveryTimes_AddressId] DEFAULT '00000000-0000-0000-0000-000000000000'",
+                    "IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name=N'DF_DeliveryTimes_AddressId') ALTER TABLE [DeliveryTimes] DROP CONSTRAINT [DF_DeliveryTimes_AddressId]",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_DeliveryTimes_Addresses_AddressId') ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId] FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id])",
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name=N'IX_DeliveryTimes_AddressId' AND object_id=OBJECT_ID(N'[dbo].[DeliveryTimes]')) CREATE INDEX [IX_DeliveryTimes_AddressId] ON [DeliveryTimes] ([AddressId])"
+                };
+
+                var results = new List<object>();
+                foreach (var sql in steps)
+                {
+                    try
+                    {
+                        await using var cmd = conn.CreateCommand();
+                        cmd.CommandText = sql;
+                        await cmd.ExecuteNonQueryAsync();
+                        results.Add(new { sql = sql[..Math.Min(60, sql.Length)], ok = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add(new { sql = sql[..Math.Min(60, sql.Length)], ok = false, error = ex.Message });
+                    }
+                }
+
+                return Results.Ok(results);
+            });
+
             // Log a client-side error
             app.MapPost("api/client-logs", async (
                 ClientLogDto log,
