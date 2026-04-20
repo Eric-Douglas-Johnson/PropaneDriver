@@ -1,9 +1,7 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
-
-// Projection type for the schema diagnostic query.
-file record SchemaColumnRow(string TableName, string ColumnName, string TypeName, bool IsNullable);
 
 namespace PropaneDriver.Server.Endpoints
 {
@@ -24,20 +22,23 @@ namespace PropaneDriver.Server.Endpoints
             // Return columns for key tables so we can diagnose live schema state
             app.MapGet("api/admin/schema", async (PropaneDriverDbContext db) =>
             {
-                var cols = await db.Database
-                    .SqlQueryRaw<SchemaColumnRow>(@"
-                        SELECT
-                            t.name   AS TableName,
-                            c.name   AS ColumnName,
-                            tp.name  AS TypeName,
-                            c.is_nullable AS IsNullable
-                        FROM sys.columns c
-                        JOIN sys.tables  t  ON t.object_id = c.object_id
-                        JOIN sys.types   tp ON tp.user_type_id = c.user_type_id
-                        WHERE t.name IN ('Deliveries','DeliveryTimes','Addresses')
-                        ORDER BY t.name, c.column_id")
-                    .ToListAsync();
-                return Results.Ok(cols);
+                var conn = db.Database.GetDbConnection();
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT t.name, c.name, tp.name, c.is_nullable
+                    FROM sys.columns c
+                    JOIN sys.tables  t  ON t.object_id = c.object_id
+                    JOIN sys.types   tp ON tp.user_type_id = c.user_type_id
+                    WHERE t.name IN ('Deliveries','DeliveryTimes','Addresses')
+                    ORDER BY t.name, c.column_id";
+
+                var rows = new List<object>();
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    rows.Add(new { Table = reader.GetString(0), Column = reader.GetString(1), Type = reader.GetString(2), Nullable = reader.GetBoolean(3) });
+
+                return Results.Ok(rows);
             });
 
             // Log a client-side error
