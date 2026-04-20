@@ -239,6 +239,21 @@ namespace PropaneDriver.Server.Data
                             FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id]);
                         CREATE INDEX [IX_DeliveryTimes_AddressId] ON [DeliveryTimes] ([AddressId]);
                     END
+                    ELSE IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'AddressId' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                    BEGIN
+                        -- Partial migration: old address columns were already dropped but
+                        -- AddressId was never added. Add only what is missing.
+                        ALTER TABLE [DeliveryTimes] ADD [AddressId] uniqueidentifier NULL;
+                        -- Table has no data at this point so NULL→NOT NULL is safe.
+                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [AddressId] uniqueidentifier NOT NULL;
+                        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_DeliveryTimes_Addresses_AddressId')
+                            ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId]
+                                FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id]);
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DeliveryTimes_AddressId' AND object_id = OBJECT_ID(N'[dbo].[DeliveryTimes]'))
+                            CREATE INDEX [IX_DeliveryTimes_AddressId] ON [DeliveryTimes] ([AddressId]);
+                    END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Alerts')
                     BEGIN
