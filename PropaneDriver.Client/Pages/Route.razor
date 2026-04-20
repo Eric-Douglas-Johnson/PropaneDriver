@@ -20,7 +20,6 @@
 <div class="deliveries-menu">
     <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
     <button class="menu-btn" @onclick="NavigateToActive" disabled="@(_activeDelivery is null)">Navigate to Active</button>
-    <button class="menu-btn" @onclick="MenuAction3">Action 3</button>
 </div>
 
 <!-- Route Summary -->
@@ -303,7 +302,7 @@
                 // duration. If the server didn't compute one (missing GPS on
                 // every stop, for instance), leave it blank.
                 EstimatedCompletionTime = route.EstimatedRouteTime > 0
-                    ? DateTime.Now.AddMinutes(route.EstimatedRouteTime).ToString("h:mm tt")
+                    ? FormatHours(route.EstimatedRouteTime)
                     : string.Empty,
                 // The UI renders alerts directly from _deliveries so that
                 // per-alert Seen state can be tracked and clicked; the
@@ -345,11 +344,6 @@
         if (string.IsNullOrWhiteSpace(address)) return;
         var dest = Uri.EscapeDataString(address);
         Nav.NavigateTo($"/navigation?destination={dest}");
-    }
-
-    private void MenuAction3()
-    {
-        // TODO: wire up third menu action
     }
 
     private void SelectDelivery(DeliveryDto delivery)
@@ -422,6 +416,14 @@
     {
         _gpsError = error;
         InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatHours(double totalMinutes)
+    {
+        var ts = TimeSpan.FromMinutes(totalMinutes);
+        return ts.Hours > 0
+            ? $"{ts.Hours}h {ts.Minutes}m"
+            : $"{ts.Minutes}m";
     }
 
     private static string FormatTimer(double totalSeconds)
