@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
@@ -7,6 +8,16 @@ namespace PropaneDriver.Server.Endpoints
     {
         public static IEndpointRouteBuilder MapClientLogEndpoints(this IEndpointRouteBuilder app)
         {
+            // Read recent error logs (diagnostic)
+            app.MapGet("api/client-logs", async (PropaneDriverDbContext db) =>
+            {
+                var logs = await db.ErrorLogs
+                    .OrderByDescending(e => e.Timestamp)
+                    .Take(50)
+                    .ToListAsync();
+                return Results.Ok(logs);
+            });
+
             // Log a client-side error
             app.MapPost("api/client-logs", async (
                 ClientLogDto log,

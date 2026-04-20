@@ -101,21 +101,32 @@ namespace PropaneDriver.Server.Data
                     BEGIN
                         -- Migrate: populate Addresses from existing Deliveries data, then
                         -- replace the inline address columns with a FK to Addresses.
+                        -- Each step is guarded so partial re-runs are safe.
 
-                        -- Create one Address row per unique (Street, City, State, ZipCode),
-                        -- averaging coordinates where duplicates exist.
+                        -- Insert only addresses not already in the table (idempotent).
                         INSERT INTO [Addresses] ([Id], [Street], [City], [State], [ZipCode], [Latitude], [Longitude], [AvgDeliveryTimeSeconds])
-                        SELECT NEWID(), [Street], [City], [State], [ZipCode],
-                               AVG([Latitude]), AVG([Longitude]), 0
-                        FROM [Deliveries]
-                        WHERE LEN(TRIM([Street])) > 0
-                          AND LEN(TRIM([City]))   > 0
-                          AND LEN(TRIM([State]))  > 0
-                          AND LEN(TRIM([ZipCode])) > 0
-                        GROUP BY [Street], [City], [State], [ZipCode];
+                        SELECT NEWID(), d.[Street], d.[City], d.[State], d.[ZipCode],
+                               AVG(d.[Latitude]), AVG(d.[Longitude]), 0
+                        FROM [Deliveries] d
+                        WHERE LEN(TRIM(d.[Street])) > 0
+                          AND LEN(TRIM(d.[City]))   > 0
+                          AND LEN(TRIM(d.[State]))  > 0
+                          AND LEN(TRIM(d.[ZipCode])) > 0
+                          AND NOT EXISTS (
+                              SELECT 1 FROM [Addresses] a
+                              WHERE a.[Street] = d.[Street]
+                                AND a.[City]   = d.[City]
+                                AND a.[State]  = d.[State]
+                                AND a.[ZipCode] = d.[ZipCode])
+                        GROUP BY d.[Street], d.[City], d.[State], d.[ZipCode];
 
-                        -- Add AddressId column (nullable to allow the UPDATE below).
-                        ALTER TABLE [Deliveries] ADD [AddressId] uniqueidentifier NULL;
+                        -- Add AddressId column only if it doesn't exist yet.
+                        IF NOT EXISTS (
+                            SELECT 1 FROM sys.columns
+                            WHERE Name = N'AddressId' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                        BEGIN
+                            ALTER TABLE [Deliveries] ADD [AddressId] uniqueidentifier NULL;
+                        END
 
                         -- Link each delivery to its matching Address row.
                         UPDATE d SET d.[AddressId] = a.[Id]
@@ -124,15 +135,27 @@ namespace PropaneDriver.Server.Data
                             ON d.[Street] = a.[Street]
                            AND d.[City]   = a.[City]
                            AND d.[State]  = a.[State]
-                           AND d.[ZipCode] = a.[ZipCode];
+                           AND d.[ZipCode] = a.[ZipCode]
+                        WHERE d.[AddressId] IS NULL;
 
                         -- Drop deliveries with no match (bad data with empty fields).
                         DELETE FROM [Deliveries] WHERE [AddressId] IS NULL;
 
-                        ALTER TABLE [Deliveries] ALTER COLUMN [AddressId] uniqueidentifier NOT NULL;
-                        ALTER TABLE [Deliveries] ADD CONSTRAINT [FK_Deliveries_Addresses_AddressId]
-                            FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id]);
-                        CREATE INDEX [IX_Deliveries_AddressId] ON [Deliveries] ([AddressId]);
+                        -- Make column NOT NULL now that all rows are linked.
+                        IF EXISTS (
+                            SELECT 1 FROM sys.columns
+                            WHERE Name = N'AddressId' AND Object_ID = Object_ID(N'[dbo].[Deliveries]')
+                              AND is_nullable = 1)
+                        BEGIN
+                            ALTER TABLE [Deliveries] ALTER COLUMN [AddressId] uniqueidentifier NOT NULL;
+                        END
+
+                        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Deliveries_Addresses_AddressId')
+                            ALTER TABLE [Deliveries] ADD CONSTRAINT [FK_Deliveries_Addresses_AddressId]
+                                FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id]);
+
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Deliveries_AddressId' AND object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
+                            CREATE INDEX [IX_Deliveries_AddressId] ON [Deliveries] ([AddressId]);
 
                         -- Drop the now-redundant address check constraints.
                         IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_Street'  AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
@@ -144,7 +167,19 @@ namespace PropaneDriver.Server.Data
                         IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Deliveries_ZipCode' AND parent_object_id = OBJECT_ID(N'[dbo].[Deliveries]'))
                             ALTER TABLE [Deliveries] DROP CONSTRAINT [CK_Deliveries_ZipCode];
 
-                        ALTER TABLE [Deliveries] DROP COLUMN [Street], [City], [State], [ZipCode], [Latitude], [Longitude];
+                        -- Drop old address columns only after FK is in place.
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Street' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [Street];
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'City' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [City];
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'State' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [State];
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'ZipCode' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [ZipCode];
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Latitude' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [Latitude];
+                        IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Longitude' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                            ALTER TABLE [Deliveries] DROP COLUMN [Longitude];
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryTimes')
