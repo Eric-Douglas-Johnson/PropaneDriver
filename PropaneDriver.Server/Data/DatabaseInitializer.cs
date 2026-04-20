@@ -243,11 +243,13 @@ namespace PropaneDriver.Server.Data
                         SELECT 1 FROM sys.columns
                         WHERE Name = N'AddressId' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
                     BEGIN
-                        -- Partial migration: old address columns were already dropped but
-                        -- AddressId was never added. Add only what is missing.
-                        ALTER TABLE [DeliveryTimes] ADD [AddressId] uniqueidentifier NULL;
-                        -- Table has no data at this point so NULL→NOT NULL is safe.
-                        ALTER TABLE [DeliveryTimes] ALTER COLUMN [AddressId] uniqueidentifier NOT NULL;
+                        -- Partial migration: old address columns already dropped but AddressId
+                        -- was never added. Rows without an address FK are unusable, so truncate
+                        -- first to guarantee the NULL→NOT NULL alter succeeds.
+                        TRUNCATE TABLE [DeliveryTimes];
+                        ALTER TABLE [DeliveryTimes] ADD [AddressId] uniqueidentifier NOT NULL
+                            CONSTRAINT [DF_DeliveryTimes_AddressId] DEFAULT '00000000-0000-0000-0000-000000000000';
+                        ALTER TABLE [DeliveryTimes] DROP CONSTRAINT [DF_DeliveryTimes_AddressId];
                         IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_DeliveryTimes_Addresses_AddressId')
                             ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId]
                                 FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id]);
