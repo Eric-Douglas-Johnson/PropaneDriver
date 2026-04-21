@@ -16,11 +16,6 @@
     <div class="nav-header">
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
-        <div class="nav-buttons">
-            <button class="btn btn-primary" @onclick="GetDirections" disabled="@(_routing || string.IsNullOrWhiteSpace(_destination))">
-                Get Directions
-            </button>
-        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_status))
@@ -94,11 +89,6 @@
 
     private string RoutingDestination =>
         !string.IsNullOrWhiteSpace(_fullDestination) ? _fullDestination : _destination;
-
-    private async Task GetDirections()
-    {
-        await FetchAndDrawRoute();
-    }
 
     private async Task FetchAndDrawRoute()
     {
