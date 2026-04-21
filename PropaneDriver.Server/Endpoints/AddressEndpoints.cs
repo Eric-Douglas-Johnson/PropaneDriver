@@ -1,0 +1,62 @@
+using PropaneDriver.Server.Data;
+using PropaneDriver.Shared.Dtos;
+
+namespace PropaneDriver.Server.Endpoints
+{
+    public static class AddressEndpoints
+    {
+        public static IEndpointRouteBuilder MapAddressEndpoints(this IEndpointRouteBuilder app)
+        {
+            var group = app.MapGroup("api/addresses");
+
+            // Overwrite the stored coordinates on an Address row. Used by the
+            // driver-side "set pin here" button when the geocoded location is
+            // off (common for rural long driveways where Google drops the pin
+            // at the road entrance instead of the tank). Leaves every other
+            // field on the row untouched.
+            group.MapPut("{id:guid}/coordinates", async (
+                Guid id,
+                AddressCoordinatesUpdateDto dto,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                // Sanity-check the payload. (0,0) is the canonical "unset"
+                // sentinel our code uses elsewhere, and absurd values almost
+                // always indicate a broken GPS frame rather than a real fix.
+                if (dto.Latitude == 0 && dto.Longitude == 0)
+                    return Results.BadRequest(new { Message = "Latitude and Longitude cannot both be 0." });
+                if (dto.Latitude < -90 || dto.Latitude > 90)
+                    return Results.BadRequest(new { Message = "Latitude must be between -90 and 90." });
+                if (dto.Longitude < -180 || dto.Longitude > 180)
+                    return Results.BadRequest(new { Message = "Longitude must be between -180 and 180." });
+
+                var address = await db.Addresses.FindAsync(id);
+                if (address is null)
+                    return Results.NotFound(new { Message = $"Address {id} not found." });
+
+                address.Latitude = dto.Latitude;
+                address.Longitude = dto.Longitude;
+
+                try
+                {
+                    await db.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Updated coordinates for Address {AddressId} to ({Lat},{Lng})",
+                        id, dto.Latitude, dto.Longitude);
+
+                    return Results.Ok(new { id, address.Latitude, address.Longitude });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to update coordinates for Address {AddressId}", id);
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "Failed to update coordinates",
+                        statusCode: 500);
+                }
+            });
+
+            return app;
+        }
+    }
+}

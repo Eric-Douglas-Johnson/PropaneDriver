@@ -8,6 +8,7 @@
 @inject GeoFenceService GeoFenceService
 @inject RouteApiService RouteApi
 @inject DeliveryApiService DeliveryApi
+@inject AddressApiService AddressApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject HttpClient Http
@@ -144,7 +145,19 @@
             </div>
             <div class="detail-actions">
                 <button class="btn btn-sm btn-primary" @onclick="NavigateToSelected">Navigate</button>
+                <button class="btn btn-sm btn-outline-info"
+                        @onclick="SetAddressGpsFromTruck"
+                        disabled="@_settingAddressGps"
+                        title="Overwrite this address's stored coordinates with the truck's current GPS fix">
+                    @(_settingAddressGps ? "Saving…" : "Set GPS from Truck")
+                </button>
             </div>
+            @if (!string.IsNullOrEmpty(_addressGpsStatus))
+            {
+                <div class="@(_addressGpsSuccess ? "text-success" : "text-danger") mt-1" style="font-size:0.8rem;">
+                    @_addressGpsStatus
+                </div>
+            }
         }
     </div>
 </div>
@@ -219,6 +232,13 @@
     private bool _gpsChecking;
     private GpsCheckResult? _gpsCheckResult;
     private string? _gpsCheckError;
+
+    // State for the "Set GPS from Truck" button in delivery details. Lives
+    // on the page (not the GeoFenceService) because it's a one-shot user
+    // action tied to whichever delivery is currently selected.
+    private bool _settingAddressGps;
+    private string? _addressGpsStatus;
+    private bool _addressGpsSuccess;
 
     private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
 
@@ -344,6 +364,87 @@
         if (string.IsNullOrWhiteSpace(address)) return;
         var dest = Uri.EscapeDataString(address);
         Nav.NavigateTo($"/navigation?destination={dest}");
+    }
+
+    // "Set GPS from Truck" — overwrite the stored coordinates on the
+    // selected delivery's Address row with the truck's current GPS fix.
+    // Useful when the geocoded pin is off (long rural driveways, the
+    // tank is behind the house, etc.). We prompt first so one fat-
+    // finger doesn't silently replace a good location with a bad one.
+    private async Task SetAddressGpsFromTruck()
+    {
+        if (_selectedDelivery is null) return;
+
+        var addressId = _selectedDelivery.Location.Id;
+        if (addressId == Guid.Empty)
+        {
+            _addressGpsStatus = "This delivery has no linked address record.";
+            _addressGpsSuccess = false;
+            return;
+        }
+
+        var lat = GeolocationService.CurrentLatitude;
+        var lon = GeolocationService.CurrentLongitude;
+
+        if (lat == 0 && lon == 0)
+        {
+            _addressGpsStatus = "No GPS fix yet — wait for a position update and try again.";
+            _addressGpsSuccess = false;
+            return;
+        }
+
+        // Capture the current stored coordinates so we can show the driver
+        // what's about to change. If the address has no saved coords yet
+        // (HasCoordinates false), there's no meaningful delta — just show
+        // the new pin.
+        var oldLat = _selectedDelivery.Location.Latitude;
+        var oldLon = _selectedDelivery.Location.Longitude;
+        var hadCoords = _selectedDelivery.Location.HasCoordinates;
+
+        // Distance in feet between old and new pin, so the prompt/status
+        // lines are actionable ("you're moving the pin 320 ft") rather
+        // than asking the driver to eyeball raw lat/lon deltas.
+        var moveFeet = hadCoords
+            ? GeoFenceService.HaversineDistance(oldLat, oldLon, lat, lon) * 3.28084
+            : 0.0;
+
+        // Native browser confirm. Good enough for a driver-on-a-phone UX
+        // and avoids pulling in a modal library just for this one prompt.
+        var prompt = hadCoords
+            ? $"Overwrite stored GPS for {_selectedDelivery.CustomerName}?\n\n" +
+              $"Current: ({oldLat:F6}, {oldLon:F6})\n" +
+              $"New:     ({lat:F6}, {lon:F6})\n" +
+              $"Change:  ~{moveFeet:F0} ft"
+            : $"Set GPS for {_selectedDelivery.CustomerName} to ({lat:F6}, {lon:F6})?\n\n" +
+              "(No coordinates currently stored.)";
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", prompt);
+        if (!confirmed) return;
+
+        _settingAddressGps = true;
+        _addressGpsStatus = null;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateCoordinatesAsync(addressId, lat, lon);
+
+        if (ok)
+        {
+            // Update the in-memory delivery so the detail view reflects
+            // the new coordinates immediately, without needing a reload.
+            _selectedDelivery.Location.Latitude = lat;
+            _selectedDelivery.Location.Longitude = lon;
+            _addressGpsStatus = hadCoords
+                ? $"✓ Saved — pin moved ~{moveFeet:F0} ft to ({lat:F6}, {lon:F6})"
+                : $"✓ Saved ({lat:F6}, {lon:F6})";
+            _addressGpsSuccess = true;
+        }
+        else
+        {
+            _addressGpsStatus = "✗ Failed to save — see ErrorLog.";
+            _addressGpsSuccess = false;
+        }
+
+        _settingAddressGps = false;
     }
 
     private void SelectDelivery(DeliveryDto delivery)

@@ -57,6 +57,7 @@ app.MapDriverEndpoints();
 app.MapRouteEndpoints();
 app.MapAuthEndpoints();
 app.MapDeliveryEndpoints();
+app.MapAddressEndpoints();
 app.MapAlertEndpoints();
 app.MapDeliveryTimeEndpoints();
 app.MapGeocodingEndpoints();
