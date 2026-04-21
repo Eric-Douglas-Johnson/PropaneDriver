@@ -63,15 +63,20 @@ namespace PropaneDriver.Client.Services
         {
             try
             {
+                // GPS updates fire continuously while the service is watching.
+                // "No active delivery" is just the idle state — the driver hasn't
+                // selected one yet, or finished the whole route. Bail silently;
+                // logging this as an error flooded ErrorLog with one row per fix.
                 if (_activeDelivery == null)
                 {
-                    await ErrorLogService.LogErrorAsync("GeoFenceService", "HandlePositionChanged called with no active delivery");
                     return;
                 }
 
+                // Same story for missing coordinates: not an error per fix, only
+                // worth noting once per delivery. Let the Admin page surface
+                // missing-GPS as a data-quality issue instead.
                 if (!_activeDelivery.Location.HasCoordinates)
                 {
-                    await ErrorLogService.LogErrorAsync("GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no GPS coordinates");
                     return;
                 }
 
