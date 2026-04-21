@@ -18,7 +18,7 @@
                value="@_destination" @oninput="OnDestinationInput" />
         <div class="nav-buttons">
             <button class="btn btn-primary" @onclick="GetDirections" disabled="@(_routing || string.IsNullOrWhiteSpace(_destination))">
-                @(_routing ? "Routing…" : "Get Directions")
+                Get Directions
             </button>
         </div>
     </div>
@@ -104,8 +104,10 @@
     {
         if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
+        // Don't show a transient "routing…" message — the button's disabled
+        // state is enough visual feedback, and the real status (distance + ETA,
+        // or an error) lands as soon as Google responds.
         _routing = true;
-        _status = $"Routing to {_destination}…";
         StateHasChanged();
 
         // Origin = current GPS position.
