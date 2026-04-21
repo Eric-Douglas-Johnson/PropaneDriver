@@ -171,12 +171,23 @@ namespace PropaneDriver.Server.Endpoints
                         var city = d.City.Trim();
                         var state = d.State.Trim();
                         var zip = d.ZipCode.Trim();
-                        var key = $"{street}|{city}|{state}|{zip}";
+                        // Case-fold the cache key so "Main St" and "main st" in the
+                        // same batch resolve to the same Address row. The DB
+                        // lookup below is already case-insensitive via collation.
+                        var key = $"{street}|{city}|{state}|{zip}".ToLowerInvariant();
 
                         if (addressCache.ContainsKey(key)) continue;
 
-                        var address = await db.Addresses.FirstOrDefaultAsync(
-                            a => a.Street == street && a.City == city && a.State == state && a.ZipCode == zip);
+                        // Explicit case-insensitive collation. Azure SQL defaults to
+                        // a CI collation so bare == would match in practice, but
+                        // being explicit matches what /api/geocode uses and keeps
+                        // us safe against any future instance that happens to be CS.
+                        const string ci = "SQL_Latin1_General_CP1_CI_AS";
+                        var address = await db.Addresses.FirstOrDefaultAsync(a =>
+                            EF.Functions.Collate(a.Street, ci) == street
+                            && EF.Functions.Collate(a.City, ci) == city
+                            && EF.Functions.Collate(a.State, ci) == state
+                            && EF.Functions.Collate(a.ZipCode, ci) == zip);
 
                         if (address is null)
                         {
@@ -207,7 +218,9 @@ namespace PropaneDriver.Server.Endpoints
 
                     var deliveries = dto.Deliveries.Select((d, i) =>
                     {
-                        var key = $"{d.Street.Trim()}|{d.City.Trim()}|{d.State.Trim()}|{d.ZipCode.Trim()}";
+                        // Must match the normalization used when populating addressCache
+                        // above — case-fold so a mixed-case duplicate resolves correctly.
+                        var key = $"{d.Street.Trim()}|{d.City.Trim()}|{d.State.Trim()}|{d.ZipCode.Trim()}".ToLowerInvariant();
                         return new DeliveryEntity
                         {
                             Id = Guid.NewGuid(),
