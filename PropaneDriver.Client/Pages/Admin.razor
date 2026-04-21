@@ -546,13 +546,28 @@
 
         if (result is not null)
         {
+            // Fill in every form field from the resolved result, regardless of
+            // whether it came from our Addresses table or from Google. That way
+            // the operator can type just a Street and have City/State/Zip/GPS
+            // auto-populate — and, when the address is already on file, the
+            // coordinates we store are guaranteed to match the existing row.
+            if (!string.IsNullOrWhiteSpace(result.Street)) _newStreet = result.Street;
+            if (!string.IsNullOrWhiteSpace(result.City)) _newCity = result.City;
+            if (!string.IsNullOrWhiteSpace(result.State)) _newState = result.State;
+            if (!string.IsNullOrWhiteSpace(result.ZipCode)) _newZip = result.ZipCode;
+
             _newLatStr = result.Latitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
             _newLonStr = result.Longitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
-            _geocodeStatus = $"Geocoded: {result.DisplayName}";
+
+            // Source tag tells the operator which path we took. "Database" =
+            // existing row, "Google" = fresh lookup. Empty when a very old
+            // server build is still answering.
+            var sourceTag = string.IsNullOrWhiteSpace(result.Source) ? "" : $" [{result.Source}]";
+            _geocodeStatus = $"Found{sourceTag}: {result.DisplayName}";
         }
         else
         {
-            _geocodeStatus = "Could not find coordinates for this address.";
+            _geocodeStatus = "Could not find this address.";
         }
 
         _geocoding = false;
