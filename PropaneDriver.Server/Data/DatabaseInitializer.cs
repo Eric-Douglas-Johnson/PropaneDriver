@@ -102,23 +102,31 @@ namespace PropaneDriver.Server.Data
                         -- Migrate: populate Addresses from existing Deliveries data, then
                         -- replace the inline address columns with a FK to Addresses.
                         -- Each step is guarded so partial re-runs are safe.
+                        --
+                        -- The INSERT...SELECT and UPDATE...JOIN that reference d.[Street]
+                        -- are wrapped in EXEC() so SQL Server defers column-name binding
+                        -- until the branch actually executes. Without this, once Deliveries
+                        -- has already been migrated (Street column dropped), the whole
+                        -- DDL batch fails to compile with ""Invalid column name 'Street'""
+                        -- even though the guard would have skipped this branch at runtime —
+                        -- which silently blocks every other migration step below from running.
 
                         -- Insert only addresses not already in the table (idempotent).
-                        INSERT INTO [Addresses] ([Id], [Street], [City], [State], [ZipCode], [Latitude], [Longitude], [AvgDeliveryTimeSeconds])
-                        SELECT NEWID(), d.[Street], d.[City], d.[State], d.[ZipCode],
-                               AVG(d.[Latitude]), AVG(d.[Longitude]), 0
-                        FROM [Deliveries] d
-                        WHERE LEN(TRIM(d.[Street])) > 0
-                          AND LEN(TRIM(d.[City]))   > 0
-                          AND LEN(TRIM(d.[State]))  > 0
-                          AND LEN(TRIM(d.[ZipCode])) > 0
-                          AND NOT EXISTS (
-                              SELECT 1 FROM [Addresses] a
-                              WHERE a.[Street] = d.[Street]
-                                AND a.[City]   = d.[City]
-                                AND a.[State]  = d.[State]
-                                AND a.[ZipCode] = d.[ZipCode])
-                        GROUP BY d.[Street], d.[City], d.[State], d.[ZipCode];
+                        EXEC('INSERT INTO [Addresses] ([Id], [Street], [City], [State], [ZipCode], [Latitude], [Longitude], [AvgDeliveryTimeSeconds])
+                              SELECT NEWID(), d.[Street], d.[City], d.[State], d.[ZipCode],
+                                     AVG(d.[Latitude]), AVG(d.[Longitude]), 0
+                              FROM [Deliveries] d
+                              WHERE LEN(TRIM(d.[Street])) > 0
+                                AND LEN(TRIM(d.[City]))   > 0
+                                AND LEN(TRIM(d.[State]))  > 0
+                                AND LEN(TRIM(d.[ZipCode])) > 0
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM [Addresses] a
+                                    WHERE a.[Street] = d.[Street]
+                                      AND a.[City]   = d.[City]
+                                      AND a.[State]  = d.[State]
+                                      AND a.[ZipCode] = d.[ZipCode])
+                              GROUP BY d.[Street], d.[City], d.[State], d.[ZipCode]');
 
                         -- Add AddressId column only if it doesn't exist yet.
                         IF NOT EXISTS (
@@ -128,15 +136,15 @@ namespace PropaneDriver.Server.Data
                             ALTER TABLE [Deliveries] ADD [AddressId] uniqueidentifier NULL;
                         END
 
-                        -- Link each delivery to its matching Address row.
-                        UPDATE d SET d.[AddressId] = a.[Id]
-                        FROM [Deliveries] d
-                        INNER JOIN [Addresses] a
-                            ON d.[Street] = a.[Street]
-                           AND d.[City]   = a.[City]
-                           AND d.[State]  = a.[State]
-                           AND d.[ZipCode] = a.[ZipCode]
-                        WHERE d.[AddressId] IS NULL;
+                        -- Link each delivery to its matching Address row (EXEC() for same reason).
+                        EXEC('UPDATE d SET d.[AddressId] = a.[Id]
+                              FROM [Deliveries] d
+                              INNER JOIN [Addresses] a
+                                  ON d.[Street] = a.[Street]
+                                 AND d.[City]   = a.[City]
+                                 AND d.[State]  = a.[State]
+                                 AND d.[ZipCode] = a.[ZipCode]
+                              WHERE d.[AddressId] IS NULL');
 
                         -- Drop deliveries with no match (bad data with empty fields).
                         DELETE FROM [Deliveries] WHERE [AddressId] IS NULL;

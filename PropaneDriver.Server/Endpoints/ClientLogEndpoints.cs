@@ -63,25 +63,29 @@ namespace PropaneDriver.Server.Endpoints
                           CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street],[City],[State],[ZipCode])
                       )",
 
-                    // 2. Seed Addresses from Deliveries if Street column still exists
+                    // 2. Seed Addresses from Deliveries if Street column still exists.
+                    //    Wrapped in EXEC() so SQL Server defers column-name resolution until
+                    //    runtime — otherwise the outer IF guard doesn't help when Deliveries
+                    //    has already been migrated and d.[Street] no longer exists, which
+                    //    trips "Invalid column name" at compile time.
                     @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
-                      INSERT INTO [Addresses] ([Id],[Street],[City],[State],[ZipCode],[Latitude],[Longitude],[AvgDeliveryTimeSeconds])
-                      SELECT NEWID(),d.[Street],d.[City],d.[State],d.[ZipCode],AVG(d.[Latitude]),AVG(d.[Longitude]),0
-                      FROM [Deliveries] d
-                      WHERE LEN(TRIM(d.[Street]))>0 AND LEN(TRIM(d.[City]))>0 AND LEN(TRIM(d.[State]))>0 AND LEN(TRIM(d.[ZipCode]))>0
-                        AND NOT EXISTS (SELECT 1 FROM [Addresses] a WHERE a.[Street]=d.[Street] AND a.[City]=d.[City] AND a.[State]=d.[State] AND a.[ZipCode]=d.[ZipCode])
-                      GROUP BY d.[Street],d.[City],d.[State],d.[ZipCode]",
+                      EXEC('INSERT INTO [Addresses] ([Id],[Street],[City],[State],[ZipCode],[Latitude],[Longitude],[AvgDeliveryTimeSeconds])
+                            SELECT NEWID(),d.[Street],d.[City],d.[State],d.[ZipCode],AVG(d.[Latitude]),AVG(d.[Longitude]),0
+                            FROM [Deliveries] d
+                            WHERE LEN(TRIM(d.[Street]))>0 AND LEN(TRIM(d.[City]))>0 AND LEN(TRIM(d.[State]))>0 AND LEN(TRIM(d.[ZipCode]))>0
+                              AND NOT EXISTS (SELECT 1 FROM [Addresses] a WHERE a.[Street]=d.[Street] AND a.[City]=d.[City] AND a.[State]=d.[State] AND a.[ZipCode]=d.[ZipCode])
+                            GROUP BY d.[Street],d.[City],d.[State],d.[ZipCode]')",
 
                     // 3. Add AddressId to Deliveries if Street column still exists
                     @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
                       AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
                       ALTER TABLE [Deliveries] ADD [AddressId] uniqueidentifier NULL",
 
-                    // 4. Link deliveries to addresses
+                    // 4. Link deliveries to addresses. Same EXEC() trick as step 2.
                     @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
-                      UPDATE d SET d.[AddressId]=a.[Id] FROM [Deliveries] d
-                      JOIN [Addresses] a ON d.[Street]=a.[Street] AND d.[City]=a.[City] AND d.[State]=a.[State] AND d.[ZipCode]=a.[ZipCode]
-                      WHERE d.[AddressId] IS NULL",
+                      EXEC('UPDATE d SET d.[AddressId]=a.[Id] FROM [Deliveries] d
+                            JOIN [Addresses] a ON d.[Street]=a.[Street] AND d.[City]=a.[City] AND d.[State]=a.[State] AND d.[ZipCode]=a.[ZipCode]
+                            WHERE d.[AddressId] IS NULL')",
 
                     // 5. Drop unlinked deliveries
                     @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
