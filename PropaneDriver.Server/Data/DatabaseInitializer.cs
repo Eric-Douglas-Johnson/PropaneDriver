@@ -257,6 +257,27 @@ namespace PropaneDriver.Server.Data
                             CREATE INDEX [IX_DeliveryTimes_AddressId] ON [DeliveryTimes] ([AddressId]);
                     END
 
+                    -- Safety net: regardless of which DeliveryTimes branch above ran,
+                    -- drop any leftover legacy per-row address columns. Handles the
+                    -- stuck half-migrated state where a prior migration attempt added
+                    -- AddressId but failed on its own ADD [AddressId] (already existed),
+                    -- rolling the whole batch back and leaving Address/Latitude/Longitude
+                    -- behind with NOT NULL + no default — which then breaks every INSERT.
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Address' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [Address];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Latitude' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [Latitude];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Longitude' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [Longitude];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Street' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [Street];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'City' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [City];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'State' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [State];
+                    IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'ZipCode' AND Object_ID = Object_ID(N'[dbo].[DeliveryTimes]'))
+                        ALTER TABLE [DeliveryTimes] DROP COLUMN [ZipCode];
+
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Alerts')
                     BEGIN
                         CREATE TABLE [Alerts] (

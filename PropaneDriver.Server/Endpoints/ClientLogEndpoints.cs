@@ -113,6 +113,24 @@ namespace PropaneDriver.Server.Endpoints
                     @"IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name=N'FK_DeliveryTimes_Addresses_AddressId')
                       AND EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'AddressId' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
                       ALTER TABLE [DeliveryTimes] ADD CONSTRAINT [FK_DeliveryTimes_Addresses_AddressId] FOREIGN KEY ([AddressId]) REFERENCES [Addresses] ([Id])",
+
+                    // 10. Drop stale legacy columns on DeliveryTimes left behind by
+                    //     a half-applied migration. With NOT NULL + no defaults these
+                    //     columns reject every INSERT the app tries to do.
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Address' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [Address]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Latitude' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [Latitude]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Longitude' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [Longitude]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [Street]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'City' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [City]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'State' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [State]",
+                    @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'ZipCode' AND Object_ID=Object_ID(N'[dbo].[DeliveryTimes]'))
+                      ALTER TABLE [DeliveryTimes] DROP COLUMN [ZipCode]",
                 };
 
                 var results = new List<object>();
