@@ -136,11 +136,12 @@ namespace PropaneDriver.Client.Services
                     return;
                 }
 
+                const double MinDeliverySeconds = 5 * 60;
                 var dto = new DeliveryTimeDto
                 {
                     DeliveryId = _activeDelivery.Id,
                     AddressId = _activeDelivery.Location.Id,
-                    TimeIntervalSeconds = _timer.Elapsed.TotalSeconds
+                    TimeIntervalSeconds = Math.Max(_timer.Elapsed.TotalSeconds, MinDeliverySeconds)
                 };
 
                 try
