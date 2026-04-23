@@ -8,6 +8,7 @@
 @inject GeoFenceService GeoFenceService
 @inject RouteApiService RouteApi
 @inject DeliveryApiService DeliveryApi
+@inject DeliveryTimeApiService DeliveryTimeApi
 @inject AddressApiService AddressApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -21,6 +22,11 @@
 <div class="deliveries-menu">
     <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
     <button class="menu-btn" @onclick="NavigateToActive" disabled="@(_activeDelivery is null)">Navigate to Active</button>
+    <button class="menu-btn" @onclick="ForceNextDelivery"
+            disabled="@(_activeDelivery is null || _forcingNext)"
+            title="Mark the current active delivery complete without recording a time, and advance to the next pending stop">
+        @(_forcingNext ? "Advancing…" : "Force Next")
+    </button>
 </div>
 
 <!-- Route Summary -->
@@ -240,6 +246,10 @@
     private string? _addressGpsStatus;
     private bool _addressGpsSuccess;
 
+    // Disables the "Force Next" button while the status update is in flight
+    // so the driver can't double-tap and skip two deliveries by accident.
+    private bool _forcingNext;
+
     private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
 
     private string? _loadError;
@@ -350,6 +360,112 @@
     {
         if (_activeDelivery is null) return;
         OpenGoogleMapsDirections(_activeDelivery);
+    }
+
+    // "Force Next" — manually mark the current active delivery as Complete
+    // and advance the active pointer to the next pending stop. Use case:
+    // the geofence didn't trip (GPS pin off, radius too tight, driver parked
+    // far from the tank, etc.) but the delivery is actually done and the
+    // driver needs to move on. The driver enters the actual delivery time
+    // in minutes so we can still persist a DeliveryTime row for the
+    // address-average stats — otherwise force-skipping would quietly skew
+    // the route-time estimates toward 0 for repeat stops.
+    //
+    // The input itself doubles as the confirmation: a valid number means
+    // proceed, Cancel or blank means abort.
+    private async Task ForceNextDelivery()
+    {
+        if (_activeDelivery is null || _forcingNext) return;
+
+        var current = _activeDelivery;
+        var nextCandidate = _deliveries
+            .Where(d => d.Status == 0 && d.Id != current.Id)
+            .FirstOrDefault();
+
+        var promptText =
+            $"Force-advance past {current.CustomerName}?\n\n" +
+            $"Current active: {current.CustomerName}\n" +
+            (nextCandidate is not null
+                ? $"Will advance to: {nextCandidate.CustomerName}\n\n"
+                : "No more pending deliveries after this — active marker will be cleared.\n\n") +
+            "Enter the delivery time in MINUTES (e.g. 12 or 7.5).\n" +
+            "Cancel or leave blank to abort.";
+
+        // window.prompt returns the typed string, or null on Cancel.
+        var raw = await JS.InvokeAsync<string?>("prompt", promptText, "");
+        if (string.IsNullOrWhiteSpace(raw)) return; // cancel or empty => abort
+
+        if (!double.TryParse(raw.Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var minutes)
+            || minutes <= 0
+            || double.IsNaN(minutes) || double.IsInfinity(minutes))
+        {
+            _saveStatus = $"✗ Invalid delivery time '{raw}'. Must be a positive number of minutes.";
+            _saveSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        if (current.Location.Id == Guid.Empty)
+        {
+            _saveStatus = $"✗ {current.CustomerName} has no linked address — cannot record a delivery time.";
+            _saveSuccess = false;
+            StateHasChanged();
+            return;
+        }
+
+        _forcingNext = true;
+        _saveStatus = null;
+        StateHasChanged();
+
+        // 1) Save the DeliveryTime row first. If this fails the whole flow
+        //    aborts and the delivery stays active, so the driver can retry
+        //    without a partial state where status=Complete but no time row
+        //    was ever stored.
+        var dto = new DeliveryTimeDto
+        {
+            DeliveryId = current.Id,
+            AddressId = current.Location.Id,
+            TimeIntervalSeconds = minutes * 60.0
+        };
+
+        var timeResult = await DeliveryTimeApi.SaveDeliveryTimeAsync(dto);
+        if (!timeResult.Success)
+        {
+            _saveStatus = $"✗ Failed to save delivery time: {timeResult.ErrorMessage}";
+            _saveSuccess = false;
+            _forcingNext = false;
+            StateHasChanged();
+            return;
+        }
+
+        // 2) Mark the delivery Complete on the server.
+        var ok = await DeliveryApi.UpdateStatusAsync(current.Id, 2);
+        if (!ok)
+        {
+            // Time row saved but status update failed — surface the mismatch
+            // so the driver knows the stop isn't fully reconciled. The server
+            // logs the HTTP failure via ErrorLogService already.
+            _saveStatus = $"✗ Saved time but failed to mark {current.CustomerName} complete — see ErrorLog.";
+            _saveSuccess = false;
+            _forcingNext = false;
+            StateHasChanged();
+            return;
+        }
+
+        // 3) Sync local state and advance the active pointer. Mirrors
+        //    HandleDeliveryCompleted on the normal geofence-driven flow.
+        current.Status = 2;
+        _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+
+        var next = FindNextDelivery();
+        SetActiveDelivery(next); // null clears the active marker when route is done
+
+        _saveStatus = $"✓ Saved {minutes:F1} min for {current.CustomerName}"
+            + (next is not null ? $" — now active: {next.CustomerName}" : " — no more pending deliveries");
+        _saveSuccess = true;
+        _forcingNext = false;
+        StateHasChanged();
     }
 
     private void NavigateToSelected()
