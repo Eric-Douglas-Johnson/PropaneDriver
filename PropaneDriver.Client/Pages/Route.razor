@@ -342,7 +342,7 @@
             };
         }
 
-        _selectedDelivery = _deliveries.FirstOrDefault();
+        _selectedDelivery = FindNextDelivery() ?? _deliveries.FirstOrDefault();
         _loaded = true;
     }
 
