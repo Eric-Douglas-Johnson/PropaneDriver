@@ -208,6 +208,20 @@
                 }
             });
 
+            // Suppress auto-centering while the user is manually panning.
+            window._navUserPanning = false;
+            window._navPanTimeout = null;
+            window._navMap.addListener('dragstart', function () {
+                window._navUserPanning = true;
+                if (window._navPanTimeout) clearTimeout(window._navPanTimeout);
+            });
+            window._navMap.addListener('dragend', function () {
+                if (window._navPanTimeout) clearTimeout(window._navPanTimeout);
+                window._navPanTimeout = setTimeout(function () {
+                    window._navUserPanning = false;
+                }, 5000);
+            });
+
             // Re-trigger a resize pass once the map is idle in case the
             // container grew between Map construction and tile fetch.
             google.maps.event.addListenerOnce(window._navMap, 'idle', function () {
@@ -230,7 +244,9 @@
             if (!window._navMap || !window._navDriverMarker) return;
             var pos = { lat: lat, lng: lon };
             window._navDriverMarker.setPosition(pos);
-            window._navMap.panTo(pos);
+            if (!window._navUserPanning) {
+                window._navMap.panTo(pos);
+            }
         };
 
         // No-op kept for backwards compatibility; Google DirectionsRenderer
