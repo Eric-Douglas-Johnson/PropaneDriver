@@ -25,6 +25,7 @@
 
     <div class="nav-map">
         <div id="google-map"></div>
+        <button class="center-btn" @onclick="CenterOnLocation" title="Center on my location">&#8982;</button>
     </div>
 </div>
 
@@ -69,6 +70,12 @@
                 await FetchAndDrawRoute();
             }
         }
+    }
+
+    private async Task CenterOnLocation()
+    {
+        if (!_mapInitialized) return;
+        try { await JS.InvokeVoidAsync("navMapCenterOnDriver"); } catch { }
     }
 
     private async void HandlePositionChanged(double lat, double lon, double accuracy)
