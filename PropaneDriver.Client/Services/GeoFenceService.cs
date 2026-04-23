@@ -9,7 +9,7 @@ namespace PropaneDriver.Client.Services
         private const double MIN_FENCE_RADIUS_FT = 25;
         private const double MAX_FENCE_RADIUS_FT = 2000;
 
-        public double FenceRadiusMeters { get; private set; } = 100 * METERS_PER_FOOT; // 100 feet default
+        public double FenceRadiusMeters { get; private set; } = 150 * METERS_PER_FOOT; // 150 feet default
         public double FenceRadiusFeet => FenceRadiusMeters / METERS_PER_FOOT;
 
         public void AdjustFenceRadiusFeet(double deltaFeet)
