@@ -479,7 +479,17 @@
         var address = delivery.Location.FullAddress;
         if (string.IsNullOrWhiteSpace(address)) return;
         var dest = Uri.EscapeDataString(address);
-        Nav.NavigateTo($"/navigation?destination={dest}");
+
+        // Pass the AddressId + current TankLocation so the Navigation
+        // page can show the note below the address without an extra
+        // server round-trip, and knows which address to PUT against
+        // when the driver taps "Add tank location".
+        var qs = $"destination={dest}&addressId={delivery.Location.Id}";
+        if (!string.IsNullOrWhiteSpace(delivery.Location.TankLocation))
+        {
+            qs += $"&tankLocation={Uri.EscapeDataString(delivery.Location.TankLocation)}";
+        }
+        Nav.NavigateTo($"/navigation?{qs}");
     }
 
     // "Set GPS from Truck" — overwrite the stored coordinates on the

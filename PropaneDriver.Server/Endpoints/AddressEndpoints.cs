@@ -56,6 +56,47 @@ namespace PropaneDriver.Server.Endpoints
                 }
             });
 
+            // Overwrite the TankLocation note on an Address row. Called
+            // from the Navigation page when a driver taps the "Add tank
+            // location" button for a delivery whose address doesn't yet
+            // have one. Null or whitespace clears the field (so this is
+            // also the path for fixing a mistyped note).
+            group.MapPut("{id:guid}/tank-location", async (
+                Guid id,
+                AddressTankLocationUpdateDto dto,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                var address = await db.Addresses.FindAsync(id);
+                if (address is null)
+                    return Results.NotFound(new { Message = $"Address {id} not found." });
+
+                // Normalize: treat whitespace-only as "clear it". Trim
+                // so we don't store leading/trailing spaces from a
+                // copy-paste.
+                address.TankLocation = string.IsNullOrWhiteSpace(dto.TankLocation)
+                    ? null
+                    : dto.TankLocation.Trim();
+
+                try
+                {
+                    await db.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Updated TankLocation for Address {AddressId} (length={Length})",
+                        id, address.TankLocation?.Length ?? 0);
+
+                    return Results.Ok(new { id, address.TankLocation });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to update TankLocation for Address {AddressId}", id);
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "Failed to update tank location",
+                        statusCode: 500);
+                }
+            });
+
             return app;
         }
     }

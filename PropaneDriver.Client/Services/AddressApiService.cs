@@ -16,6 +16,36 @@ namespace PropaneDriver.Client.Services
             _http = http;
         }
 
+        public async Task<bool> UpdateTankLocationAsync(Guid addressId, string? tankLocation)
+        {
+            if (addressId == Guid.Empty) return false;
+
+            try
+            {
+                var response = await _http.PutAsJsonAsync(
+                    $"api/addresses/{addressId}/tank-location",
+                    new AddressTankLocationUpdateDto { TankLocation = tankLocation });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "AddressApiService.UpdateTankLocationAsync",
+                        $"PUT api/addresses/{addressId}/tank-location returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "AddressApiService.UpdateTankLocationAsync",
+                    $"Exception updating tank location for {addressId}: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<bool> UpdateCoordinatesAsync(Guid addressId, double latitude, double longitude)
         {
             if (addressId == Guid.Empty) return false;

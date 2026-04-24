@@ -3,12 +3,22 @@
 @inject GeolocationService GeolocationService
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject AddressApiService AddressApi
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 @code {
     [SupplyParameterFromQuery(Name = "destination")]
     public string? DestinationQuery { get; set; }
+
+    // Passed from Route.razor so we can display the tank-location note
+    // and PUT edits back to the right row. Both are optional — the page
+    // still works for ad-hoc typed destinations that have no DB row.
+    [SupplyParameterFromQuery(Name = "addressId")]
+    public string? AddressIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tankLocation")]
+    public string? TankLocationQuery { get; set; }
 }
 
 <PageTitle>Navigation</PageTitle>
@@ -17,6 +27,24 @@
     <div class="nav-header">
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
+
+        @if (_addressId != Guid.Empty)
+        {
+            <div class="tank-location">
+                @if (!string.IsNullOrWhiteSpace(_tankLocation))
+                {
+                    <span class="tank-location-value">@_tankLocation</span>
+                }
+                else
+                {
+                    <span class="tank-location-empty">No location set</span>
+                    <button class="btn-tank-add" @onclick="PromptAndSaveTankLocation"
+                            disabled="@_savingTankLocation">
+                        @(_savingTankLocation ? "Saving…" : "Add tank location")
+                    </button>
+                }
+            </div>
+        }
     </div>
 
     @if (!string.IsNullOrEmpty(_status))
@@ -42,6 +70,30 @@
     private string? _status;
     private bool _mapInitialized;
     private bool _routing;
+
+    // Tank-location state. _addressId = Guid.Empty means "this
+    // destination wasn't launched from a delivery row" (e.g. ad-hoc
+    // typed into the address bar), in which case we don't render the
+    // line at all — there's no Address row to save against.
+    private Guid _addressId = Guid.Empty;
+    private string? _tankLocation;
+    private bool _savingTankLocation;
+
+    protected override void OnInitialized()
+    {
+        // Parse query-string state once on page init. These don't change
+        // during the page's lifetime — a new address means a fresh nav
+        // to /navigation from the Deliveries page.
+        if (!string.IsNullOrWhiteSpace(AddressIdQuery)
+            && Guid.TryParse(AddressIdQuery, out var parsed))
+        {
+            _addressId = parsed;
+        }
+
+        _tankLocation = string.IsNullOrWhiteSpace(TankLocationQuery)
+            ? null
+            : TankLocationQuery;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -85,6 +137,51 @@
     private void BackToDeliveries()
     {
         Nav.NavigateTo("/deliveries");
+    }
+
+    // Prompt the driver for a tank-location description, then PUT it to
+    // the server. On success we update the local display so the user
+    // sees the new value without re-navigating. We keep this lightweight
+    // (window.prompt) to match the Force-Next flow on the Deliveries
+    // page — no modal infrastructure exists yet on this page.
+    private async Task PromptAndSaveTankLocation()
+    {
+        if (_addressId == Guid.Empty || _savingTankLocation) return;
+
+        string? input;
+        try
+        {
+            input = await JS.InvokeAsync<string?>(
+                "prompt",
+                "Describe where the tank is on the property (e.g. \"behind garage, left of AC unit\"):",
+                "");
+        }
+        catch
+        {
+            // JS prompt throws on Blazor Server in rare cases; bail quietly.
+            return;
+        }
+
+        // Null = user hit Cancel. Empty = user hit OK on a blank field;
+        // treat the same as cancel rather than storing an empty string.
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        _savingTankLocation = true;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateTankLocationAsync(_addressId, input.Trim());
+
+        if (ok)
+        {
+            _tankLocation = input.Trim();
+        }
+        else
+        {
+            _status = "Failed to save tank location. Please try again.";
+        }
+
+        _savingTankLocation = false;
+        StateHasChanged();
     }
 
     private async void HandlePositionChanged(double lat, double lon, double accuracy)
