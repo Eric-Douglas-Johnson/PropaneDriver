@@ -33,6 +33,13 @@ namespace PropaneDriver.Server.Data
 
         public double AvgDeliveryTimeSeconds { get; set; }
 
+        // Free-text note describing where the propane tank sits on the
+        // property (e.g. "behind garage, left of AC unit"). Optional;
+        // drivers can leave it blank and existing addresses will read back
+        // as null until someone fills it in.
+        [MaxLength(500)]
+        public string? TankLocation { get; set; }
+
         // Navigation
         public List<DeliveryEntity> Deliveries { get; set; } = new();
         public List<DeliveryTimeEntity> DeliveryTimes { get; set; } = new();

@@ -274,6 +274,14 @@
                     <input type="number" class="form-control form-control-sm" @bind="_newAvgMin" />
                 </div>
             </div>
+            <div class="admin-row">
+                <div class="admin-field flex-2">
+                    <label>Tank Location <span style="font-size:0.75rem; color:#8892b0;">(optional)</span></label>
+                    <input type="text" class="form-control form-control-sm"
+                           placeholder="e.g. behind garage, left of AC unit"
+                           @bind="_newTankLocation" />
+                </div>
+            </div>
             @if (_geocoding)
             {
                 <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">Looking up coordinates…</div>
@@ -359,6 +367,7 @@
     private string _newLatStr = string.Empty;
     private string _newLonStr = string.Empty;
     private double _newAvgMin = 20;
+    private string _newTankLocation = string.Empty;
     private bool _geocoding;
     private string? _geocodeStatus;
     private string _lastGeocodedAddress = string.Empty;
@@ -596,7 +605,8 @@
             Latitude = lat,
             Longitude = lon,
             AvgDeliveryTimeMinutes = _newAvgMin,
-            SortOrder = _pendingDeliveries.Count
+            SortOrder = _pendingDeliveries.Count,
+            TankLocation = string.IsNullOrWhiteSpace(_newTankLocation) ? null : _newTankLocation.Trim()
         });
 
         // Reset form (keep city/state/zip since they're often the same)
@@ -604,6 +614,7 @@
         _newStreet = string.Empty;
         _newLatStr = string.Empty;
         _newLonStr = string.Empty;
+        _newTankLocation = string.Empty;
         _geocodeStatus = null;
         _lastGeocodedAddress = string.Empty;
     }

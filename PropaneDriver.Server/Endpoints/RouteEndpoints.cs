@@ -39,7 +39,8 @@ namespace PropaneDriver.Server.Endpoints
                                     ZipCode = d.Address.ZipCode,
                                     Latitude = d.Address.Latitude,
                                     Longitude = d.Address.Longitude,
-                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds
+                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
+                                    TankLocation = d.Address.TankLocation
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -129,7 +130,8 @@ namespace PropaneDriver.Server.Endpoints
                                     ZipCode = d.Address.ZipCode,
                                     Latitude = d.Address.Latitude,
                                     Longitude = d.Address.Longitude,
-                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds
+                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
+                                    TankLocation = d.Address.TankLocation
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -197,6 +199,13 @@ namespace PropaneDriver.Server.Endpoints
                             && EF.Functions.Collate(a.State, ci) == state
                             && EF.Functions.Collate(a.ZipCode, ci) == zip);
 
+                        // Normalize the tank-location note: trim, and treat
+                        // whitespace-only as "not provided" so we don't overwrite
+                        // an existing stored value with an empty string.
+                        var tankLocation = string.IsNullOrWhiteSpace(d.TankLocation)
+                            ? null
+                            : d.TankLocation.Trim();
+
                         if (address is null)
                         {
                             address = new AddressEntity
@@ -208,14 +217,26 @@ namespace PropaneDriver.Server.Endpoints
                                 ZipCode = zip,
                                 Latitude = d.Latitude,
                                 Longitude = d.Longitude,
-                                AvgDeliveryTimeSeconds = 0
+                                AvgDeliveryTimeSeconds = 0,
+                                TankLocation = tankLocation
                             };
                             db.Addresses.Add(address);
                         }
-                        else if (d.Latitude != 0 || d.Longitude != 0)
+                        else
                         {
-                            address.Latitude = d.Latitude;
-                            address.Longitude = d.Longitude;
+                            if (d.Latitude != 0 || d.Longitude != 0)
+                            {
+                                address.Latitude = d.Latitude;
+                                address.Longitude = d.Longitude;
+                            }
+
+                            // Only update TankLocation when the caller actually
+                            // supplied one — a null/blank value on a fresh route
+                            // submit shouldn't wipe a previously-saved note.
+                            if (tankLocation is not null)
+                            {
+                                address.TankLocation = tankLocation;
+                            }
                         }
 
                         addressCache[key] = address;

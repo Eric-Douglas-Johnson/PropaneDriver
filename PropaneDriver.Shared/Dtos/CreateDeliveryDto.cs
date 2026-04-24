@@ -32,5 +32,11 @@ namespace PropaneDriver.Shared.Dtos
         public double Longitude { get; set; }
         public double AvgDeliveryTimeMinutes { get; set; }
         public int SortOrder { get; set; }
+
+        // Optional: free-text note about where the tank is on the
+        // property. If null/empty on an existing Address the server
+        // leaves the stored value untouched.
+        [MaxLength(500)]
+        public string? TankLocation { get; set; }
     }
 }

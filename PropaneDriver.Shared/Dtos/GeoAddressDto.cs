@@ -11,6 +11,10 @@ namespace PropaneDriver.Shared.Dtos
         public double Longitude { get; set; }
         public double AvgDeliveryTimeSeconds { get; set; }
 
+        // Optional free-text note about where the tank sits on the
+        // property. Null until the admin fills it in.
+        public string? TankLocation { get; set; }
+
         public string FullAddress =>
             string.Join(", ", new[] { Street, City, State, ZipCode }
                 .Where(s => !string.IsNullOrWhiteSpace(s)));

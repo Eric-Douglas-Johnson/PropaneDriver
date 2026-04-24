@@ -66,6 +66,7 @@ namespace PropaneDriver.Server.Data
                             [Latitude] float NOT NULL CONSTRAINT [DF_Addresses_Latitude] DEFAULT 0,
                             [Longitude] float NOT NULL CONSTRAINT [DF_Addresses_Longitude] DEFAULT 0,
                             [AvgDeliveryTimeSeconds] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds] DEFAULT 0,
+                            [TankLocation] nvarchar(500) NULL,
                             CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street], [City], [State], [ZipCode]),
                             CONSTRAINT [CK_Addresses_Street] CHECK (LEN(TRIM([Street])) > 0),
                             CONSTRAINT [CK_Addresses_City] CHECK (LEN(TRIM([City])) > 0),
@@ -73,6 +74,15 @@ namespace PropaneDriver.Server.Data
                             CONSTRAINT [CK_Addresses_ZipCode] CHECK (LEN(TRIM([ZipCode])) > 0)
                         );
                         CREATE INDEX [IX_Addresses_Location] ON [Addresses] ([Street], [City], [State], [ZipCode]);
+                    END
+
+                    -- Self-migrate: add TankLocation to existing deployments. Nullable
+                    -- with no default so this is a zero-downtime metadata-only change.
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'TankLocation' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                    BEGIN
+                        ALTER TABLE [Addresses] ADD [TankLocation] nvarchar(500) NULL;
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')
