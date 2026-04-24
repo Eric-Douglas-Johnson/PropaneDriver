@@ -38,7 +38,6 @@
                 }
                 else
                 {
-                    <span class="tank-location-empty">No location set</span>
                     <button class="btn-tank-add" @onclick="PromptAndSaveTankLocation"
                             disabled="@_savingTankLocation">
                         @(_savingTankLocation ? "Saving…" : "Add tank location")

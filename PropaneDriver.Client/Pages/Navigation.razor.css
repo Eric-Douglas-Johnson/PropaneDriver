@@ -67,12 +67,6 @@
     text-shadow: 0 0 10px rgba(255, 179, 71, 0.35);
 }
 
-.tank-location-empty {
-    color: #8892b0;
-    font-style: italic;
-    font-size: 1.3rem;
-}
-
 .btn-tank-add {
     background-color: #0f0f1e;
     color: whitesmoke;
