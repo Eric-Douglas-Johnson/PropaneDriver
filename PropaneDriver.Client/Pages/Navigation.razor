@@ -15,9 +15,6 @@
 
 <div class="nav-page">
     <div class="nav-header">
-        <button class="btn-back" @onclick="BackToDeliveries" title="Back to Deliveries">
-            &larr; Deliveries
-        </button>
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
     </div>
@@ -29,6 +26,9 @@
 
     <div class="nav-map">
         <div id="google-map"></div>
+        <button class="btn-back" @onclick="BackToDeliveries" title="Back to Deliveries">
+            &larr; Deliveries
+        </button>
         <button class="center-btn" @onclick="CenterOnLocation" title="Center on my location">&#8982;</button>
     </div>
 </div>
