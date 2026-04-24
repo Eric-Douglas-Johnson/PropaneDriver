@@ -92,10 +92,18 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(new { Deleted = true, RouteId = id });
             });
 
-            // Get today's route (with deliveries + alerts) for a driver
+            // Get today's route (with deliveries + alerts) for a driver.
+            // "Today" is computed in Central time because that's the driver's
+            // local timezone and it's also what the Admin page uses when
+            // saving Route.Date (DateTime.Today in the browser). Azure App
+            // Service has no timezone set, so a bare DateTime.Today here
+            // evaluates to UTC and silently misses the route for ~5 hours
+            // every evening around the UTC day rollover.
             group.MapGet("today/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
             {
-                var today = DateOnly.FromDateTime(DateTime.Today);
+                var centralTz = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
+                var today = DateOnly.FromDateTime(
+                    TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, centralTz));
                 var route = await db.Routes
                     .AsNoTracking()
                     .Where(r => r.DriverId == driverId && r.Date == today)
