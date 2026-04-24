@@ -89,3 +89,28 @@
 .center-btn:active {
     background-color: #2a2a4a;
 }
+
+/* "← Deliveries" button sits above the destination input inside the
+   nav-header column. Styled to match the dark theme but sized down
+   so it doesn't compete with the large address field for attention. */
+.btn-back {
+    align-self: flex-start;
+    background-color: #0f0f1e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.btn-back:hover {
+    background-color: #1f1f3a;
+    border-color: #3a3a6a;
+}
+
+.btn-back:active {
+    background-color: #2a2a4a;
+}

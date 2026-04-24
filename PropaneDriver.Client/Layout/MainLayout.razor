@@ -1,8 +1,14 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@implements IDisposable
+
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    @if (!_hideSidebar)
+    {
+        <div class="sidebar">
+            <NavMenu />
+        </div>
+    }
 
     <main>
         <div class="top-row px-4 auth">
@@ -15,3 +21,39 @@
         </article>
     </main>
 </div>
+
+@code {
+    // Routes where we want the full viewport for the page content. Matched
+    // case-insensitively against the URL path; extend as more full-screen
+    // pages (e.g. a future dispatch map) get added.
+    private static readonly HashSet<string> FullScreenRoutes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "/navigation"
+    };
+
+    private bool _hideSidebar;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += HandleLocationChanged;
+        UpdateSidebarVisibility();
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        UpdateSidebarVisibility();
+        StateHasChanged();
+    }
+
+    private void UpdateSidebarVisibility()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        if (string.IsNullOrEmpty(path)) path = "/";
+        _hideSidebar = FullScreenRoutes.Contains(path);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= HandleLocationChanged;
+    }
+}

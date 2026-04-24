@@ -1,6 +1,7 @@
 @page "/navigation"
 @using PropaneDriver.Client.Services
 @inject GeolocationService GeolocationService
+@inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
@@ -14,6 +15,9 @@
 
 <div class="nav-page">
     <div class="nav-header">
+        <button class="btn-back" @onclick="BackToDeliveries" title="Back to Deliveries">
+            &larr; Deliveries
+        </button>
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
     </div>
@@ -76,6 +80,11 @@
     {
         if (!_mapInitialized) return;
         try { await JS.InvokeVoidAsync("navMapCenterOnDriver"); } catch { }
+    }
+
+    private void BackToDeliveries()
+    {
+        Nav.NavigateTo("/deliveries");
     }
 
     private async void HandlePositionChanged(double lat, double lon, double accuracy)
