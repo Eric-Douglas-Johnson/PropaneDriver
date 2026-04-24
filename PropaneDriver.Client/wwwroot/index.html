@@ -228,7 +228,12 @@
 
         window.navMapUpdateDriver = function (lat, lon) {
             if (!window._navMap || !window._navDriverMarker) return;
-            window._navDriverMarker.setPosition({ lat: lat, lng: lon });
+            var pos = { lat: lat, lng: lon };
+            window._navDriverMarker.setPosition(pos);
+            var bounds = window._navMap.getBounds();
+            if (bounds && !bounds.contains(pos)) {
+                window._navMap.panTo(pos);
+            }
         };
 
         window.navMapCenterOnDriver = function () {
