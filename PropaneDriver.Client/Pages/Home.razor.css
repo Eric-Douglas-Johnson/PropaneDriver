@@ -1,0 +1,65 @@
+.home-wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 3rem;
+}
+
+.home-hero {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.home-hero h1 {
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: #e6edf3;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.4rem;
+}
+
+.home-tagline {
+    font-size: 1.05rem;
+    color: #8892b0;
+    font-style: italic;
+    margin: 0;
+}
+
+.home-truck-card {
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 14px;
+    padding: 2rem 1.5rem 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.07), 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.home-truck-card svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.home-card {
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 14px;
+    padding: 1.75rem 2rem;
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: #c9d1d9;
+}
+
+.home-card p:last-child {
+    margin-bottom: 0;
+}
+
+.home-link {
+    color: #4a8fd4;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.home-link:hover {
+    color: #6aaee8;
+    text-decoration: underline;
+}
