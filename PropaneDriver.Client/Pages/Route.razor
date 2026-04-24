@@ -611,6 +611,10 @@
         {
             SetActiveDelivery(next);
         }
+        else if (next is null)
+        {
+            SetActiveDelivery(null);
+        }
 
         InvokeAsync(StateHasChanged);
     }
