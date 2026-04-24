@@ -155,7 +155,7 @@
                         @onclick="SetAddressGpsFromTruck"
                         disabled="@_settingAddressGps"
                         title="Overwrite this address's stored coordinates with the truck's current GPS fix">
-                    @(_settingAddressGps ? "Saving…" : "Set GPS from Truck")
+                    @(_settingAddressGps ? "Saving…" : "Set GPS Pin")
                 </button>
             </div>
             @if (!string.IsNullOrEmpty(_addressGpsStatus))
