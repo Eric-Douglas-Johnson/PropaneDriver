@@ -32,14 +32,11 @@
         @if (_addressId != Guid.Empty)
         {
             <div class="tank-location">
-                @if (!string.IsNullOrWhiteSpace(_tankLocation))
-                {
-                    <span class="tank-location-label">Tank Location:</span>
-                    <span class="tank-location-value">@_tankLocation</span>
-                }
-                else if (_addingTankLocation)
+                @if (_addingTankLocation)
                 {
                     <input type="text" class="tank-location-input"
+                           name="tank-location-note"
+                           autocomplete="off"
                            value="@_tankLocationDraft"
                            @oninput="e => _tankLocationDraft = e.Value?.ToString() ?? string.Empty"
                            placeholder="e.g. behind garage, left of AC" />
@@ -50,11 +47,22 @@
                             disabled="@(_savingTankLocation || string.IsNullOrWhiteSpace(_tankLocationDraft))">
                         @(_savingTankLocation ? "Saving…" : "Save")
                     </button>
+                    @if (!string.IsNullOrWhiteSpace(_tankLocation))
+                    {
+                        <button class="btn-tank-action btn-tank-clear" @onclick="ClearTankLocation"
+                                disabled="@_savingTankLocation">Clear</button>
+                    }
                     <button class="btn-tank-action btn-tank-cancel" @onclick="CancelAddTankLocation">Cancel</button>
+                }
+                else if (!string.IsNullOrWhiteSpace(_tankLocation))
+                {
+                    <span class="tank-location-label">Tank Location:</span>
+                    <span class="tank-location-value">@_tankLocation</span>
+                    <button class="btn-tank-edit" @onclick="BeginEditTankLocation" title="Edit tank location">&#x270E;</button>
                 }
                 else
                 {
-                    <button class="btn-tank-add" @onclick="BeginAddTankLocation">
+                    <button class="btn-tank-add" @onclick="BeginEditTankLocation">
                         Add tank location
                     </button>
                 }
@@ -157,9 +165,13 @@
         Nav.NavigateTo("/deliveries");
     }
 
-    private void BeginAddTankLocation()
+    private void BeginEditTankLocation()
     {
-        _tankLocationDraft = string.Empty;
+        // Pre-fill the editor with the existing value so the driver can fix
+        // a typo or wrong note instead of having to retype from scratch. Also
+        // covers the "wrong autofilled address" case: pencil → see what's
+        // there → either edit it or hit Clear.
+        _tankLocationDraft = _tankLocation ?? string.Empty;
         _addingTankLocation = true;
     }
 
@@ -167,6 +179,34 @@
     {
         _addingTankLocation = false;
         _tankLocationDraft = string.Empty;
+    }
+
+    private async Task ClearTankLocation()
+    {
+        if (_addressId == Guid.Empty || _savingTankLocation) return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm", "Remove the tank location note for this address?");
+        if (!confirmed) return;
+
+        _savingTankLocation = true;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateTankLocationAsync(_addressId, null);
+
+        if (ok)
+        {
+            _tankLocation = null;
+            _addingTankLocation = false;
+            _tankLocationDraft = string.Empty;
+        }
+        else
+        {
+            _status = "Failed to clear tank location. Please try again.";
+        }
+
+        _savingTankLocation = false;
+        StateHasChanged();
     }
 
     private async Task DictateTankLocation()

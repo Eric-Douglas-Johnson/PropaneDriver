@@ -217,6 +217,16 @@
     background-color: #2a4a7a;
 }
 
+.btn-tank-clear {
+    background-color: #3b1a1a;
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
+.btn-tank-clear:hover:not(:disabled) {
+    background-color: #5a2a2a;
+}
+
 .btn-tank-cancel:hover {
     background-color: #252545;
 }
@@ -224,4 +234,26 @@
 .btn-tank-action:disabled {
     opacity: 0.5;
     cursor: default;
+}
+
+.btn-tank-edit {
+    background: none;
+    border: 1px solid #2a2a4a;
+    border-radius: 50%;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: #ffb347;
+    line-height: 1;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-tank-edit:hover {
+    background-color: rgba(255, 159, 67, 0.15);
+    border-color: #ff9f43;
 }
