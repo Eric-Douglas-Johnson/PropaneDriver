@@ -114,6 +114,11 @@
     animation: alert-flash 1s ease-in-out infinite;
 }
 
+.alert-static {
+    cursor: pointer;
+    opacity: 0.75;
+}
+
 .alert-seen {
     cursor: default;
     opacity: 0.65;

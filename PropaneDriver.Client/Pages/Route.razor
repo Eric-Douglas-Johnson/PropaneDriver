@@ -54,7 +54,7 @@
             // AlertDto directly — this lets us track per-alert Seen state
             // and mark it seen on click.
             var allAlerts = _deliveries
-                .SelectMany(d => d.Alerts.Select(a => (Customer: d.CustomerName, Alert: a)))
+                .SelectMany(d => d.Alerts.Select(a => (Customer: d.CustomerName, Alert: a, IsActive: _activeDelivery?.Id == d.Id)))
                 .ToList();
         }
         @if (allAlerts.Count == 0)
@@ -66,7 +66,7 @@
             @foreach (var entry in allAlerts)
             {
                 var captured = entry.Alert;
-                <span class="alert-badge alert-warning @(captured.Seen ? "alert-seen" : "alert-flashing")"
+                <span class="alert-badge alert-warning @(captured.Seen ? "alert-seen" : entry.IsActive ? "alert-flashing" : "alert-static")"
                       @onclick="() => MarkAlertSeen(captured)">
                     @entry.Customer: @entry.Alert.Message
                 </span>
