@@ -98,3 +98,9 @@
 .admin-table tr:last-child td {
     border-bottom: none;
 }
+
+.input-with-mic {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}

@@ -27,5 +27,6 @@ builder.Services.AddScoped<AddressApiService>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<GeoFenceService>();
+builder.Services.AddScoped<SpeechService>();
 
 await builder.Build().RunAsync();

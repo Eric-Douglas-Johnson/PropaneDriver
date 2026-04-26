@@ -107,3 +107,40 @@ a, .btn-link {
 code {
     color: #c02d76;
 }
+
+/* ===== Shared mic button ===== */
+.btn-mic {
+    background-color: #1a1a2e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+    border-radius: 50%;
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-mic:hover:not(:disabled) {
+    background-color: #252545;
+    border-color: #4a6cf7;
+}
+
+.btn-mic-active {
+    background-color: #ef4444 !important;
+    border-color: #ef4444 !important;
+    animation: mic-pulse 1s ease-in-out infinite;
+}
+
+.btn-mic:disabled {
+    cursor: default;
+}
+
+@keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50%       { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}

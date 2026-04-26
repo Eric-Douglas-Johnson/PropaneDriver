@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject AddressApiService AddressApi
+@inject SpeechService SpeechService
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
@@ -36,11 +37,25 @@
                     <span class="tank-location-label">Tank Location:</span>
                     <span class="tank-location-value">@_tankLocation</span>
                 }
+                else if (_addingTankLocation)
+                {
+                    <input type="text" class="tank-location-input"
+                           value="@_tankLocationDraft"
+                           @oninput="e => _tankLocationDraft = e.Value?.ToString() ?? string.Empty"
+                           placeholder="e.g. behind garage, left of AC" />
+                    <button class="btn-mic @(_dictatingTankLocation ? "btn-mic-active" : "")"
+                            @onclick="DictateTankLocation" disabled="@_dictatingTankLocation"
+                            title="Dictate">&#x1F399;</button>
+                    <button class="btn-tank-action btn-tank-save" @onclick="SaveTankLocation"
+                            disabled="@(_savingTankLocation || string.IsNullOrWhiteSpace(_tankLocationDraft))">
+                        @(_savingTankLocation ? "Saving…" : "Save")
+                    </button>
+                    <button class="btn-tank-action btn-tank-cancel" @onclick="CancelAddTankLocation">Cancel</button>
+                }
                 else
                 {
-                    <button class="btn-tank-add" @onclick="PromptAndSaveTankLocation"
-                            disabled="@_savingTankLocation">
-                        @(_savingTankLocation ? "Saving…" : "Add tank location")
+                    <button class="btn-tank-add" @onclick="BeginAddTankLocation">
+                        Add tank location
                     </button>
                 }
             </div>
@@ -78,6 +93,9 @@
     private Guid _addressId = Guid.Empty;
     private string? _tankLocation;
     private bool _savingTankLocation;
+    private bool _addingTankLocation;
+    private string _tankLocationDraft = string.Empty;
+    private bool _dictatingTankLocation;
 
     protected override void OnInitialized()
     {
@@ -139,41 +157,45 @@
         Nav.NavigateTo("/deliveries");
     }
 
-    // Prompt the driver for a tank-location description, then PUT it to
-    // the server. On success we update the local display so the user
-    // sees the new value without re-navigating. We keep this lightweight
-    // (window.prompt) to match the Force-Next flow on the Deliveries
-    // page — no modal infrastructure exists yet on this page.
-    private async Task PromptAndSaveTankLocation()
+    private void BeginAddTankLocation()
     {
-        if (_addressId == Guid.Empty || _savingTankLocation) return;
+        _tankLocationDraft = string.Empty;
+        _addingTankLocation = true;
+    }
 
-        string? input;
-        try
-        {
-            input = await JS.InvokeAsync<string?>(
-                "prompt",
-                "Describe where the tank is on the property (e.g. \"behind garage, left of AC unit\"):",
-                "");
-        }
-        catch
-        {
-            // JS prompt throws on Blazor Server in rare cases; bail quietly.
-            return;
-        }
+    private void CancelAddTankLocation()
+    {
+        _addingTankLocation = false;
+        _tankLocationDraft = string.Empty;
+    }
 
-        // Null = user hit Cancel. Empty = user hit OK on a blank field;
-        // treat the same as cancel rather than storing an empty string.
-        if (string.IsNullOrWhiteSpace(input)) return;
+    private async Task DictateTankLocation()
+    {
+        _dictatingTankLocation = true;
+        StateHasChanged();
+
+        var text = await SpeechService.DictateAsync();
+        if (!string.IsNullOrEmpty(text))
+            _tankLocationDraft = text;
+
+        _dictatingTankLocation = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveTankLocation()
+    {
+        if (_addressId == Guid.Empty || string.IsNullOrWhiteSpace(_tankLocationDraft) || _savingTankLocation) return;
 
         _savingTankLocation = true;
         StateHasChanged();
 
-        var ok = await AddressApi.UpdateTankLocationAsync(_addressId, input.Trim());
+        var ok = await AddressApi.UpdateTankLocationAsync(_addressId, _tankLocationDraft.Trim());
 
         if (ok)
         {
-            _tankLocation = input.Trim();
+            _tankLocation = _tankLocationDraft.Trim();
+            _addingTankLocation = false;
+            _tankLocationDraft = string.Empty;
         }
         else
         {

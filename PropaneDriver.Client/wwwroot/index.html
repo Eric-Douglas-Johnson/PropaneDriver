@@ -274,6 +274,41 @@
             });
         };
 
+        // ===== Speech recognition interop =====
+        window.startDictation = function () {
+            return new Promise(function (resolve) {
+                var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRec) {
+                    resolve({ text: '', error: 'Speech recognition is not supported in this browser.' });
+                    return;
+                }
+                var recognition = new SpeechRec();
+                recognition.lang = 'en-US';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+                var resolved = false;
+                function done(text, error) {
+                    if (resolved) return;
+                    resolved = true;
+                    resolve({ text: text, error: error });
+                }
+                recognition.onresult = function (event) {
+                    done(event.results[0][0].transcript, '');
+                };
+                recognition.onerror = function (event) {
+                    done('', event.error || 'unknown error');
+                };
+                recognition.onend = function () {
+                    done('', '');
+                };
+                try {
+                    recognition.start();
+                } catch (e) {
+                    done('', e.message);
+                }
+            });
+        };
+
         window.navMapDestroy = function () {
             if (window._navDirectionsRenderer) {
                 window._navDirectionsRenderer.setMap(null);

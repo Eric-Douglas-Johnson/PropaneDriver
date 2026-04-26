@@ -4,6 +4,7 @@
 @inject RouteApiService RouteApi
 @inject GeocodingService Geocoder
 @inject HttpClient Http
+@inject SpeechService SpeechService
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Route Admin</PageTitle>
@@ -143,9 +144,14 @@
                     <div class="admin-row mt-2">
                         <div class="admin-field flex-2">
                             <label>New alert message</label>
-                            <input type="text" class="form-control form-control-sm"
-                                   @bind="_newAlertMessage"
-                                   @onkeydown="OnAlertKeyDown" />
+                            <div class="input-with-mic">
+                                <input type="text" class="form-control form-control-sm"
+                                       @bind="_newAlertMessage"
+                                       @onkeydown="OnAlertKeyDown" />
+                                <button class="btn-mic @(_dictatingAlert ? "btn-mic-active" : "")"
+                                        @onclick="DictateAlert" disabled="@_dictatingAlert"
+                                        title="Dictate">&#x1F399;</button>
+                            </div>
                         </div>
                         <div class="admin-field" style="align-self:flex-end; max-width:120px;">
                             <button class="btn btn-sm btn-primary" @onclick="AddAlert"
@@ -382,6 +388,7 @@
     private string _newAlertMessage = string.Empty;
     private string? _deletingAlertId;
     private bool _addingAlert;
+    private bool _dictatingAlert;
     private string? _alertStatus;
     private bool _alertStatusSuccess;
 
@@ -672,6 +679,19 @@
         _alertDelivery = null;
         _newAlertMessage = string.Empty;
         _alertStatus = null;
+    }
+
+    private async Task DictateAlert()
+    {
+        _dictatingAlert = true;
+        StateHasChanged();
+
+        var text = await SpeechService.DictateAsync();
+        if (!string.IsNullOrEmpty(text))
+            _newAlertMessage = text;
+
+        _dictatingAlert = false;
+        StateHasChanged();
     }
 
     private async Task OnAlertKeyDown(KeyboardEventArgs e)
