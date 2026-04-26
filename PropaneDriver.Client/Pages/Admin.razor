@@ -283,9 +283,16 @@
             <div class="admin-row">
                 <div class="admin-field flex-2">
                     <label>Tank Location <span style="font-size:0.75rem; color:#8892b0;">(optional)</span></label>
+                    <!-- The readonly-on-load trick is here because Chrome
+                         ignores autocomplete=off on text inputs that sit next
+                         to a sequence of address fields. A readonly input is
+                         skipped by autofill; we drop the attribute on first
+                         focus so the operator can type. -->
                     <input type="text" class="form-control form-control-sm"
-                           name="tank-location-note"
+                           name="propane-tank-note"
                            autocomplete="off"
+                           readonly="@(_tankLocReadonly ? "readonly" : null)"
+                           @onfocus="() => _tankLocReadonly = false"
                            placeholder="e.g. behind garage, left of AC unit"
                            @bind="_newTankLocation" />
                 </div>
@@ -376,6 +383,7 @@
     private string _newLonStr = string.Empty;
     private double _newAvgMin = 20;
     private string _newTankLocation = string.Empty;
+    private bool _tankLocReadonly = true;
     private bool _geocoding;
     private string? _geocodeStatus;
     private string _lastGeocodedAddress = string.Empty;
@@ -624,6 +632,7 @@
         _newLatStr = string.Empty;
         _newLonStr = string.Empty;
         _newTankLocation = string.Empty;
+        _tankLocReadonly = true;
         _geocodeStatus = null;
         _lastGeocodedAddress = string.Empty;
     }
