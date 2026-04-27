@@ -1,6 +1,6 @@
 namespace PropaneDriver.Shared.Dtos
 {
-    public class DeliveryDto
+    public class PropaneDelivery : IDelivery
     {
         public string Id { get; set; } = string.Empty;
         public DateOnly Date { get; set; }

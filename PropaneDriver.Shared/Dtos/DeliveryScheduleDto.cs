@@ -4,7 +4,7 @@ namespace PropaneDriver.Shared.Dtos
     {
         public int Month { get; set; }
         public int Year { get; set; }
-        public List<DeliveryDto> Deliveries { get; set; } = [];
+        public List<IDelivery> Deliveries { get; set; } = [];
         public int EmptyDaysInFirstWeek { get; set; }
     }
 }

@@ -240,9 +240,9 @@
 
 @code {
     private RouteSummaryDto _routeSummary = new();
-    private List<DeliveryDto> _deliveries = [];
-    private DeliveryDto? _selectedDelivery;
-    private DeliveryDto? _activeDelivery;
+    private List<IDelivery> _deliveries = [];
+    private IDelivery? _selectedDelivery;
+    private IDelivery? _activeDelivery;
     private GeoFenceEventArgs? _geoFenceStatus;
     private double _timerSeconds;
     private string? _gpsError;
@@ -496,7 +496,7 @@
         OpenGoogleMapsDirections(_selectedDelivery);
     }
 
-    private void OpenGoogleMapsDirections(DeliveryDto delivery)
+    private void OpenGoogleMapsDirections(IDelivery delivery)
     {
         var address = delivery.Location.FullAddress;
         if (string.IsNullOrWhiteSpace(address)) return;
@@ -595,7 +595,7 @@
         _settingAddressGps = false;
     }
 
-    private void SelectDelivery(DeliveryDto delivery)
+    private void SelectDelivery(IDelivery delivery)
     {
         // Selecting a delivery only changes the detail view; the geofence
         // stays locked to the current/active delivery.
@@ -618,7 +618,7 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private async void HandleDeliveryCompleted(DeliveryDto completed, double elapsedSeconds)
+    private async void HandleDeliveryCompleted(IDelivery completed, double elapsedSeconds)
     {
         // The GeoFenceService has already set completed.Status = 2 and
         // persisted it server-side. We just need to update UI state and
@@ -643,10 +643,10 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private DeliveryDto? FindNextDelivery()
+    private IDelivery? FindNextDelivery()
     => _deliveries.FirstOrDefault(d => d.Status == 0);
 
-    private async Task SetActiveDeliveryAsync(DeliveryDto? delivery)
+    private async Task SetActiveDeliveryAsync(IDelivery? delivery)
     {
         _activeDelivery = delivery;
         _geoFenceStatus = null;
@@ -686,7 +686,7 @@
             : $"{ts.Minutes}m";
     }
 
-    private string FormatCompletedDuration(DeliveryDto delivery)
+    private string FormatCompletedDuration(IDelivery delivery)
     {
         // Prefer the in-session value (geofence flow + Force Next populate this
         // dictionary as deliveries finish). Fall back to the server-persisted

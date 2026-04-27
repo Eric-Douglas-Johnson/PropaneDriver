@@ -40,7 +40,7 @@ namespace PropaneDriver.Client.Services
         private readonly DeliveryApiService _deliveryApi;
         private readonly BrowserStorageService _storage;
 
-        private DeliveryDto? _activeDelivery;
+        private IDelivery? _activeDelivery;
         private bool _lastCheckWasInsideGeoFence;
         // Wall-clock timestamp the driver crossed into the fence. Wall-clock
         // (not Stopwatch) so the elapsed time keeps advancing through page
@@ -50,7 +50,7 @@ namespace PropaneDriver.Client.Services
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
-        public event Action<DeliveryDto, double>? OnDeliveryCompleted;
+        public event Action<IDelivery, double>? OnDeliveryCompleted;
 
         public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public double ElapsedSeconds => _enteredFenceAtUtc is { } start
@@ -71,7 +71,7 @@ namespace PropaneDriver.Client.Services
             _geolocationService.OnPositionChanged += HandlePositionChanged;
         }
 
-        public async Task SetTargetAsync(DeliveryDto? delivery)
+        public async Task SetTargetAsync(IDelivery? delivery)
         {
             _activeDelivery = delivery;
             _lastCheckWasInsideGeoFence = false;
