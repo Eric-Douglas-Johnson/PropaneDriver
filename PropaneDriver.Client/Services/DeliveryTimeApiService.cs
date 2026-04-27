@@ -23,12 +23,11 @@ namespace PropaneDriver.Client.Services
                     var body = await response.Content.ReadAsStringAsync();
                     var msg = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}: {body}";
                     Console.WriteLine($"Failed to save delivery time: {msg}");
-                    // Persist the failure server-side too so it shows up in
-                    // /api/client-logs. Without this, a 4xx/5xx on the save
-                    // path is invisible to post-mortem debugging.
+
                     await ErrorLogService.LogErrorAsync(
                         "DeliveryTimeApiService.SaveDeliveryTimeAsync",
                         $"DeliveryId={dto.DeliveryId} AddressId={dto.AddressId}: {msg}");
+
                     return new SaveDeliveryTimeResult { Success = false, ErrorMessage = msg };
                 }
 
@@ -37,9 +36,11 @@ namespace PropaneDriver.Client.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to save delivery time: {ex.Message}");
+
                 await ErrorLogService.LogErrorAsync(
                     "DeliveryTimeApiService.SaveDeliveryTimeAsync",
                     $"Exception saving delivery time DeliveryId={dto.DeliveryId} AddressId={dto.AddressId}: {ex.Message}");
+
                 return new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message };
             }
         }

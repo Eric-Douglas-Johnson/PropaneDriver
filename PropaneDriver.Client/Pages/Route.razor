@@ -109,7 +109,7 @@
                      @onclick="() => SelectDelivery(delivery)">
                     <span class="delivery-item-name">@delivery.CustomerName</span>
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
-                    <span class="delivery-time">@FormatCompletedDuration(delivery.Id)</span>
+                    <span class="delivery-time">@FormatCompletedDuration(delivery)</span>
                 </div>
             }
             else
@@ -681,9 +681,17 @@
             : $"{ts.Minutes}m";
     }
 
-    private string FormatCompletedDuration(string deliveryId)
+    private string FormatCompletedDuration(DeliveryDto delivery)
     {
-        if (!_completedTimesSeconds.TryGetValue(deliveryId, out var seconds)) return string.Empty;
+        // Prefer the in-session value (geofence flow + Force Next populate this
+        // dictionary as deliveries finish). Fall back to the server-persisted
+        // RecordedTimeSeconds so completed rows still show their duration after
+        // a page reload — the dictionary is empty on a fresh page instance.
+        if (!_completedTimesSeconds.TryGetValue(delivery.Id, out var seconds))
+        {
+            if (delivery.RecordedTimeSeconds is not { } persisted) return string.Empty;
+            seconds = persisted;
+        }
         var ts = TimeSpan.FromSeconds(seconds);
         if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
         return $"{ts.Minutes}m {ts.Seconds:D2}s";

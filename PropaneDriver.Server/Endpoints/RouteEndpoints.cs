@@ -151,7 +151,36 @@ namespace PropaneDriver.Server.Endpoints
                     })
                     .FirstOrDefaultAsync();
 
-                return route is null ? Results.NotFound() : Results.Ok(route);
+                if (route is null) return Results.NotFound();
+
+                // Hydrate the actual recorded delivery time on each completed
+                // stop so the minimized "Complete" row can show the duration
+                // after a page reload, when the client-side _completedTimesSeconds
+                // dictionary is empty. The DeliveryTimes table is keyed by the
+                // delivery's string Id (Guid.ToString()), so we group by it and
+                // pick the most recent record per delivery.
+                var deliveryIds = route.Deliveries.Select(d => d.Id).ToList();
+                if (deliveryIds.Count > 0)
+                {
+                    var times = await db.DeliveryTimes
+                        .Where(t => deliveryIds.Contains(t.DeliveryId))
+                        .Select(t => new { t.DeliveryId, t.TimeIntervalSeconds, t.RecordedAt })
+                        .ToListAsync();
+
+                    var latestByDelivery = times
+                        .GroupBy(t => t.DeliveryId)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => g.OrderByDescending(x => x.RecordedAt).First().TimeIntervalSeconds);
+
+                    foreach (var d in route.Deliveries)
+                    {
+                        if (latestByDelivery.TryGetValue(d.Id, out var seconds))
+                            d.RecordedTimeSeconds = seconds;
+                    }
+                }
+
+                return Results.Ok(route);
             });
 
             // Create a route with deliveries
