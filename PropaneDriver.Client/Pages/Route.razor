@@ -291,7 +291,7 @@
         await LoadTodayRouteAsync();
 
         // Set the initial active delivery (used by the geofence)
-        SetActiveDelivery(FindNextDelivery());
+        await SetActiveDeliveryAsync(FindNextDelivery());
 
         // Auto-start GPS monitoring
         await GeolocationService.StartWatchingAsync();
@@ -481,7 +481,7 @@
         _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
 
         var next = FindNextDelivery();
-        SetActiveDelivery(next); // null clears the active marker when route is done
+        await SetActiveDeliveryAsync(next); // null clears the active marker when route is done
 
         _saveStatus = $"✓ Saved {minutes:F1} min for {current.CustomerName}"
             + (next is not null ? $" — now active: {next.CustomerName}" : " — no more pending deliveries");
@@ -618,7 +618,7 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void HandleDeliveryCompleted(DeliveryDto completed, double elapsedSeconds)
+    private async void HandleDeliveryCompleted(DeliveryDto completed, double elapsedSeconds)
     {
         // The GeoFenceService has already set completed.Status = 2 and
         // persisted it server-side. We just need to update UI state and
@@ -633,26 +633,31 @@
         var next = FindNextDelivery();
         if (next is not null && next.Id != completed.Id)
         {
-            SetActiveDelivery(next);
+            await SetActiveDeliveryAsync(next);
         }
         else if (next is null)
         {
-            SetActiveDelivery(null);
+            await SetActiveDeliveryAsync(null);
         }
 
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     private DeliveryDto? FindNextDelivery()
     => _deliveries.FirstOrDefault(d => d.Status == 0);
 
-    private void SetActiveDelivery(DeliveryDto? delivery)
+    private async Task SetActiveDeliveryAsync(DeliveryDto? delivery)
     {
         _activeDelivery = delivery;
         _geoFenceStatus = null;
         _timerSeconds = 0;
         _wasInsideFence = false;
-        GeoFenceService.SetTarget(delivery);
+
+        // Awaited so that on initial page load, any persisted fence-entry
+        // timer is restored before the GPS service starts emitting position
+        // updates. A fire-and-forget call would race with the first GPS tick
+        // and the timer would restart from zero.
+        await GeoFenceService.SetTargetAsync(delivery);
 
         // Keep the detail view in sync if nothing is selected yet
         if (_selectedDelivery is null && delivery is not null)
