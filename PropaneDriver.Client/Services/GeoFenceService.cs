@@ -35,7 +35,7 @@ namespace PropaneDriver.Client.Services
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
-        public event Action<DeliveryDto>? OnDeliveryCompleted;
+        public event Action<DeliveryDto, double>? OnDeliveryCompleted;
 
         public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public double ElapsedSeconds => _timer.Elapsed.TotalSeconds;
@@ -132,16 +132,18 @@ namespace PropaneDriver.Client.Services
             {
                 if (_activeDelivery.Location.Id == Guid.Empty)
                 {
-                    await ErrorLogService.LogErrorAsync("GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no AddressId — cannot save time");
+                    await ErrorLogService.LogErrorAsync(
+                        "GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no AddressId — cannot save time");
                     return;
                 }
 
                 const double MinDeliverySeconds = 5 * 60;
+                var elapsedSeconds = Math.Max(_timer.Elapsed.TotalSeconds, MinDeliverySeconds);
                 var dto = new DeliveryTimeDto
                 {
                     DeliveryId = _activeDelivery.Id,
                     AddressId = _activeDelivery.Location.Id,
-                    TimeIntervalSeconds = Math.Max(_timer.Elapsed.TotalSeconds, MinDeliverySeconds)
+                    TimeIntervalSeconds = elapsedSeconds
                 };
 
                 try
@@ -172,7 +174,7 @@ namespace PropaneDriver.Client.Services
                         await ErrorLogService.LogErrorAsync("GeoFenceService", $"UpdateStatusAsync failed: {ex.Message}");
                     }
 
-                    OnDeliveryCompleted?.Invoke(completed);
+                    OnDeliveryCompleted?.Invoke(completed, elapsedSeconds);
 
                     // Clear the active delivery so we don't re-complete it on
                     // the next fence crossing. The next target is set by the

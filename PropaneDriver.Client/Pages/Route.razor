@@ -101,19 +101,33 @@
             var statusClass = GetStatusClass(delivery.Status);
             var isSelected = _selectedDelivery?.Id == delivery.Id;
             var isActive = _activeDelivery?.Id == delivery.Id;
-            <div class="delivery-item @statusClass @(isSelected ? "selected" : "") @(isActive ? "active" : "")"
-                 @onclick="() => SelectDelivery(delivery)">
-                <div class="delivery-item-header">
-                    @if (isActive)
-                    {
-                        var inside = _geoFenceStatus?.IsInsideFence == true;
-                        <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
-                    }
+            if (delivery.Status == 2)
+            {
+                // Minimized row for completed deliveries: just the customer
+                // name, the Complete tag, and the duration on a single line.
+                <div class="delivery-item delivery-item-minimized @statusClass @(isSelected ? "selected" : "")"
+                     @onclick="() => SelectDelivery(delivery)">
+                    <span class="delivery-item-name">@delivery.CustomerName</span>
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
+                    <span class="delivery-time">@FormatCompletedDuration(delivery.Id)</span>
                 </div>
-                <div class="delivery-item-name">@delivery.CustomerName</div>
-                <div class="delivery-item-address">@delivery.Location.FullAddress</div>
-            </div>
+            }
+            else
+            {
+                <div class="delivery-item @statusClass @(isSelected ? "selected" : "") @(isActive ? "active" : "")"
+                     @onclick="() => SelectDelivery(delivery)">
+                    <div class="delivery-item-header">
+                        @if (isActive)
+                        {
+                            var inside = _geoFenceStatus?.IsInsideFence == true;
+                            <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
+                        }
+                        <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
+                    </div>
+                    <div class="delivery-item-name">@delivery.CustomerName</div>
+                    <div class="delivery-item-address">@delivery.Location.FullAddress</div>
+                </div>
+            }
         }
     </div>
 
@@ -249,6 +263,13 @@
     // Disables the "Force Next" button while the status update is in flight
     // so the driver can't double-tap and skip two deliveries by accident.
     private bool _forcingNext;
+
+    // Per-delivery completion duration in seconds, populated as deliveries
+    // finish during this session (geofence flow + Force Next). Drives the
+    // duration label on minimized completed rows. Deliveries that were
+    // already complete on page load won't have an entry — those rows render
+    // without a duration.
+    private readonly Dictionary<string, double> _completedTimesSeconds = new();
 
     private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
 
@@ -456,6 +477,7 @@
         // 3) Sync local state and advance the active pointer. Mirrors
         //    HandleDeliveryCompleted on the normal geofence-driven flow.
         current.Status = 2;
+        _completedTimesSeconds[current.Id] = minutes * 60.0;
         _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
 
         var next = FindNextDelivery();
@@ -596,13 +618,15 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void HandleDeliveryCompleted(DeliveryDto completed)
+    private void HandleDeliveryCompleted(DeliveryDto completed, double elapsedSeconds)
     {
         // The GeoFenceService has already set completed.Status = 2 and
         // persisted it server-side. We just need to update UI state and
         // advance to the next pending delivery.
         var localMatch = _deliveries.FirstOrDefault(d => d.Id == completed.Id);
         if (localMatch is not null) localMatch.Status = 2;
+
+        _completedTimesSeconds[completed.Id] = elapsedSeconds;
 
         _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
 
@@ -655,6 +679,14 @@
         return ts.Hours > 0
             ? $"{ts.Hours}h {ts.Minutes}m"
             : $"{ts.Minutes}m";
+    }
+
+    private string FormatCompletedDuration(string deliveryId)
+    {
+        if (!_completedTimesSeconds.TryGetValue(deliveryId, out var seconds)) return string.Empty;
+        var ts = TimeSpan.FromSeconds(seconds);
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m {ts.Seconds:D2}s";
     }
 
     private static string FormatTimer(double totalSeconds)

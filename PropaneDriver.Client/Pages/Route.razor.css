@@ -187,6 +187,28 @@
     margin-bottom: 0.25rem;
 }
 
+/* Completed deliveries collapse to a single line: name, Complete tag,
+   duration. No address, no header block, tighter padding. */
+.delivery-item.delivery-item-minimized {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+}
+
+.delivery-item.delivery-item-minimized .delivery-item-name {
+    flex: 1;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.delivery-item.delivery-item-minimized .delivery-time {
+    font-size: 0.8rem;
+    color: #8892b0;
+}
+
 .delivery-time {
     color: whitesmoke;
     font-weight: 600;
