@@ -58,7 +58,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         if (_db is null) return;
 
         // Create a temporary Address to satisfy the FK.
-        var address = new AddressEntity
+        var address = new AddressDbRecord
         {
             Id = Guid.NewGuid(),
             Street = "INTEGRATION TEST",
@@ -72,7 +72,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         _db.Addresses.Add(address);
         await _db.SaveChangesAsync();
 
-        var entity = new DeliveryTimeEntity
+        var entity = new DeliveryTimeDbRecord
         {
             DeliveryId = "test-integration",
             AddressId = address.Id,
@@ -104,7 +104,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
     {
         if (_db is null) return;
 
-        var address = new AddressEntity
+        var address = new AddressDbRecord
         {
             Id = Guid.NewGuid(),
             Street = $"INTEGRATION TEST {Guid.NewGuid()}",
@@ -118,12 +118,12 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         _db.Addresses.Add(address);
         await _db.SaveChangesAsync();
 
-        _db.DeliveryTimes.Add(new DeliveryTimeEntity
+        _db.DeliveryTimes.Add(new DeliveryTimeDbRecord
         {
             DeliveryId = "avg-test-1", AddressId = address.Id,
             TimeIntervalSeconds = 40, RecordedAt = DateTime.UtcNow
         });
-        _db.DeliveryTimes.Add(new DeliveryTimeEntity
+        _db.DeliveryTimes.Add(new DeliveryTimeDbRecord
         {
             DeliveryId = "avg-test-2", AddressId = address.Id,
             TimeIntervalSeconds = 60, RecordedAt = DateTime.UtcNow

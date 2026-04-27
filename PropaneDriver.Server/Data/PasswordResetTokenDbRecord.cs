@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class PasswordResetTokenEntity
+    public class PasswordResetTokenDbRecord
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();

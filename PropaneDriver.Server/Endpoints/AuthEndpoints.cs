@@ -56,7 +56,7 @@ namespace PropaneDriver.Server.Endpoints
                 if (exists)
                     return Results.Conflict(new { Message = "A driver with that user name already exists." });
 
-                var driver = new DriverEntity
+                var driver = new DriverDbRecord
                 {
                     Id = Guid.NewGuid(),
                     UserName = registration.UserName,
@@ -100,7 +100,7 @@ namespace PropaneDriver.Server.Endpoints
                 foreach (var t in existing)
                     t.UsedAt = DateTime.UtcNow;
 
-                db.PasswordResetTokens.Add(new PasswordResetTokenEntity
+                db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
                 {
                     DriverId = driver.Id,
                     TokenHash = tokenHash,

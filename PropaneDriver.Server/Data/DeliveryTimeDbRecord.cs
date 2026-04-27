@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class DeliveryTimeEntity
+    public class DeliveryTimeDbRecord
     {
         [Key]
         public int Id { get; set; }
@@ -18,6 +18,6 @@ namespace PropaneDriver.Server.Data
         public DateTime RecordedAt { get; set; }
 
         // Navigation
-        public AddressEntity? Address { get; set; }
+        public AddressDbRecord? Address { get; set; }
     }
 }

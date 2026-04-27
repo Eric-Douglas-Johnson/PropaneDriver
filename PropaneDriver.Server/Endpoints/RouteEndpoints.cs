@@ -202,7 +202,7 @@ namespace PropaneDriver.Server.Endpoints
                     // Upsert an Address record for each unique address in this route.
                     // Using a dictionary keyed on normalized address to avoid duplicate DB lookups
                     // within the same batch.
-                    var addressCache = new Dictionary<string, AddressEntity>();
+                    var addressCache = new Dictionary<string, AddressDbRecord>();
 
                     foreach (var d in dto.Deliveries)
                     {
@@ -237,7 +237,7 @@ namespace PropaneDriver.Server.Endpoints
 
                         if (address is null)
                         {
-                            address = new AddressEntity
+                            address = new AddressDbRecord
                             {
                                 Id = Guid.NewGuid(),
                                 Street = street,
@@ -279,7 +279,7 @@ namespace PropaneDriver.Server.Endpoints
                         // Must match the normalization used when populating addressCache
                         // above — case-fold so a mixed-case duplicate resolves correctly.
                         var key = $"{d.Street.Trim()}|{d.City.Trim()}|{d.State.Trim()}|{d.ZipCode.Trim()}".ToLowerInvariant();
-                        return new DeliveryEntity
+                        return new DeliveryDbRecord
                         {
                             Id = Guid.NewGuid(),
                             AddressId = addressCache[key].Id,
@@ -294,7 +294,7 @@ namespace PropaneDriver.Server.Endpoints
                     var estimatedRouteTime = await GPSHelperService.GetEstimatedRouteTime(
                         deliveries, addressCache.Values.ToList());
 
-                    var route = new RouteEntity
+                    var route = new RouteDbRecord
                     {
                         Id = Guid.NewGuid(),
                         DriverId = driverId,

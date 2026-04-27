@@ -25,7 +25,7 @@ namespace PropaneDriver.Server.Endpoints
 
                 try
                 {
-                    var entity = new DeliveryTimeEntity
+                    var entity = new DeliveryTimeDbRecord
                     {
                         DeliveryId = dto.DeliveryId,
                         AddressId = dto.AddressId,

@@ -9,8 +9,8 @@ namespace PropaneDriver.Tests;
 //   GET /driver/{id}  — single driver lookup by Id
 public class DriverEndpointsTests
 {
-    private static DriverEntity MakeDriver(string first, string last, string userName)
-        => new DriverEntity
+    private static DriverDbRecord MakeDriver(string first, string last, string userName)
+        => new DriverDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = userName,

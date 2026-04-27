@@ -13,7 +13,7 @@ public class AlertEndpointsTests
     public async Task DeleteAlert_ExistingAlert_RemovesRow()
     {
         using var db = TestDb.Create();
-        var alert = new AlertEntity
+        var alert = new AlertDbRecord
         {
             Id = Guid.NewGuid(),
             DeliveryId = Guid.NewGuid(),
@@ -47,7 +47,7 @@ public class AlertEndpointsTests
     public async Task MarkSeen_UnseenAlert_SetsSeenTrue()
     {
         using var db = TestDb.Create();
-        var alert = new AlertEntity
+        var alert = new AlertDbRecord
         {
             Id = Guid.NewGuid(),
             DeliveryId = Guid.NewGuid(),
@@ -76,7 +76,7 @@ public class AlertEndpointsTests
     public async Task MarkSeen_AlreadySeen_IsIdempotent()
     {
         using var db = TestDb.Create();
-        var alert = new AlertEntity
+        var alert = new AlertDbRecord
         {
             Id = Guid.NewGuid(),
             DeliveryId = Guid.NewGuid(),
@@ -107,8 +107,8 @@ public class AlertEndpointsTests
     {
         using var db = TestDb.Create();
         var deliveryId = Guid.NewGuid();
-        var keep = new AlertEntity { Id = Guid.NewGuid(), DeliveryId = deliveryId, Message = "Keep", CreatedAt = DateTime.UtcNow };
-        var drop = new AlertEntity { Id = Guid.NewGuid(), DeliveryId = deliveryId, Message = "Drop", CreatedAt = DateTime.UtcNow };
+        var keep = new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = deliveryId, Message = "Keep", CreatedAt = DateTime.UtcNow };
+        var drop = new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = deliveryId, Message = "Drop", CreatedAt = DateTime.UtcNow };
         db.Alerts.AddRange(keep, drop);
         await db.SaveChangesAsync();
 

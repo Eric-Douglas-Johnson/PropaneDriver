@@ -189,7 +189,7 @@ namespace PropaneDriver.Server.Endpoints
         // meaningful, so "any matching row" is close enough — duplicates on
         // street alone across different cities are unlikely for a single-
         // company delivery area).
-        private static async Task<AddressEntity?> FindExistingAddressAsync(
+        private static async Task<AddressDbRecord?> FindExistingAddressAsync(
             PropaneDriverDbContext db,
             string street,
             string city,

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class DriverEntity
+    public class DriverDbRecord
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();

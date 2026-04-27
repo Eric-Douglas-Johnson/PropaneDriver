@@ -10,9 +10,9 @@ namespace PropaneDriver.Tests;
 // token invalidation, and SHA-256 token hashing for password reset.
 public class AuthEndpointsTests
 {
-    private static DriverEntity SeedDriver(PropaneDriverDbContext db, string userName, string password, string email = "driver@example.com")
+    private static DriverDbRecord SeedDriver(PropaneDriverDbContext db, string userName, string password, string email = "driver@example.com")
     {
-        var driver = new DriverEntity
+        var driver = new DriverDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = userName,
@@ -70,7 +70,7 @@ public class AuthEndpointsTests
 
         Assert.False(await db.Drivers.AnyAsync(d => d.UserName == "new-driver"));
 
-        db.Drivers.Add(new DriverEntity
+        db.Drivers.Add(new DriverDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = "new-driver",
@@ -101,7 +101,7 @@ public class AuthEndpointsTests
         var driver = SeedDriver(db, "driver1", "pw", email: "reset@example.com");
 
         // Seed an existing unused token — ForgotPassword invalidates these.
-        var existing = new PasswordResetTokenEntity
+        var existing = new PasswordResetTokenDbRecord
         {
             DriverId = driver.Id,
             TokenHash = HashToken("stale-token"),
@@ -121,7 +121,7 @@ public class AuthEndpointsTests
             .Replace("+", "-").Replace("/", "_").Replace("=", "");
         var tokenHash = HashToken(rawToken);
 
-        db.PasswordResetTokens.Add(new PasswordResetTokenEntity
+        db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
             DriverId = driver.Id,
             TokenHash = tokenHash,
@@ -162,7 +162,7 @@ public class AuthEndpointsTests
         var driver = SeedDriver(db, "driver1", "old-pw");
         var rawToken = "plain-token-abc";
         var tokenHash = HashToken(rawToken);
-        var resetToken = new PasswordResetTokenEntity
+        var resetToken = new PasswordResetTokenDbRecord
         {
             DriverId = driver.Id,
             TokenHash = tokenHash,
@@ -195,7 +195,7 @@ public class AuthEndpointsTests
         using var db = TestDb.Create();
         var driver = SeedDriver(db, "driver1", "pw");
         var rawToken = "expired-token";
-        db.PasswordResetTokens.Add(new PasswordResetTokenEntity
+        db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
             DriverId = driver.Id,
             TokenHash = HashToken(rawToken),
@@ -216,7 +216,7 @@ public class AuthEndpointsTests
         using var db = TestDb.Create();
         var driver = SeedDriver(db, "driver1", "pw");
         var rawToken = "consumed-token";
-        db.PasswordResetTokens.Add(new PasswordResetTokenEntity
+        db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
             DriverId = driver.Id,
             TokenHash = HashToken(rawToken),

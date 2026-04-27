@@ -10,10 +10,10 @@ namespace PropaneDriver.Tests;
 //   PUT    {id}/status  — updates the Status column
 public class DeliveryEndpointsTests
 {
-    private static DeliveryEntity SeedDelivery(PropaneDriverDbContext db)
+    private static DeliveryDbRecord SeedDelivery(PropaneDriverDbContext db)
     {
         var routeId = Guid.NewGuid();
-        db.Routes.Add(new RouteEntity
+        db.Routes.Add(new RouteDbRecord
         {
             Id = routeId,
             DriverId = Guid.NewGuid(),
@@ -21,7 +21,7 @@ public class DeliveryEndpointsTests
             CreatedAt = DateTime.UtcNow
         });
 
-        var address = new AddressEntity
+        var address = new AddressDbRecord
         {
             Id = Guid.NewGuid(),
             Street = "100 Analytic Way",
@@ -33,7 +33,7 @@ public class DeliveryEndpointsTests
         };
         db.Addresses.Add(address);
 
-        var delivery = new DeliveryEntity
+        var delivery = new DeliveryDbRecord
         {
             Id = Guid.NewGuid(),
             RouteId = routeId,
@@ -57,8 +57,8 @@ public class DeliveryEndpointsTests
 
         var now = DateTime.UtcNow;
         db.Alerts.AddRange(
-            new AlertEntity { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "second", CreatedAt = now.AddMinutes(1) },
-            new AlertEntity { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "first", CreatedAt = now }
+            new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "second", CreatedAt = now.AddMinutes(1) },
+            new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "first", CreatedAt = now }
         );
         await db.SaveChangesAsync();
 
@@ -93,7 +93,7 @@ public class DeliveryEndpointsTests
 
         // Mirror endpoint body: only save trimmed message.
         Assert.False(string.IsNullOrWhiteSpace(dto.Message));
-        var alert = new AlertEntity
+        var alert = new AlertDbRecord
         {
             Id = Guid.NewGuid(),
             DeliveryId = delivery.Id,
@@ -148,7 +148,7 @@ public class DeliveryEndpointsTests
         // The cascade is declared in PropaneDriverDbContext.OnModelCreating.
         using var db = TestDb.Create();
         var delivery = SeedDelivery(db);
-        db.Alerts.Add(new AlertEntity
+        db.Alerts.Add(new AlertDbRecord
         {
             Id = Guid.NewGuid(),
             DeliveryId = delivery.Id,

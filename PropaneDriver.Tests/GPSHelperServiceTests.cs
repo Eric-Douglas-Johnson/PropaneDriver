@@ -15,11 +15,11 @@ public class GPSHelperServiceTests
     private const double AverageMph = 40.0;
     private const double DefaultDeliveryMinutes = 10.0;
 
-    // Creates a matched (DeliveryEntity, AddressEntity) pair for a stop.
-    private static (DeliveryEntity delivery, AddressEntity address) Stop(
+    // Creates a matched (DeliveryDbRecord, AddressDbRecord) pair for a stop.
+    private static (DeliveryDbRecord delivery, AddressDbRecord address) Stop(
         int sortOrder, double lat, double lng, double avgMinutes = 0)
     {
-        var address = new AddressEntity
+        var address = new AddressDbRecord
         {
             Id = Guid.NewGuid(),
             Street = $"Stop-{sortOrder} St",
@@ -29,7 +29,7 @@ public class GPSHelperServiceTests
             Latitude = lat,
             Longitude = lng
         };
-        var delivery = new DeliveryEntity
+        var delivery = new DeliveryDbRecord
         {
             Id = Guid.NewGuid(),
             AddressId = address.Id,
@@ -41,7 +41,7 @@ public class GPSHelperServiceTests
         return (delivery, address);
     }
 
-    private static async Task<int> Estimate(params (DeliveryEntity d, AddressEntity a)[] stops)
+    private static async Task<int> Estimate(params (DeliveryDbRecord d, AddressDbRecord a)[] stops)
         => await GPSHelperService.GetEstimatedRouteTime(
             stops.Select(s => s.d).ToList(),
             stops.Select(s => s.a).ToList());
@@ -50,14 +50,14 @@ public class GPSHelperServiceTests
     public async Task GetEstimatedRouteTime_EmptyList_ReturnsZero()
     {
         Assert.Equal(0, await GPSHelperService.GetEstimatedRouteTime(
-            new List<DeliveryEntity>(), new List<AddressEntity>()));
+            new List<DeliveryDbRecord>(), new List<AddressDbRecord>()));
     }
 
     [Fact]
     public async Task GetEstimatedRouteTime_NullList_ReturnsZero()
     {
         Assert.Equal(0, await GPSHelperService.GetEstimatedRouteTime(
-            null!, new List<AddressEntity>()));
+            null!, new List<AddressDbRecord>()));
     }
 
     [Fact]

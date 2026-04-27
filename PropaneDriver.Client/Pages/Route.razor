@@ -347,7 +347,7 @@
                 TotalStops = _deliveries.Count,
                 CompletedStops = _deliveries.Count(d => d.Status == 2),
                 // Server-side GPSHelperService stores expected route duration in
-                // minutes on the RouteEntity. Project it forward from "now" so
+                // minutes on the RouteDbRecord. Project it forward from "now" so
                 // the "Est. Completion" tile shows a clock time the driver can
                 // actually plan against (e.g. "3:47 PM") rather than a raw
                 // duration. If the server didn't compute one (missing GPS on

@@ -14,9 +14,9 @@ public class DeliveryTimesEndpointTests
         return new PropaneDriverDbContext(options);
     }
 
-    private static AddressEntity MakeAddress(string street = "123 Main St", string city = "Hibbing",
+    private static AddressDbRecord MakeAddress(string street = "123 Main St", string city = "Hibbing",
         string state = "MN", string zip = "55746") =>
-        new AddressEntity
+        new AddressDbRecord
         {
             Id = Guid.NewGuid(),
             Street = street,
@@ -28,8 +28,8 @@ public class DeliveryTimesEndpointTests
             AvgDeliveryTimeSeconds = 0
         };
 
-    private static DeliveryTimeEntity MakeEntity(Guid addressId, string deliveryId, double seconds) =>
-        new DeliveryTimeEntity
+    private static DeliveryTimeDbRecord MakeEntity(Guid addressId, string deliveryId, double seconds) =>
+        new DeliveryTimeDbRecord
         {
             DeliveryId = deliveryId,
             AddressId = addressId,
@@ -53,7 +53,7 @@ public class DeliveryTimesEndpointTests
             TimeIntervalSeconds = 45.5
         };
 
-        var entity = new DeliveryTimeEntity
+        var entity = new DeliveryTimeDbRecord
         {
             DeliveryId = dto.DeliveryId,
             AddressId = dto.AddressId,

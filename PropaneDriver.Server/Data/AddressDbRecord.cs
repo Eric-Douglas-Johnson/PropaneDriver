@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class AddressEntity
+    public class AddressDbRecord
     {
         [Key]
         public Guid Id { get; set; }
@@ -41,7 +41,7 @@ namespace PropaneDriver.Server.Data
         public string? TankLocation { get; set; }
 
         // Navigation
-        public List<DeliveryEntity> Deliveries { get; set; } = new();
-        public List<DeliveryTimeEntity> DeliveryTimes { get; set; } = new();
+        public List<DeliveryDbRecord> Deliveries { get; set; } = new();
+        public List<DeliveryTimeDbRecord> DeliveryTimes { get; set; } = new();
     }
 }

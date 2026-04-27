@@ -42,7 +42,7 @@ namespace PropaneDriver.Server.Endpoints
                 var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
                 if (!deliveryExists) return Results.NotFound();
 
-                var alert = new AlertEntity
+                var alert = new AlertDbRecord
                 {
                     Id = Guid.NewGuid(),
                     DeliveryId = id,

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class RouteEntity
+    public class RouteDbRecord
     {
         [Key]
         public Guid Id { get; set; }
@@ -19,6 +19,6 @@ namespace PropaneDriver.Server.Data
         public DateTime CreatedAt { get; set; }
 
         // Navigation
-        public List<DeliveryEntity> Deliveries { get; set; } = new();
+        public List<DeliveryDbRecord> Deliveries { get; set; } = new();
     }
 }

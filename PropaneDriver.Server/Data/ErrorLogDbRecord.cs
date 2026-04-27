@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class ErrorLogEntity
+    public class ErrorLogDbRecord
     {
         [Key]
         public Guid Id { get; set; }

@@ -9,13 +9,13 @@ namespace PropaneDriver.Tests;
 //   GET driver/{driverId}         — list summary (DeliveryCount / CompletedCount)
 //   DELETE {id}                   — cascade-deletes child deliveries
 //   GET today/{driverId}          — same projection as by-date, keyed on today
-//   POST                          — creates RouteEntity + Deliveries,
+//   POST                          — creates RouteDbRecord + Deliveries,
 //                                    auto-assigns SortOrder when zero
 public class RouteEndpointsTests
 {
-    private static RouteEntity SeedRouteWithDeliveries(PropaneDriverDbContext db, Guid driverId, DateOnly date, int deliveryCount = 2)
+    private static RouteDbRecord SeedRouteWithDeliveries(PropaneDriverDbContext db, Guid driverId, DateOnly date, int deliveryCount = 2)
     {
-        var route = new RouteEntity
+        var route = new RouteDbRecord
         {
             Id = Guid.NewGuid(),
             DriverId = driverId,
@@ -24,7 +24,7 @@ public class RouteEndpointsTests
         };
         for (int i = 0; i < deliveryCount; i++)
         {
-            var address = new AddressEntity
+            var address = new AddressDbRecord
             {
                 Id = Guid.NewGuid(),
                 Street = $"{i} Main St",
@@ -36,7 +36,7 @@ public class RouteEndpointsTests
             };
             db.Addresses.Add(address);
 
-            route.Deliveries.Add(new DeliveryEntity
+            route.Deliveries.Add(new DeliveryDbRecord
             {
                 Id = Guid.NewGuid(),
                 RouteId = route.Id,
@@ -211,7 +211,7 @@ public class RouteEndpointsTests
         // Mirror endpoint body: upsert addresses, then create deliveries with AddressId.
         var deliveries = dto.Deliveries.Select((d, i) =>
         {
-            var address = new AddressEntity
+            var address = new AddressDbRecord
             {
                 Id = Guid.NewGuid(),
                 Street = string.IsNullOrWhiteSpace(d.Street) ? "1 Test St" : d.Street,
@@ -220,7 +220,7 @@ public class RouteEndpointsTests
                 ZipCode = string.IsNullOrWhiteSpace(d.ZipCode) ? "55746" : d.ZipCode
             };
             db.Addresses.Add(address);
-            return new DeliveryEntity
+            return new DeliveryDbRecord
             {
                 Id = Guid.NewGuid(),
                 AddressId = address.Id,
@@ -232,7 +232,7 @@ public class RouteEndpointsTests
             };
         }).ToList();
 
-        var route = new RouteEntity
+        var route = new RouteDbRecord
         {
             Id = Guid.NewGuid(),
             DriverId = driverId,
@@ -306,8 +306,8 @@ public class RouteEndpointsTests
 
         var now = DateTime.UtcNow;
         db.Alerts.AddRange(
-            new AlertEntity { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "later",  CreatedAt = now.AddMinutes(5) },
-            new AlertEntity { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "earlier", CreatedAt = now }
+            new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "later",  CreatedAt = now.AddMinutes(5) },
+            new AlertDbRecord { Id = Guid.NewGuid(), DeliveryId = delivery.Id, Message = "earlier", CreatedAt = now }
         );
         await db.SaveChangesAsync();
 

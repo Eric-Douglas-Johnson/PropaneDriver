@@ -22,7 +22,7 @@ public class ClientLogEndpointsTests
             Timestamp = ts
         };
 
-        db.ErrorLogs.Add(new ErrorLogEntity
+        db.ErrorLogs.Add(new ErrorLogDbRecord
         {
             Id = Guid.NewGuid(),
             Source = log.Source ?? "Unknown",
@@ -51,7 +51,7 @@ public class ClientLogEndpointsTests
             Timestamp = null
         };
 
-        db.ErrorLogs.Add(new ErrorLogEntity
+        db.ErrorLogs.Add(new ErrorLogDbRecord
         {
             Id = Guid.NewGuid(),
             Source = log.Source ?? "Unknown",
@@ -72,7 +72,7 @@ public class ClientLogEndpointsTests
     public async Task PostClientLog_AssignsNewGuid()
     {
         using var db = TestDb.Create();
-        var entity = new ErrorLogEntity
+        var entity = new ErrorLogDbRecord
         {
             Id = Guid.NewGuid(),
             Source = "x",

@@ -31,8 +31,8 @@ namespace PropaneDriver.Server.Services
         // lookup. Stops with unset coordinates (0,0) contribute their servicing
         // time but no drive leg — no silent cross-ocean legs.
         public static async Task<int> GetEstimatedRouteTime(
-            List<DeliveryEntity> deliveries,
-            List<AddressEntity> addresses)
+            List<DeliveryDbRecord> deliveries,
+            List<AddressDbRecord> addresses)
         {
             if (deliveries is null || deliveries.Count == 0)
                 return 0;
@@ -69,7 +69,7 @@ namespace PropaneDriver.Server.Services
             return (int)Math.Round(deliveryMinutes + driveMinutes);
         }
 
-        private static bool HasCoordinates(AddressEntity a)
+        private static bool HasCoordinates(AddressDbRecord a)
             => a.Latitude != 0 || a.Longitude != 0;
 
         private static double EstimateDriveMinutes(double lat1, double lng1, double lat2, double lng2)

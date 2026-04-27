@@ -164,7 +164,7 @@ namespace PropaneDriver.Server.Endpoints
             {
                 try
                 {
-                    var entity = new ErrorLogEntity
+                    var entity = new ErrorLogDbRecord
                     {
                         Id = Guid.NewGuid(),
                         Source = log.Source ?? "Unknown",

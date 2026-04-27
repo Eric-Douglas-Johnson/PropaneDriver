@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
 {
-    public class AlertEntity
+    public class AlertDbRecord
     {
         [Key]
         public Guid Id { get; set; }
@@ -19,6 +19,6 @@ namespace PropaneDriver.Server.Data
         public bool Seen { get; set; }
 
         // Navigation
-        public DeliveryEntity? Delivery { get; set; }
+        public DeliveryDbRecord? Delivery { get; set; }
     }
 }

@@ -9,26 +9,26 @@ namespace PropaneDriver.Server.Data
         {
         }
 
-        public DbSet<AddressEntity> Addresses => Set<AddressEntity>();
-        public DbSet<DeliveryTimeEntity> DeliveryTimes => Set<DeliveryTimeEntity>();
-        public DbSet<DriverEntity> Drivers => Set<DriverEntity>();
-        public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
-        public DbSet<ErrorLogEntity> ErrorLogs => Set<ErrorLogEntity>();
-        public DbSet<RouteEntity> Routes => Set<RouteEntity>();
-        public DbSet<DeliveryEntity> Deliveries => Set<DeliveryEntity>();
-        public DbSet<AlertEntity> Alerts => Set<AlertEntity>();
+        public DbSet<AddressDbRecord> Addresses => Set<AddressDbRecord>();
+        public DbSet<DeliveryTimeDbRecord> DeliveryTimes => Set<DeliveryTimeDbRecord>();
+        public DbSet<DriverDbRecord> Drivers => Set<DriverDbRecord>();
+        public DbSet<PasswordResetTokenDbRecord> PasswordResetTokens => Set<PasswordResetTokenDbRecord>();
+        public DbSet<ErrorLogDbRecord> ErrorLogs => Set<ErrorLogDbRecord>();
+        public DbSet<RouteDbRecord> Routes => Set<RouteDbRecord>();
+        public DbSet<DeliveryDbRecord> Deliveries => Set<DeliveryDbRecord>();
+        public DbSet<AlertDbRecord> Alerts => Set<AlertDbRecord>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            modelBuilder.Entity<AddressEntity>(entity =>
+            modelBuilder.Entity<AddressDbRecord>(entity =>
             {
                 entity.ToTable("Addresses");
                 entity.HasIndex(e => new { e.Street, e.City, e.State, e.ZipCode }).IsUnique();
             });
 
-            modelBuilder.Entity<DeliveryTimeEntity>(entity =>
+            modelBuilder.Entity<DeliveryTimeDbRecord>(entity =>
             {
                 entity.ToTable("DeliveryTimes");
                 entity.HasIndex(e => e.AddressId);
@@ -39,28 +39,28 @@ namespace PropaneDriver.Server.Data
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
-            modelBuilder.Entity<DriverEntity>(entity =>
+            modelBuilder.Entity<DriverDbRecord>(entity =>
             {
                 entity.ToTable("Drivers");
                 entity.HasIndex(e => e.UserName).IsUnique();
                 entity.HasIndex(e => e.Email);
             });
 
-            modelBuilder.Entity<PasswordResetTokenEntity>(entity =>
+            modelBuilder.Entity<PasswordResetTokenDbRecord>(entity =>
             {
                 entity.ToTable("PasswordResetTokens");
                 entity.HasIndex(e => e.DriverId);
                 entity.HasIndex(e => e.TokenHash);
             });
 
-            modelBuilder.Entity<ErrorLogEntity>(entity =>
+            modelBuilder.Entity<ErrorLogDbRecord>(entity =>
             {
                 entity.ToTable("ErrorLog");
                 entity.HasIndex(e => e.Source);
                 entity.HasIndex(e => e.Timestamp);
             });
 
-            modelBuilder.Entity<RouteEntity>(entity =>
+            modelBuilder.Entity<RouteDbRecord>(entity =>
             {
                 entity.ToTable("Routes");
                 entity.HasIndex(e => e.DriverId);
@@ -68,7 +68,7 @@ namespace PropaneDriver.Server.Data
                 entity.HasIndex(e => new { e.DriverId, e.Date });
             });
 
-            modelBuilder.Entity<DeliveryEntity>(entity =>
+            modelBuilder.Entity<DeliveryDbRecord>(entity =>
             {
                 entity.ToTable("Deliveries");
                 entity.HasIndex(e => e.RouteId);
@@ -84,7 +84,7 @@ namespace PropaneDriver.Server.Data
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
-            modelBuilder.Entity<AlertEntity>(entity =>
+            modelBuilder.Entity<AlertDbRecord>(entity =>
             {
                 entity.ToTable("Alerts");
                 entity.HasIndex(e => e.DeliveryId);
