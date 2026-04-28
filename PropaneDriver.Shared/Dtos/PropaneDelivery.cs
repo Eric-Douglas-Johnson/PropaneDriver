@@ -1,3 +1,5 @@
+using PropaneDriver.Shared.Interfaces;
+
 namespace PropaneDriver.Shared.Dtos
 {
     public class PropaneDelivery : IDelivery

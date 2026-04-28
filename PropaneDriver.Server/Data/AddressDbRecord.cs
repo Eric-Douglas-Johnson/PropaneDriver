@@ -40,6 +40,11 @@ namespace PropaneDriver.Server.Data
         [MaxLength(500)]
         public string? TankLocation { get; set; }
 
+        // Driveway requires the driver to back the truck in (vs. pull
+        // forward and turn around). Defaults false; existing rows pick
+        // this up automatically when the column is added with a default.
+        public bool BackIn { get; set; }
+
         // Navigation
         public List<DeliveryDbRecord> Deliveries { get; set; } = new();
         public List<DeliveryTimeDbRecord> DeliveryTimes { get; set; } = new();

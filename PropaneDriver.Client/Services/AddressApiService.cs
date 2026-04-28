@@ -46,6 +46,36 @@ namespace PropaneDriver.Client.Services
             }
         }
 
+        public async Task<bool> UpdateBackInAsync(Guid addressId, bool backIn)
+        {
+            if (addressId == Guid.Empty) return false;
+
+            try
+            {
+                var response = await _http.PutAsJsonAsync(
+                    $"api/addresses/{addressId}/back-in",
+                    new AddressBackInUpdateDto { BackIn = backIn });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "AddressApiService.UpdateBackInAsync",
+                        $"PUT api/addresses/{addressId}/back-in returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "AddressApiService.UpdateBackInAsync",
+                    $"Exception updating back-in for {addressId}: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<bool> UpdateCoordinatesAsync(Guid addressId, double latitude, double longitude)
         {
             if (addressId == Guid.Empty) return false;

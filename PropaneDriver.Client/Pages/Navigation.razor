@@ -20,6 +20,9 @@
 
     [SupplyParameterFromQuery(Name = "tankLocation")]
     public string? TankLocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "backIn")]
+    public bool BackInQuery { get; set; }
 }
 
 <PageTitle>Navigation</PageTitle>
@@ -31,7 +34,15 @@
 
         @if (_addressId != Guid.Empty)
         {
-            <div class="tank-location">
+            <div class="addr-meta">
+                @if (_backIn)
+                {
+                    <span class="back-in-badge" title="Back the truck into this driveway">
+                        <span class="back-in-icon">&#x21A9;</span>
+                        <span class="back-in-text">Back In</span>
+                    </span>
+                }
+                <div class="tank-location">
                 @if (_addingTankLocation)
                 {
                     <input type="text" class="tank-location-input"
@@ -66,6 +77,7 @@
                         Add tank location
                     </button>
                 }
+                </div>
             </div>
         }
     </div>
@@ -104,6 +116,7 @@
     private bool _addingTankLocation;
     private string _tankLocationDraft = string.Empty;
     private bool _dictatingTankLocation;
+    private bool _backIn;
 
     protected override void OnInitialized()
     {
@@ -119,6 +132,8 @@
         _tankLocation = string.IsNullOrWhiteSpace(TankLocationQuery)
             ? null
             : TankLocationQuery;
+
+        _backIn = BackInQuery;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

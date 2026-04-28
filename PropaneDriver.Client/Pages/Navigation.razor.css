@@ -31,6 +31,47 @@
     color: #8892b0;
 }
 
+/* Horizontal row holding the back-in badge (when present) on the
+   left and the tank-location section on the right. Wraps to a new
+   line on narrow screens so the badge stays readable. */
+.addr-meta {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.addr-meta > .tank-location {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* High-contrast warning chip — driver needs to see this at a glance
+   before pulling in. Red is reserved here intentionally; the rest of
+   the header uses the propane-flame orange. */
+.back-in-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #c0392b, #8b1e14);
+    border: 1px solid #ff5e4a;
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 0 0 12px rgba(255, 94, 74, 0.35);
+    white-space: nowrap;
+}
+
+.back-in-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    transform: scaleX(-1);
+}
+
 /* Tank-location line sits directly below the address input inside the
    nav-header card. Styled with a warm propane-flame accent so it
    reads as a notable secondary piece of info — driver should be able

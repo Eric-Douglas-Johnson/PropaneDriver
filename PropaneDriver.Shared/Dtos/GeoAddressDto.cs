@@ -15,6 +15,9 @@ namespace PropaneDriver.Shared.Dtos
         // property. Null until the admin fills it in.
         public string? TankLocation { get; set; }
 
+        // True when the driver must back the truck into this driveway.
+        public bool BackIn { get; set; }
+
         public string FullAddress =>
             string.Join(", ", new[] { Street, City, State, ZipCode }
                 .Where(s => !string.IsNullOrWhiteSpace(s)));

@@ -3,6 +3,7 @@
 @using PropaneDriver.Client.Authentication
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Shared.Dtos
+@using PropaneDriver.Shared.Interfaces
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
@@ -510,6 +511,10 @@
         if (!string.IsNullOrWhiteSpace(delivery.Location.TankLocation))
         {
             qs += $"&tankLocation={Uri.EscapeDataString(delivery.Location.TankLocation)}";
+        }
+        if (delivery.Location.BackIn)
+        {
+            qs += "&backIn=true";
         }
         Nav.NavigateTo($"/navigation?{qs}");
     }

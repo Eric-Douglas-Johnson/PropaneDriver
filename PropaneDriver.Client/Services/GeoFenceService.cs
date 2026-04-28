@@ -1,5 +1,6 @@
 using PropaneDriver.Client.Authentication;
 using PropaneDriver.Shared.Dtos;
+using PropaneDriver.Shared.Interfaces;
 
 namespace PropaneDriver.Client.Services
 {

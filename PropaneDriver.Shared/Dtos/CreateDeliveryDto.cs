@@ -38,5 +38,7 @@ namespace PropaneDriver.Shared.Dtos
         // leaves the stored value untouched.
         [MaxLength(500)]
         public string? TankLocation { get; set; }
+
+        public bool BackIn { get; set; }
     }
 }

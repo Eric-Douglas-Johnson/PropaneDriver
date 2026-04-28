@@ -1,12 +1,14 @@
+using PropaneDriver.Shared.Dtos;
+using PropaneDriver.Shared.JsonConverters;
 using System.Text.Json.Serialization;
 
-namespace PropaneDriver.Shared.Dtos
+namespace PropaneDriver.Shared.Interfaces
 {
     // Abstraction over a deliverable stop. Concrete implementations represent
     // different sources (manual entry today; CSV/CRM/tank-monitor pulls later).
     // Code that consumes a delivery should depend on IDelivery so a new source
     // can plug in without touching every call site.
-    [JsonConverter(typeof(IDeliveryJsonConverter))]
+    [JsonConverter(typeof(DeliveryJsonConverter))]
     public interface IDelivery
     {
         string Id { get; set; }

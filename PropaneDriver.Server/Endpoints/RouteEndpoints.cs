@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 using PropaneDriver.Server.Services;
+using PropaneDriver.Shared.Interfaces;
 
 namespace PropaneDriver.Server.Endpoints
 {
@@ -40,7 +41,8 @@ namespace PropaneDriver.Server.Endpoints
                                     Latitude = d.Address.Latitude,
                                     Longitude = d.Address.Longitude,
                                     AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
-                                    TankLocation = d.Address.TankLocation
+                                    TankLocation = d.Address.TankLocation,
+                                    BackIn = d.Address.BackIn
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -131,7 +133,8 @@ namespace PropaneDriver.Server.Endpoints
                                     Latitude = d.Address.Latitude,
                                     Longitude = d.Address.Longitude,
                                     AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
-                                    TankLocation = d.Address.TankLocation
+                                    TankLocation = d.Address.TankLocation,
+                                    BackIn = d.Address.BackIn
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -247,7 +250,8 @@ namespace PropaneDriver.Server.Endpoints
                                 Latitude = d.Latitude,
                                 Longitude = d.Longitude,
                                 AvgDeliveryTimeSeconds = 0,
-                                TankLocation = tankLocation
+                                TankLocation = tankLocation,
+                                BackIn = d.BackIn
                             };
                             db.Addresses.Add(address);
                         }

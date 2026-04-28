@@ -97,6 +97,40 @@ namespace PropaneDriver.Server.Endpoints
                 }
             });
 
+            // Toggle the BackIn flag on an Address row. Used by the
+            // admin/driver UI to mark driveways where the truck must
+            // back in (vs. pulling forward and turning around).
+            group.MapPut("{id:guid}/back-in", async (
+                Guid id,
+                AddressBackInUpdateDto dto,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                var address = await db.Addresses.FindAsync(id);
+                if (address is null)
+                    return Results.NotFound(new { Message = $"Address {id} not found." });
+
+                address.BackIn = dto.BackIn;
+
+                try
+                {
+                    await db.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Updated BackIn for Address {AddressId} to {BackIn}",
+                        id, dto.BackIn);
+
+                    return Results.Ok(new { id, address.BackIn });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to update BackIn for Address {AddressId}", id);
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "Failed to update back-in flag",
+                        statusCode: 500);
+                }
+            });
+
             return app;
         }
     }

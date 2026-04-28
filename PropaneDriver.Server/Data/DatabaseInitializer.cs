@@ -67,6 +67,7 @@ namespace PropaneDriver.Server.Data
                             [Longitude] float NOT NULL CONSTRAINT [DF_Addresses_Longitude] DEFAULT 0,
                             [AvgDeliveryTimeSeconds] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds] DEFAULT 0,
                             [TankLocation] nvarchar(500) NULL,
+                            [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0,
                             CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street], [City], [State], [ZipCode]),
                             CONSTRAINT [CK_Addresses_Street] CHECK (LEN(TRIM([Street])) > 0),
                             CONSTRAINT [CK_Addresses_City] CHECK (LEN(TRIM([City])) > 0),
@@ -83,6 +84,15 @@ namespace PropaneDriver.Server.Data
                         WHERE Name = N'TankLocation' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
                     BEGIN
                         ALTER TABLE [Addresses] ADD [TankLocation] nvarchar(500) NULL;
+                    END
+
+                    -- Self-migrate: add BackIn flag. NOT NULL with a 0 default so
+                    -- existing rows backfill to ""no back-in required"".
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'BackIn' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                    BEGIN
+                        ALTER TABLE [Addresses] ADD [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0;
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')
