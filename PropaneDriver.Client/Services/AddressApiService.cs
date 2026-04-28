@@ -16,6 +16,28 @@ namespace PropaneDriver.Client.Services
             _http = http;
         }
 
+        // Fetch the canonical address state. The Navigation page calls
+        // this on init so its UI reflects the current BackIn/TankLocation
+        // values from the server even when the query-string baked at
+        // launch is stale (e.g. driver toggled BackIn on a previous
+        // navigation session and is hitting the page directly).
+        public async Task<GeoAddressDto?> GetAddressAsync(Guid addressId)
+        {
+            if (addressId == Guid.Empty) return null;
+
+            try
+            {
+                return await _http.GetFromJsonAsync<GeoAddressDto>($"api/addresses/{addressId}");
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "AddressApiService.GetAddressAsync",
+                    $"Exception fetching address {addressId}: {ex.Message}");
+                return null;
+            }
+        }
+
         public async Task<bool> UpdateTankLocationAsync(Guid addressId, string? tankLocation)
         {
             if (addressId == Guid.Empty) return false;

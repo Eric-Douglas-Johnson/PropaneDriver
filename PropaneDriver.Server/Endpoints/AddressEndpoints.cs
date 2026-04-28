@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
@@ -8,6 +9,37 @@ namespace PropaneDriver.Server.Endpoints
         public static IEndpointRouteBuilder MapAddressEndpoints(this IEndpointRouteBuilder app)
         {
             var group = app.MapGroup("api/addresses");
+
+            // Fetch a single Address row as a GeoAddressDto. Used by the
+            // Navigation page to refresh its cached query-string state on
+            // init, so flags toggled elsewhere (Admin page, prior nav
+            // session) reflect their current server value instead of the
+            // stale value baked into the URL.
+            group.MapGet("{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
+            {
+                var address = await db.Addresses
+                    .AsNoTracking()
+                    .Where(a => a.Id == id)
+                    .Select(a => new GeoAddressDto
+                    {
+                        Id = a.Id,
+                        Street = a.Street,
+                        City = a.City,
+                        State = a.State,
+                        ZipCode = a.ZipCode,
+                        Latitude = a.Latitude,
+                        Longitude = a.Longitude,
+                        AvgDeliveryTimeSeconds = a.AvgDeliveryTimeSeconds,
+                        TankLocation = a.TankLocation,
+                        BackIn = a.BackIn,
+                        LongRunning = a.LongRunning
+                    })
+                    .FirstOrDefaultAsync();
+
+                return address is null
+                    ? Results.NotFound(new { Message = $"Address {id} not found." })
+                    : Results.Ok(address);
+            });
 
             // Overwrite the stored coordinates on an Address row. Used by the
             // driver-side "set pin here" button when the geocoded location is

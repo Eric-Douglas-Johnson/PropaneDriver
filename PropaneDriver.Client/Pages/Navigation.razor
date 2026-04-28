@@ -37,10 +37,22 @@
             <div class="addr-meta">
                 @if (_backIn)
                 {
-                    <span class="back-in-badge" title="Back the truck into this driveway">
+                    <button class="back-in-badge"
+                            @onclick="() => ToggleBackIn(false)"
+                            disabled="@_savingBackIn"
+                            title="Tap to clear the back-in flag for this address">
                         <span class="back-in-icon">&#x21A9;</span>
                         <span class="back-in-text">Back In</span>
-                    </span>
+                    </button>
+                }
+                else
+                {
+                    <button class="btn-back-in-add"
+                            @onclick="() => ToggleBackIn(true)"
+                            disabled="@_savingBackIn"
+                            title="Mark this driveway as requiring the truck to back in">
+                        @(_savingBackIn ? "Saving…" : "+ Back In")
+                    </button>
                 }
                 <div class="tank-location">
                 @if (_addingTankLocation)
@@ -117,12 +129,14 @@
     private string _tankLocationDraft = string.Empty;
     private bool _dictatingTankLocation;
     private bool _backIn;
+    private bool _savingBackIn;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        // Parse query-string state once on page init. These don't change
-        // during the page's lifetime — a new address means a fresh nav
-        // to /navigation from the Deliveries page.
+        // Parse query-string state first so the initial render has
+        // values immediately — these are passed in by Route.razor when
+        // launching navigation, used as a fast cache before the server
+        // refetch lands.
         if (!string.IsNullOrWhiteSpace(AddressIdQuery)
             && Guid.TryParse(AddressIdQuery, out var parsed))
         {
@@ -134,6 +148,23 @@
             : TankLocationQuery;
 
         _backIn = BackInQuery;
+
+        // Refetch canonical address state from the server so the UI
+        // reflects flags toggled in other places (Admin page, prior
+        // nav session) instead of trusting the URL the page launched
+        // from. Silently leaves the query-string cache in place if
+        // the fetch fails — better stale than blank.
+        if (_addressId != Guid.Empty)
+        {
+            var fresh = await AddressApi.GetAddressAsync(_addressId);
+            if (fresh is not null)
+            {
+                _tankLocation = string.IsNullOrWhiteSpace(fresh.TankLocation)
+                    ? null
+                    : fresh.TankLocation;
+                _backIn = fresh.BackIn;
+            }
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -234,6 +265,33 @@
             _tankLocationDraft = text;
 
         _dictatingTankLocation = false;
+        StateHasChanged();
+    }
+
+    // Flip the BackIn flag on the current address. Used by both the
+    // "Back In" badge (tap to clear) and the "+ Back In" button (tap to
+    // set). Optimistic-write: we update _backIn first so the UI flips
+    // immediately, then revert on failure. The existing _status line
+    // surfaces error text.
+    private async Task ToggleBackIn(bool newValue)
+    {
+        if (_addressId == Guid.Empty || _savingBackIn) return;
+
+        _savingBackIn = true;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateBackInAsync(_addressId, newValue);
+
+        if (ok)
+        {
+            _backIn = newValue;
+        }
+        else
+        {
+            _status = "Failed to update Back In flag. Please try again.";
+        }
+
+        _savingBackIn = false;
         StateHasChanged();
     }
 
