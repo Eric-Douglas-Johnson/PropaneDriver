@@ -46,39 +46,34 @@
     min-width: 0;
 }
 
-/* High-contrast warning chip — driver needs to see this at a glance
-   before pulling in. Red is reserved here intentionally; the rest of
-   the header uses the propane-flame orange. */
+/* Container button for the red Back-In icon image. Transparent so the
+   SVG carries all the visual weight; minor padding + drop-shadow give
+   it presence on the dark header without competing with the icon. */
 .back-in-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.55rem 0.9rem;
-    border-radius: 6px;
-    background: linear-gradient(90deg, #c0392b, #8b1e14);
-    border: 1px solid #ff5e4a;
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    box-shadow: 0 0 12px rgba(255, 94, 74, 0.35);
-    white-space: nowrap;
+    justify-content: center;
+    padding: 0.35rem 0.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    line-height: 0;
 }
 
 .back-in-badge:hover:not(:disabled) {
-    filter: brightness(1.1);
+    filter: brightness(1.15) drop-shadow(0 0 6px rgba(201, 42, 31, 0.6));
 }
 
 .back-in-badge:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: default;
 }
 
-.back-in-icon {
-    font-size: 1.5rem;
-    line-height: 1;
-    transform: scaleX(-1);
+.back-in-icon-img {
+    height: 2.5rem;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 0 4px rgba(201, 42, 31, 0.45));
 }
 
 /* Off-state counterpart to the red Back-In badge. Subtle by default

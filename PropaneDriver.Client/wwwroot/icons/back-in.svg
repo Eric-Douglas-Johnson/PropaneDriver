@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32" aria-label="Back in" role="img" fill="#c92a1f">
+  <polygon points="2,16 12,8 12,12 22,12 22,20 12,20 12,24"/>
+  <rect x="26" y="6" width="20" height="18" rx="2"/>
+  <path d="M46 6 L58 6 L62 12 L62 24 L46 24 Z"/>
+  <circle cx="32" cy="26" r="3"/>
+  <circle cx="52" cy="26" r="3"/>
+</svg>
