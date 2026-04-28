@@ -122,6 +122,10 @@
                         {
                             var inside = _geoFenceStatus?.IsInsideFence == true;
                             <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
+                            @if (delivery.Location.LongRunning && GeoFenceService.IsManualTimerRunning)
+                            {
+                                <span class="delivery-status-badge manual-timer-badge">@FormatTimer(_timerSeconds)</span>
+                            }
                         }
                         <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                     </div>
@@ -177,6 +181,24 @@
             {
                 <div class="@(_addressGpsSuccess ? "text-success" : "text-danger") mt-1" style="font-size:0.8rem;">
                     @_addressGpsStatus
+                </div>
+            }
+            @if (_selectedDelivery.Location.LongRunning && _activeDelivery?.Id == _selectedDelivery.Id)
+            {
+                <div class="manual-timer-panel">
+                    <div class="manual-timer-display">@FormatTimer(_timerSeconds)</div>
+                    <div class="manual-timer-actions">
+                        <button class="btn btn-lg btn-success"
+                                @onclick="StartManualTimer"
+                                disabled="@(GeoFenceService.IsManualTimerRunning || _togglingManualTimer)">
+                            Start Timer
+                        </button>
+                        <button class="btn btn-lg btn-danger"
+                                @onclick="StopManualTimer"
+                                disabled="@(!GeoFenceService.IsManualTimerRunning || _togglingManualTimer)">
+                            Stop Timer
+                        </button>
+                    </div>
                 </div>
             }
         }
@@ -264,6 +286,11 @@
     // Disables the "Force Next" button while the status update is in flight
     // so the driver can't double-tap and skip two deliveries by accident.
     private bool _forcingNext;
+
+    // Same idea for the LongRunning manual Start/Stop buttons — protects
+    // against a double-tap firing two starts or two stops in quick
+    // succession before the service has a chance to flip its state.
+    private bool _togglingManualTimer;
 
     // Per-delivery completion duration in seconds, populated as deliveries
     // finish during this session (geofence flow + Force Next). Drives the
@@ -495,6 +522,39 @@
     {
         if (_selectedDelivery is null) return;
         OpenGoogleMapsDirections(_selectedDelivery);
+    }
+
+    private async Task StartManualTimer()
+    {
+        if (_togglingManualTimer || _activeDelivery is null) return;
+        _togglingManualTimer = true;
+        try
+        {
+            await GeoFenceService.StartManualTimerAsync();
+        }
+        finally
+        {
+            _togglingManualTimer = false;
+        }
+    }
+
+    private async Task StopManualTimer()
+    {
+        if (_togglingManualTimer || !GeoFenceService.IsManualTimerRunning) return;
+        _togglingManualTimer = true;
+        try
+        {
+            // The GeoFenceService stops the tick, saves the DeliveryTime,
+            // marks the delivery complete, and fires OnDeliveryCompleted —
+            // which our HandleDeliveryCompleted already routes through to
+            // advance the active pointer and update the completed-times
+            // dictionary. Same downstream path the geofence flow takes.
+            await GeoFenceService.StopManualTimerAsync();
+        }
+        finally
+        {
+            _togglingManualTimer = false;
+        }
     }
 
     private void OpenGoogleMapsDirections(IDelivery delivery)

@@ -42,7 +42,8 @@ namespace PropaneDriver.Server.Endpoints
                                     Longitude = d.Address.Longitude,
                                     AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
                                     TankLocation = d.Address.TankLocation,
-                                    BackIn = d.Address.BackIn
+                                    BackIn = d.Address.BackIn,
+                                    LongRunning = d.Address.LongRunning
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -134,7 +135,8 @@ namespace PropaneDriver.Server.Endpoints
                                     Longitude = d.Address.Longitude,
                                     AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
                                     TankLocation = d.Address.TankLocation,
-                                    BackIn = d.Address.BackIn
+                                    BackIn = d.Address.BackIn,
+                                    LongRunning = d.Address.LongRunning
                                 },
                                 AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                                 Status = d.Status,
@@ -251,7 +253,8 @@ namespace PropaneDriver.Server.Endpoints
                                 Longitude = d.Longitude,
                                 AvgDeliveryTimeSeconds = 0,
                                 TankLocation = tankLocation,
-                                BackIn = d.BackIn
+                                BackIn = d.BackIn,
+                                LongRunning = d.LongRunning
                             };
                             db.Addresses.Add(address);
                         }

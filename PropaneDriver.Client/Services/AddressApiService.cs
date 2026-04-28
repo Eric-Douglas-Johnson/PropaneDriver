@@ -76,6 +76,36 @@ namespace PropaneDriver.Client.Services
             }
         }
 
+        public async Task<bool> UpdateLongRunningAsync(Guid addressId, bool longRunning)
+        {
+            if (addressId == Guid.Empty) return false;
+
+            try
+            {
+                var response = await _http.PutAsJsonAsync(
+                    $"api/addresses/{addressId}/long-running",
+                    new AddressLongRunningUpdateDto { LongRunning = longRunning });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "AddressApiService.UpdateLongRunningAsync",
+                        $"PUT api/addresses/{addressId}/long-running returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "AddressApiService.UpdateLongRunningAsync",
+                    $"Exception updating long-running for {addressId}: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<bool> UpdateCoordinatesAsync(Guid addressId, double latitude, double longitude)
         {
             if (addressId == Guid.Empty) return false;

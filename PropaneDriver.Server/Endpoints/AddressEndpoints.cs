@@ -131,6 +131,40 @@ namespace PropaneDriver.Server.Endpoints
                 }
             });
 
+            // Toggle the LongRunning flag on an Address row. When true,
+            // the driver client uses Start/Stop buttons instead of the
+            // GPS-geofence auto-timer for deliveries to this address.
+            group.MapPut("{id:guid}/long-running", async (
+                Guid id,
+                AddressLongRunningUpdateDto dto,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                var address = await db.Addresses.FindAsync(id);
+                if (address is null)
+                    return Results.NotFound(new { Message = $"Address {id} not found." });
+
+                address.LongRunning = dto.LongRunning;
+
+                try
+                {
+                    await db.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Updated LongRunning for Address {AddressId} to {LongRunning}",
+                        id, dto.LongRunning);
+
+                    return Results.Ok(new { id, address.LongRunning });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to update LongRunning for Address {AddressId}", id);
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "Failed to update long-running flag",
+                        statusCode: 500);
+                }
+            });
+
             return app;
         }
     }

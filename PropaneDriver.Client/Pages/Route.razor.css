@@ -261,6 +261,16 @@
     color: #ef4444;
 }
 
+/* Inline running-timer chip on the active row when the address is in
+   manual (LongRunning) mode. Monospace so the digits don't jitter as
+   the seconds tick over. */
+.delivery-status-badge.manual-timer-badge {
+    background-color: #1e3a5f;
+    color: #93c5fd;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+}
+
 /* ===== Delivery Detail (Right Panel) ===== */
 .delivery-detail {
     flex: 1;
@@ -318,6 +328,35 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     margin-top: 1.5rem;
+}
+
+/* Manual Start/Stop panel for LongRunning addresses — only renders when
+   the active delivery is selected and its address opts out of geofence
+   timing. Big monospace clock so the driver can read it from the seat. */
+.manual-timer-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #0f1f3a;
+    border: 1px solid #1e3a5f;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.manual-timer-display {
+    font-size: 2.75rem;
+    font-weight: 700;
+    color: #93c5fd;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.06em;
+    line-height: 1;
+}
+
+.manual-timer-actions {
+    display: flex;
+    gap: 0.75rem;
 }
 
 /* ===== Geofence Status ===== */

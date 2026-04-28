@@ -48,6 +48,14 @@ namespace PropaneDriver.Client.Services
         // reloads — Stopwatch is in-memory only and a refresh would zero it.
         private DateTime? _enteredFenceAtUtc;
 
+        // Manual-timer mode state. Used when the active delivery's address
+        // has LongRunning=true: GPS auto-start/stop is bypassed and the
+        // driver drives the timer with explicit Start/Stop buttons. The
+        // tick timer drives 1-second OnTimerTick events while running so
+        // the UI clock advances even when no GPS update is firing.
+        private bool _manualTimerRunning;
+        private System.Threading.Timer? _manualTickTimer;
+
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
         public event Action<double>? OnTimerTick;
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
@@ -58,6 +66,7 @@ namespace PropaneDriver.Client.Services
             ? (DateTime.UtcNow - start).TotalSeconds
             : 0;
         public bool IsMonitoring => _activeDelivery != null;
+        public bool IsManualTimerRunning => _manualTimerRunning;
 
         public GeoFenceService(
             GeolocationService geolocationService,
@@ -77,6 +86,12 @@ namespace PropaneDriver.Client.Services
             _activeDelivery = delivery;
             _lastCheckWasInsideGeoFence = false;
             _enteredFenceAtUtc = null;
+
+            // Tear down any leftover manual tick timer from a previous
+            // active delivery before we evaluate restore state. A no-op
+            // if nothing was running.
+            StopManualTickTimer();
+            _manualTimerRunning = false;
 
             // If we previously persisted a fence-entry instant for THIS
             // delivery (i.e. the page just reloaded mid-delivery), restore
@@ -99,12 +114,84 @@ namespace PropaneDriver.Client.Services
                 && stored.DeliveryId == delivery.Id)
             {
                 _enteredFenceAtUtc = stored.EnteredAtUtc;
-                _lastCheckWasInsideGeoFence = true;
+
+                // Restore on the right channel: LongRunning addresses use
+                // the manual flow (GPS doesn't auto-stop), all others use
+                // the geofence-inside flag.
+                if (delivery.Location.LongRunning)
+                {
+                    _manualTimerRunning = true;
+                    StartManualTickTimer();
+                }
+                else
+                {
+                    _lastCheckWasInsideGeoFence = true;
+                }
             }
             else if (stored is not null)
             {
                 try { await _storage.RemoveFromStorage(TimerStorageKey); } catch { }
             }
+        }
+
+        // Driver-tapped Start. Only valid for a LongRunning active delivery
+        // that doesn't already have a timer running. Persists the start
+        // instant so a page reload mid-delivery resumes the same timer
+        // instead of restarting from zero.
+        public async Task StartManualTimerAsync()
+        {
+            if (_activeDelivery is null) return;
+            if (!_activeDelivery.Location.LongRunning) return;
+            if (_manualTimerRunning) return;
+
+            _enteredFenceAtUtc = DateTime.UtcNow;
+            _manualTimerRunning = true;
+
+            try
+            {
+                await _storage.SaveToStorageAsync(TimerStorageKey, new StoredTimerState
+                {
+                    DeliveryId = _activeDelivery.Id,
+                    EnteredAtUtc = _enteredFenceAtUtc.Value
+                });
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "GeoFenceService", $"Persisting manual-timer start failed: {ex.Message}");
+            }
+
+            StartManualTickTimer();
+            OnTimerTick?.Invoke(ElapsedSeconds);
+        }
+
+        // Driver-tapped Stop. Tears down the tick timer and feeds the
+        // standard save+complete+advance pipeline so completed-LongRunning
+        // deliveries take the same downstream path as fence-driven ones
+        // (DeliveryTime row saved, status=2, OnDeliveryCompleted fires).
+        public async Task StopManualTimerAsync()
+        {
+            if (!_manualTimerRunning) return;
+
+            StopManualTickTimer();
+            _manualTimerRunning = false;
+            await StopTimerAndSaveAsync();
+        }
+
+        private void StartManualTickTimer()
+        {
+            _manualTickTimer?.Dispose();
+            _manualTickTimer = new System.Threading.Timer(
+                _ => OnTimerTick?.Invoke(ElapsedSeconds),
+                state: null,
+                dueTime: TimeSpan.FromSeconds(1),
+                period: TimeSpan.FromSeconds(1));
+        }
+
+        private void StopManualTickTimer()
+        {
+            _manualTickTimer?.Dispose();
+            _manualTickTimer = null;
         }
 
         private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
@@ -124,6 +211,14 @@ namespace PropaneDriver.Client.Services
                 // worth noting once per delivery. Let the Admin page surface
                 // missing-GPS as a data-quality issue instead.
                 if (!_activeDelivery.Location.HasCoordinates)
+                {
+                    return;
+                }
+
+                // LongRunning addresses opt out of GPS-driven start/stop —
+                // the driver controls the timer with explicit buttons via
+                // StartManualTimerAsync / StopManualTimerAsync.
+                if (_activeDelivery.Location.LongRunning)
                 {
                     return;
                 }

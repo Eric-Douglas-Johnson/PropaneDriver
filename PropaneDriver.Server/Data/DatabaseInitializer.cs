@@ -68,6 +68,7 @@ namespace PropaneDriver.Server.Data
                             [AvgDeliveryTimeSeconds] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds] DEFAULT 0,
                             [TankLocation] nvarchar(500) NULL,
                             [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0,
+                            [LongRunning] bit NOT NULL CONSTRAINT [DF_Addresses_LongRunning] DEFAULT 0,
                             CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street], [City], [State], [ZipCode]),
                             CONSTRAINT [CK_Addresses_Street] CHECK (LEN(TRIM([Street])) > 0),
                             CONSTRAINT [CK_Addresses_City] CHECK (LEN(TRIM([City])) > 0),
@@ -93,6 +94,15 @@ namespace PropaneDriver.Server.Data
                         WHERE Name = N'BackIn' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
                     BEGIN
                         ALTER TABLE [Addresses] ADD [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0;
+                    END
+
+                    -- Self-migrate: add LongRunning flag. Same NOT NULL + DEFAULT 0
+                    -- pattern so existing addresses keep using the geofence flow.
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'LongRunning' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                    BEGIN
+                        ALTER TABLE [Addresses] ADD [LongRunning] bit NOT NULL CONSTRAINT [DF_Addresses_LongRunning] DEFAULT 0;
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')

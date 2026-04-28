@@ -6,6 +6,7 @@
 @inject GeocodingService Geocoder
 @inject HttpClient Http
 @inject SpeechService SpeechService
+@inject AddressApiService AddressApi
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Route Admin</PageTitle>
@@ -64,6 +65,10 @@
                             <th>Address</th>
                             <th>GPS</th>
                             <th>Status</th>
+                            <th>
+                                Long Running
+                                <span class="info-icon" title="@LongRunningDescription">?</span>
+                            </th>
                             <th>Alerts</th>
                         </tr>
                     </thead>
@@ -73,6 +78,7 @@
                         {
                             idx++;
                             var captured = del;
+                            var addressId = del.Location.Id;
                             <tr>
                                 <td>@idx</td>
                                 <td>@del.CustomerName</td>
@@ -88,6 +94,12 @@
                                     }
                                 </td>
                                 <td>@StatusText(del.Status)</td>
+                                <td>
+                                    <input type="checkbox"
+                                           checked="@del.Location.LongRunning"
+                                           disabled="@(_togglingLongRunningId == addressId)"
+                                           @onchange="e => ToggleLongRunning(captured, (bool)(e.Value ?? false))" />
+                                </td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-warning py-0 px-2"
                                             @onclick="() => OpenAlerts(captured)">
@@ -289,6 +301,13 @@
             {
                 <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
             }
+            <div class="admin-row mt-2" style="align-items:center;">
+                <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
+                    <input type="checkbox" @bind="_newLongRunning" />
+                    Long Running
+                    <span class="info-icon" title="@LongRunningDescription">?</span>
+                </label>
+            </div>
             <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
                     disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
                 Add Delivery
@@ -306,6 +325,10 @@
                         <th>Customer</th>
                         <th>Address</th>
                         <th>GPS</th>
+                        <th>
+                            Long Running
+                            <span class="info-icon" title="@LongRunningDescription">?</span>
+                        </th>
                         <th></th>
                     </tr>
                 </thead>
@@ -319,6 +342,7 @@
                             <td>@delivery.CustomerName</td>
                             <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
                             <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
+                            <td>@(delivery.LongRunning ? "Yes" : "No")</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RemovePending(capturedIndex)">X</button>
                             </td>
@@ -366,9 +390,20 @@
     private string _newLatStr = string.Empty;
     private string _newLonStr = string.Empty;
     private double _newAvgMin = 20;
+    private bool _newLongRunning;
     private bool _geocoding;
     private string? _geocodeStatus;
     private string _lastGeocodedAddress = string.Empty;
+
+    // Tracks the AddressId of the row whose LongRunning checkbox is mid-PUT
+    // so we can disable the input while the request is in flight and avoid
+    // a double-toggle race. Empty Guid = no row currently toggling.
+    private Guid _togglingLongRunningId = Guid.Empty;
+
+    // Single source of truth for the help-tooltip copy used by both the
+    // Add-Delivery checkbox and the existing-route table column.
+    private const string LongRunningDescription =
+        "Skip the GPS geofence auto-timer for this address. The driver will see Start/Stop buttons on the delivery page and the recorded time is saved when they tap Stop. Use this for stops where the truck sits parked for a long fill (e.g. bulk tanks) or where the geofence misfires.";
 
     private List<CreateDeliveryDto> _pendingDeliveries = new();
     private string? _createStatus;
@@ -604,7 +639,8 @@
             Latitude = lat,
             Longitude = lon,
             AvgDeliveryTimeMinutes = _newAvgMin,
-            SortOrder = _pendingDeliveries.Count
+            SortOrder = _pendingDeliveries.Count,
+            LongRunning = _newLongRunning
         });
 
         // Reset form (keep city/state/zip since they're often the same)
@@ -612,8 +648,41 @@
         _newStreet = string.Empty;
         _newLatStr = string.Empty;
         _newLonStr = string.Empty;
+        _newLongRunning = false;
         _geocodeStatus = null;
         _lastGeocodedAddress = string.Empty;
+    }
+
+    // Toggle LongRunning on an existing address by hitting the PUT endpoint.
+    // Updates the in-memory delivery's flag on success so the table reflects
+    // the change without a full route reload. On failure, surfaces a status
+    // line and reverts the bound checkbox by leaving Location.LongRunning
+    // unchanged (Blazor re-renders from that source of truth).
+    private async Task ToggleLongRunning(IDelivery delivery, bool newValue)
+    {
+        var addressId = delivery.Location.Id;
+        if (addressId == Guid.Empty) return;
+        if (_togglingLongRunningId != Guid.Empty) return;
+
+        _togglingLongRunningId = addressId;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateLongRunningAsync(addressId, newValue);
+
+        if (ok)
+        {
+            delivery.Location.LongRunning = newValue;
+            _routeStatus = $"Updated Long Running for {delivery.CustomerName} → {(newValue ? "On" : "Off")}.";
+            _routeStatusSuccess = true;
+        }
+        else
+        {
+            _routeStatus = $"Failed to update Long Running for {delivery.CustomerName} — see ErrorLog.";
+            _routeStatusSuccess = false;
+        }
+
+        _togglingLongRunningId = Guid.Empty;
+        StateHasChanged();
     }
 
     private void RemovePending(int index)

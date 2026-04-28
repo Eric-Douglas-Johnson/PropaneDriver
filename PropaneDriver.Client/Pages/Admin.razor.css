@@ -104,3 +104,27 @@
     align-items: center;
     gap: 0.4rem;
 }
+
+/* Small circled "?" used next to checkbox labels and column headers to
+   surface a help description via the native title tooltip. cursor:help
+   gives the OS a hint that hovering will show explanatory text. */
+.info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background-color: #2a2a4a;
+    color: #93c5fd;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: help;
+    user-select: none;
+    margin-left: 0.25rem;
+}
+
+.info-icon:hover {
+    background-color: #3a3a6a;
+    color: #ffffff;
+}

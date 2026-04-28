@@ -40,5 +40,7 @@ namespace PropaneDriver.Shared.Dtos
         public string? TankLocation { get; set; }
 
         public bool BackIn { get; set; }
+
+        public bool LongRunning { get; set; }
     }
 }

@@ -18,6 +18,10 @@ namespace PropaneDriver.Shared.Dtos
         // True when the driver must back the truck into this driveway.
         public bool BackIn { get; set; }
 
+        // True when this address skips the GPS-geofence timer flow and
+        // uses driver-driven Start/Stop buttons instead.
+        public bool LongRunning { get; set; }
+
         public string FullAddress =>
             string.Join(", ", new[] { Street, City, State, ZipCode }
                 .Where(s => !string.IsNullOrWhiteSpace(s)));
