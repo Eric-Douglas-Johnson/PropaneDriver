@@ -112,6 +112,10 @@
     color: white;
 }
 
+.nav-item ::deep a.active .bi {
+    visibility: hidden;
+}
+
 .nav-item ::deep .nav-link:hover {
     background-color: #252545;
     color: white;
