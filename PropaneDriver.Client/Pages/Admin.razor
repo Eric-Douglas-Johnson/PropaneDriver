@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject SpeechService SpeechService
 @inject AddressApiService AddressApi
+@inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Route Admin</PageTitle>
@@ -255,8 +256,9 @@
         <div class="admin-row mb-2">
             <div class="admin-field flex-2">
                 <label>Import from dispatch screenshot</label>
-                <InputFile @key="_importFileKey" OnChange="OnImportFileSelected" accept="image/*"
-                           class="form-control form-control-sm" />
+                <input type="file" id="dispatch-import-file" @key="_importFileKey"
+                       accept="image/*" class="form-control form-control-sm"
+                       @onchange="OnImportFileSelected" />
             </div>
         </div>
         @if (_importing)
@@ -763,19 +765,8 @@
             _pendingDeliveries.RemoveAt(index);
     }
 
-    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    private async Task OnImportFileSelected()
     {
-        var file = e.File;
-        if (file is null) return;
-
-        const long maxBytes = 10 * 1024 * 1024;
-        if (file.Size > maxBytes)
-        {
-            _importStatus = "File exceeds 10 MB.";
-            _importStatusSuccess = false;
-            return;
-        }
-
         _importing = true;
         _importStatus = null;
         _importedRows.Clear();
@@ -784,20 +775,35 @@
 
         try
         {
-            // Buffer the file in memory before posting. The streaming-from-
-            // IBrowserFile pattern is fragile on mobile browsers (the JS file
-            // handle isn't always ready immediately after the picker returns),
-            // and these screenshots are small enough that buffering is fine.
-            // Retry the read on transient failures so the user doesn't have
-            // to keep tapping Upload until it sticks.
-            byte[] bytes = await ReadWithRetryAsync(file, maxBytes);
+            // Read the picked file via FileReader in JS rather than
+            // IBrowserFile.OpenReadStream — the latter streams the file in
+            // chunks across JS interop and intermittently fails on Android
+            // Chrome with "the requested file could not be read".
+            var jsResult = await JS.InvokeAsync<JsFileResult?>(
+                "readDispatchFileAsBase64", "dispatch-import-file");
+            if (jsResult is null || string.IsNullOrEmpty(jsResult.Base64))
+            {
+                _importStatus = "No file selected.";
+                _importStatusSuccess = false;
+                return;
+            }
+
+            const long maxBytes = 10 * 1024 * 1024;
+            if (jsResult.Size > maxBytes)
+            {
+                _importStatus = "File exceeds 10 MB.";
+                _importStatusSuccess = false;
+                return;
+            }
+
+            var bytes = Convert.FromBase64String(jsResult.Base64);
 
             using var content = new MultipartFormDataContent();
             var byteContent = new ByteArrayContent(bytes);
-            byteContent.Headers.ContentType =
-                new System.Net.Http.Headers.MediaTypeHeaderValue(
-                    string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
-            content.Add(byteContent, "file", file.Name);
+            byteContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                string.IsNullOrEmpty(jsResult.ContentType) ? "application/octet-stream" : jsResult.ContentType);
+            content.Add(byteContent, "file",
+                string.IsNullOrEmpty(jsResult.FileName) ? "screenshot" : jsResult.FileName);
 
             var response = await Http.PostAsync("api/imports/dispatch-screenshot", content);
             if (!response.IsSuccessStatusCode)
@@ -816,8 +822,6 @@
         }
         catch (Exception ex)
         {
-            // Surface the inner exception too — Blazor wraps the real cause
-            // (e.g., browser file-API errors) in a generic outer message.
             var detail = ex.InnerException is null ? ex.Message : $"{ex.Message} — {ex.InnerException.Message}";
             _importStatus = $"Error: {detail}";
             _importStatusSuccess = false;
@@ -829,28 +833,11 @@
         }
     }
 
-    // The first OpenReadStream call after the file picker closes can
-    // intermittently throw "the requested file could not be read" while the
-    // JS-side file handle settles. A few quick retries clear the transient
-    // case without hiding a genuine read failure behind a long spin.
-    private static async Task<byte[]> ReadWithRetryAsync(IBrowserFile file, long maxBytes)
-    {
-        const int maxAttempts = 3;
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                await using var src = file.OpenReadStream(maxBytes);
-                await using var ms = new MemoryStream();
-                await src.CopyToAsync(ms);
-                return ms.ToArray();
-            }
-            catch when (attempt < maxAttempts)
-            {
-                await Task.Delay(150);
-            }
-        }
-    }
+    private sealed record JsFileResult(
+        [property: System.Text.Json.Serialization.JsonPropertyName("base64")] string Base64,
+        [property: System.Text.Json.Serialization.JsonPropertyName("contentType")] string ContentType,
+        [property: System.Text.Json.Serialization.JsonPropertyName("fileName")] string FileName,
+        [property: System.Text.Json.Serialization.JsonPropertyName("size")] long Size);
 
     private async Task LoadImportedRow(int index)
     {
