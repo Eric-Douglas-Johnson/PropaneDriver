@@ -10,9 +10,10 @@ main {
 
 .sidebar {
     background-color: #1a1a2e;
-    /* Pure black so it disappears against the active ribbon's right edge
-       instead of leaving a purple-grey sliver where they meet. */
-    border-right: 1px solid #000000;
+    /* Page-canvas color so it disappears against both the active ribbon
+       (same color) and the main content area (also same color), letting
+       the ribbon visually flow into the page without a sliver. */
+    border-right: 1px solid #0d1117;
 }
 
 .top-row {
