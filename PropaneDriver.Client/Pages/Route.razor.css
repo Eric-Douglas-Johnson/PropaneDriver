@@ -323,11 +323,25 @@
     font-size: 0.95rem;
 }
 
+/* Back-In status row inside the detail card. Renders the red truck SVG
+   alongside the field label so the driver gets the same visual cue as
+   the Navigation header without needing a separate trip there. */
+.detail-back-in .back-in-icon-img {
+    height: 2.5rem;
+    width: auto;
+    filter: drop-shadow(0 0 4px rgba(201, 42, 31, 0.45));
+}
+
+/* Solid divider between read-only details (above) and action buttons
+   (below) so the panel reads as two distinct zones — info vs. actions
+   — instead of one long undifferentiated stack. */
 .detail-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
     margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 2px solid #4a4a7a;
 }
 
 /* Manual Start/Stop panel for LongRunning addresses — only renders when
