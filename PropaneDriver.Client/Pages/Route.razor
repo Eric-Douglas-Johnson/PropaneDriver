@@ -186,15 +186,12 @@
                         title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
                     @(string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation) ? "Set Tank Location" : "Edit Tank Location")
                 </button>
-                @if (!_selectedDelivery.Location.BackIn)
-                {
-                    <button class="btn btn-lg btn-danger"
-                            @onclick="SetBackIn"
-                            disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
-                            title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Mark this driveway as requiring the truck to back in")">
-                        @(_settingBackIn ? "Saving…" : "+ Back In")
-                    </button>
-                }
+                <button class="btn btn-lg btn-danger"
+                        @onclick="ToggleBackIn"
+                        disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
+                        title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : (_selectedDelivery.Location.BackIn ? "Clear the back-in flag for this driveway" : "Mark this driveway as requiring the truck to back in"))">
+                    @(_settingBackIn ? "Saving…" : (_selectedDelivery.Location.BackIn ? "− Back In" : "+ Back In"))
+                </button>
             </div>
             @if (!string.IsNullOrEmpty(_addressGpsStatus))
             {
@@ -769,22 +766,25 @@
         _tankLocationStatus = null;
     }
 
-    // One-way: tapping "+ Back In" flips the flag from off → on. Clearing
-    // it back off lives on the Navigation page (tap the red icon there);
-    // we don't surface a clear here to keep this row compact.
-    private async Task SetBackIn()
+    // Toggles the BackIn flag for the selected delivery's address. Same
+    // button serves both directions — label flips between "+ Back In" and
+    // "− Back In" so the driver can clear a mistakenly-set flag without
+    // jumping to the Navigation page.
+    private async Task ToggleBackIn()
     {
         if (_selectedDelivery is null || _settingBackIn) return;
         var addressId = _selectedDelivery.Location.Id;
         if (addressId == Guid.Empty) return;
 
+        var newValue = !_selectedDelivery.Location.BackIn;
+
         _settingBackIn = true;
         StateHasChanged();
 
-        var ok = await AddressApi.UpdateBackInAsync(addressId, true);
+        var ok = await AddressApi.UpdateBackInAsync(addressId, newValue);
         if (ok)
         {
-            _selectedDelivery.Location.BackIn = true;
+            _selectedDelivery.Location.BackIn = newValue;
         }
 
         _settingBackIn = false;
