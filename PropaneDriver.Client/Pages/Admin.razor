@@ -261,7 +261,10 @@
         </div>
         @if (_importing)
         {
-            <div style="font-size:0.8rem; color:#8892b0;">Reading screenshot…</div>
+            <div class="d-flex align-items-center gap-2" style="font-size:0.8rem; color:#8892b0;">
+                <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+                <span>Reading screenshot… (this can take a few seconds)</span>
+            </div>
         }
         else if (!string.IsNullOrEmpty(_importStatus))
         {
@@ -827,12 +830,13 @@
     }
 
     // On Android Chrome the first OpenReadStream call after the file picker
-    // closes sometimes throws "the requested file could not be read" because
-    // the JS-side file handle hasn't fully settled yet. Empirically a few
-    // retries with a small delay get past it without user intervention.
+    // closes intermittently throws "the requested file could not be read"
+    // because the JS-side file handle hasn't fully settled. Empirically the
+    // window during which it stays unreadable can be several seconds, so we
+    // retry aggressively with a capped backoff before giving up.
     private static async Task<byte[]> ReadWithRetryAsync(IBrowserFile file, long maxBytes)
     {
-        const int maxAttempts = 5;
+        const int maxAttempts = 40;
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -844,7 +848,8 @@
             }
             catch when (attempt < maxAttempts)
             {
-                await Task.Delay(150 * attempt);
+                // Linear backoff capped at 400 ms — total worst case ~14 s.
+                await Task.Delay(Math.Min(100 + (50 * attempt), 400));
             }
         }
     }
