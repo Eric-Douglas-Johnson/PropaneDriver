@@ -251,6 +251,57 @@
     <div class="admin-card">
         <h5>Create New Route</h5>
 
+        <!-- Import from screenshot -->
+        <div class="admin-row mb-2">
+            <div class="admin-field flex-2">
+                <label>Import from dispatch screenshot</label>
+                <InputFile OnChange="OnImportFileSelected" accept="image/*"
+                           class="form-control form-control-sm" disabled="@_importing" />
+            </div>
+        </div>
+        @if (_importing)
+        {
+            <div style="font-size:0.8rem; color:#8892b0;">Reading screenshot…</div>
+        }
+        else if (!string.IsNullOrEmpty(_importStatus))
+        {
+            <div class="@(_importStatusSuccess ? "text-success" : "text-warning")"
+                 style="font-size:0.8rem;">@_importStatus</div>
+        }
+
+        @if (_importedRows.Count > 0)
+        {
+            <div class="mt-2">
+                <h6>Detected deliveries (@_importedRows.Count)</h6>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Customer</th>
+                            <th>Address</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < _importedRows.Count; i++)
+                        {
+                            var row = _importedRows[i];
+                            var idx = i;
+                            <tr>
+                                <td>@(i + 1)</td>
+                                <td>@row.CustomerName</td>
+                                <td>@row.Street, @row.City, @row.State @row.ZipCode</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info py-0 px-1"
+                                            @onclick="() => LoadImportedRow(idx)">Load</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
         <!-- Add delivery form -->
         <div class="add-delivery-form">
             <div class="admin-row">
@@ -403,12 +454,18 @@
     // Single source of truth for the help-tooltip copy used by both the
     // Add-Delivery checkbox and the existing-route table column.
     private const string LongRunningDescription =
-        "Skip the GPS geofence auto-timer for this address. The driver will see Start/Stop buttons on the delivery page and the recorded time is saved when they tap Stop. Use this for stops where the truck sits parked for a long fill (e.g. bulk tanks) or where the geofence misfires.";
+        "Use Start/Stop buttons on the delivery page to record delivery time.";
 
     private List<CreateDeliveryDto> _pendingDeliveries = new();
     private string? _createStatus;
     private bool _createSuccess;
     private bool _creating;
+
+    // Screenshot-import (OCR) state
+    private bool _importing;
+    private string? _importStatus;
+    private bool _importStatusSuccess;
+    private List<ParsedDeliveryDto> _importedRows = new();
 
     // Alert management
     private IDelivery? _alertDelivery;
@@ -689,6 +746,74 @@
     {
         if (index >= 0 && index < _pendingDeliveries.Count)
             _pendingDeliveries.RemoveAt(index);
+    }
+
+    private async Task OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        const long maxBytes = 10 * 1024 * 1024;
+        if (file.Size > maxBytes)
+        {
+            _importStatus = "File exceeds 10 MB.";
+            _importStatusSuccess = false;
+            return;
+        }
+
+        _importing = true;
+        _importStatus = null;
+        _importedRows.Clear();
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(maxBytes);
+            var streamContent = new StreamContent(stream);
+            streamContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
+            content.Add(streamContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/imports/dispatch-screenshot", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                _importStatus = $"Upload failed: {(int)response.StatusCode} {response.StatusCode}";
+                _importStatusSuccess = false;
+                return;
+            }
+
+            var parsed = await response.Content.ReadFromJsonAsync<ParsedDispatchDto>();
+            _importedRows = parsed?.Deliveries ?? new();
+            _importStatus = parsed?.Warning ?? $"Found {_importedRows.Count} deliveries.";
+            _importStatusSuccess = _importedRows.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            _importStatus = $"Error: {ex.Message}";
+            _importStatusSuccess = false;
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task LoadImportedRow(int index)
+    {
+        if (index < 0 || index >= _importedRows.Count) return;
+        var row = _importedRows[index];
+        _newCustomer = row.CustomerName;
+        _newStreet = row.Street;
+        _newCity = row.City;
+        _newState = string.IsNullOrWhiteSpace(row.State) ? _newState : row.State;
+        _newZip = row.ZipCode;
+        _newLatStr = string.Empty;
+        _newLonStr = string.Empty;
+        // Force TryGeocode to run even if the user previously geocoded this exact address.
+        _lastGeocodedAddress = string.Empty;
+        await TryGeocode();
     }
 
     private async Task CreateRoute()

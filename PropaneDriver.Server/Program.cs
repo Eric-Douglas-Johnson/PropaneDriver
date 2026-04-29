@@ -27,6 +27,7 @@ builder.Services.AddDbContext<PropaneDriverDbContext>(options =>
 });
 
 builder.Services.AddSingleton<EmailService>();
+builder.Services.AddSingleton<DocumentIntelligenceService>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
@@ -63,6 +64,7 @@ app.MapDeliveryTimeEndpoints();
 app.MapGeocodingEndpoints();
 app.MapConfigEndpoints();
 app.MapClientLogEndpoints();
+app.MapImportEndpoints();
 
 app.MapFallbackToFile("index.html");
 
