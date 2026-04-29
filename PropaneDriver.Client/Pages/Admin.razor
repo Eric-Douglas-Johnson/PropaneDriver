@@ -255,7 +255,7 @@
         <div class="admin-row mb-2">
             <div class="admin-field flex-2">
                 <label>Import from dispatch screenshot</label>
-                <InputFile OnChange="OnImportFileSelected" accept="image/*"
+                <InputFile @key="_importFileKey" OnChange="OnImportFileSelected" accept="image/*"
                            class="form-control form-control-sm" disabled="@_importing" />
             </div>
         </div>
@@ -475,6 +475,9 @@
     private bool _importStatusSuccess;
     private List<ParsedDeliveryDto> _importedRows = new();
     private List<string>? _importRawLines;
+    // Bumped after every upload attempt so the InputFile remounts and
+    // the browser file handle from the prior pick can't be reused.
+    private int _importFileKey;
 
     // Alert management
     private IDelivery? _alertDelivery;
@@ -823,6 +826,7 @@
         finally
         {
             _importing = false;
+            _importFileKey++;
         }
     }
 
