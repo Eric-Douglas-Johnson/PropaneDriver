@@ -352,10 +352,6 @@
                     <label>Longitude</label>
                     <input type="text" class="form-control form-control-sm" @bind="_newLonStr" />
                 </div>
-                <div class="admin-field" style="max-width:100px;">
-                    <label>Avg Min</label>
-                    <input type="number" class="form-control form-control-sm" @bind="_newAvgMin" />
-                </div>
             </div>
             @if (_geocoding)
             {
@@ -453,7 +449,6 @@
     private string _newZip = string.Empty;
     private string _newLatStr = string.Empty;
     private string _newLonStr = string.Empty;
-    private double _newAvgMin = 20;
     private bool _newLongRunning;
     private bool _geocoding;
     private string? _geocodeStatus;
@@ -712,7 +707,6 @@
             ZipCode = _newZip.Trim(),
             Latitude = lat,
             Longitude = lon,
-            AvgDeliveryTimeMinutes = _newAvgMin,
             SortOrder = _pendingDeliveries.Count,
             LongRunning = _newLongRunning
         });
