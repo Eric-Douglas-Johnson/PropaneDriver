@@ -163,6 +163,13 @@
                         <span>@_selectedDelivery.Location.Latitude.ToString("F6"), @_selectedDelivery.Location.Longitude.ToString("F6")</span>
                     </div>
                 }
+                @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
+                {
+                    <div class="detail-row">
+                        <label>Tank Location</label>
+                        <span>@_selectedDelivery.Location.TankLocation</span>
+                    </div>
+                }
                 <div class="detail-row">
                     <label>Avg Delivery Time</label>
                     <span>@_selectedDelivery.AvgDeliveryTimeMinutes min</span>
@@ -176,11 +183,79 @@
                         title="Overwrite this address's stored coordinates with the truck's current GPS fix">
                     @(_settingAddressGps ? "Saving…" : "Set GPS Pin")
                 </button>
+                <button class="btn btn-sm btn-outline-warning"
+                        @onclick="BeginAddAlert"
+                        disabled="@_addingAlertOpen">
+                    Add Alert
+                </button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="BeginEditTankLocation"
+                        disabled="@(_editingTankLocation || _selectedDelivery.Location.Id == Guid.Empty)"
+                        title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
+                    @(string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation) ? "Set Tank Location" : "Edit Tank Location")
+                </button>
             </div>
             @if (!string.IsNullOrEmpty(_addressGpsStatus))
             {
                 <div class="@(_addressGpsSuccess ? "text-success" : "text-danger") mt-1" style="font-size:0.8rem;">
                     @_addressGpsStatus
+                </div>
+            }
+            @if (_addingAlertOpen)
+            {
+                <div class="mt-2">
+                    <input type="text" class="form-control form-control-sm"
+                           placeholder="Alert message"
+                           value="@_alertDraft"
+                           @oninput="e => _alertDraft = e.Value?.ToString() ?? string.Empty"
+                           @onkeydown="OnAlertKeyDown" />
+                    <div class="d-flex gap-2 mt-1">
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="SaveAlert"
+                                disabled="@(_savingAlert || string.IsNullOrWhiteSpace(_alertDraft))">
+                            @(_savingAlert ? "Saving…" : "Save Alert")
+                        </button>
+                        <button class="btn btn-sm btn-secondary"
+                                @onclick="CancelAddAlert"
+                                disabled="@_savingAlert">Cancel</button>
+                    </div>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_alertSaveStatus))
+            {
+                <div class="@(_alertSaveSuccess ? "text-success" : "text-danger") mt-1" style="font-size:0.8rem;">
+                    @_alertSaveStatus
+                </div>
+            }
+            @if (_editingTankLocation)
+            {
+                <div class="mt-2">
+                    <input type="text" class="form-control form-control-sm"
+                           placeholder="e.g. behind garage, left of AC"
+                           value="@_tankLocationDraft"
+                           @oninput="e => _tankLocationDraft = e.Value?.ToString() ?? string.Empty" />
+                    <div class="d-flex gap-2 mt-1">
+                        <button class="btn btn-sm btn-primary"
+                                @onclick="SaveTankLocationNote"
+                                disabled="@(_savingTankLocation || string.IsNullOrWhiteSpace(_tankLocationDraft))">
+                            @(_savingTankLocation ? "Saving…" : "Save")
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
+                        {
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="ClearTankLocationNote"
+                                    disabled="@_savingTankLocation">Clear</button>
+                        }
+                        <button class="btn btn-sm btn-secondary"
+                                @onclick="CancelEditTankLocation"
+                                disabled="@_savingTankLocation">Cancel</button>
+                    </div>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_tankLocationStatus))
+            {
+                <div class="@(_tankLocationSuccess ? "text-success" : "text-danger") mt-1" style="font-size:0.8rem;">
+                    @_tankLocationStatus
                 </div>
             }
             @if (_selectedDelivery.Location.LongRunning && _activeDelivery?.Id == _selectedDelivery.Id)
@@ -282,6 +357,20 @@
     private bool _settingAddressGps;
     private string? _addressGpsStatus;
     private bool _addressGpsSuccess;
+
+    // Inline "Add Alert" editor state for the selected delivery.
+    private bool _addingAlertOpen;
+    private string _alertDraft = string.Empty;
+    private bool _savingAlert;
+    private string? _alertSaveStatus;
+    private bool _alertSaveSuccess;
+
+    // Inline "Set Tank Location" editor state for the selected delivery.
+    private bool _editingTankLocation;
+    private string _tankLocationDraft = string.Empty;
+    private bool _savingTankLocation;
+    private string? _tankLocationStatus;
+    private bool _tankLocationSuccess;
 
     // Disables the "Force Next" button while the status update is in flight
     // so the driver can't double-tap and skip two deliveries by accident.
@@ -663,8 +752,170 @@
     private void SelectDelivery(IDelivery delivery)
     {
         // Selecting a delivery only changes the detail view; the geofence
-        // stays locked to the current/active delivery.
+        // stays locked to the current/active delivery. Close any open
+        // inline editors so a draft for the previous row can't be saved
+        // against the newly-selected one.
         _selectedDelivery = delivery;
+        _addingAlertOpen = false;
+        _alertDraft = string.Empty;
+        _alertSaveStatus = null;
+        _editingTankLocation = false;
+        _tankLocationDraft = string.Empty;
+        _tankLocationStatus = null;
+    }
+
+    private void BeginAddAlert()
+    {
+        _alertDraft = string.Empty;
+        _alertSaveStatus = null;
+        _addingAlertOpen = true;
+    }
+
+    private void CancelAddAlert()
+    {
+        _addingAlertOpen = false;
+        _alertDraft = string.Empty;
+    }
+
+    private async Task OnAlertKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_savingAlert && !string.IsNullOrWhiteSpace(_alertDraft))
+        {
+            await SaveAlert();
+        }
+    }
+
+    private async Task SaveAlert()
+    {
+        if (_selectedDelivery is null
+            || string.IsNullOrWhiteSpace(_alertDraft)
+            || _savingAlert) return;
+
+        _savingAlert = true;
+        _alertSaveStatus = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/deliveries/{_selectedDelivery.Id}/alerts",
+                new CreateAlertDto { Message = _alertDraft.Trim() });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var created = await response.Content.ReadFromJsonAsync<AlertDto>();
+                if (created is not null)
+                {
+                    // Append to the in-memory delivery so the route-summary
+                    // Alerts strip picks it up on the next render — no need
+                    // to reload the route.
+                    _selectedDelivery.Alerts.Add(created);
+                }
+                _alertSaveStatus = "✓ Alert added";
+                _alertSaveSuccess = true;
+                _addingAlertOpen = false;
+                _alertDraft = string.Empty;
+            }
+            else
+            {
+                _alertSaveStatus = $"✗ Failed to add alert: {(int)response.StatusCode}";
+                _alertSaveSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _alertSaveStatus = $"✗ Error: {ex.Message}";
+            _alertSaveSuccess = false;
+        }
+        finally
+        {
+            _savingAlert = false;
+        }
+    }
+
+    private void BeginEditTankLocation()
+    {
+        if (_selectedDelivery is null) return;
+        _tankLocationDraft = _selectedDelivery.Location.TankLocation ?? string.Empty;
+        _tankLocationStatus = null;
+        _editingTankLocation = true;
+    }
+
+    private void CancelEditTankLocation()
+    {
+        _editingTankLocation = false;
+        _tankLocationDraft = string.Empty;
+    }
+
+    private async Task SaveTankLocationNote()
+    {
+        if (_selectedDelivery is null
+            || string.IsNullOrWhiteSpace(_tankLocationDraft)
+            || _savingTankLocation) return;
+
+        var addressId = _selectedDelivery.Location.Id;
+        if (addressId == Guid.Empty)
+        {
+            _tankLocationStatus = "✗ This delivery has no linked address record.";
+            _tankLocationSuccess = false;
+            return;
+        }
+
+        _savingTankLocation = true;
+        _tankLocationStatus = null;
+        StateHasChanged();
+
+        var trimmed = _tankLocationDraft.Trim();
+        var ok = await AddressApi.UpdateTankLocationAsync(addressId, trimmed);
+
+        if (ok)
+        {
+            _selectedDelivery.Location.TankLocation = trimmed;
+            _tankLocationStatus = "✓ Tank location saved";
+            _tankLocationSuccess = true;
+            _editingTankLocation = false;
+            _tankLocationDraft = string.Empty;
+        }
+        else
+        {
+            _tankLocationStatus = "✗ Failed to save — see ErrorLog.";
+            _tankLocationSuccess = false;
+        }
+
+        _savingTankLocation = false;
+    }
+
+    private async Task ClearTankLocationNote()
+    {
+        if (_selectedDelivery is null || _savingTankLocation) return;
+        var addressId = _selectedDelivery.Location.Id;
+        if (addressId == Guid.Empty) return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm", "Remove the tank location note for this address?");
+        if (!confirmed) return;
+
+        _savingTankLocation = true;
+        _tankLocationStatus = null;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateTankLocationAsync(addressId, null);
+
+        if (ok)
+        {
+            _selectedDelivery.Location.TankLocation = null;
+            _tankLocationStatus = "✓ Tank location cleared";
+            _tankLocationSuccess = true;
+            _editingTankLocation = false;
+            _tankLocationDraft = string.Empty;
+        }
+        else
+        {
+            _tankLocationStatus = "✗ Failed to clear — see ErrorLog.";
+            _tankLocationSuccess = false;
+        }
+
+        _savingTankLocation = false;
     }
 
     private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
