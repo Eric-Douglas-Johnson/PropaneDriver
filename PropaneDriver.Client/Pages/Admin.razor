@@ -269,6 +269,14 @@
                  style="font-size:0.8rem;">@_importStatus</div>
         }
 
+        @if (_importRawLines is not null && _importRawLines.Count > 0)
+        {
+            <div class="mt-2">
+                <h6>OCR raw text (no addresses matched)</h6>
+                <pre style="background:#1c2333;color:#cdd6f4;padding:0.5rem;border-radius:4px;font-size:0.75rem;max-height:300px;overflow:auto;">@string.Join("\n", _importRawLines)</pre>
+            </div>
+        }
+
         @if (_importedRows.Count > 0)
         {
             <div class="mt-2">
@@ -466,6 +474,7 @@
     private string? _importStatus;
     private bool _importStatusSuccess;
     private List<ParsedDeliveryDto> _importedRows = new();
+    private List<string>? _importRawLines;
 
     // Alert management
     private IDelivery? _alertDelivery;
@@ -764,6 +773,7 @@
         _importing = true;
         _importStatus = null;
         _importedRows.Clear();
+        _importRawLines = null;
         StateHasChanged();
 
         try
@@ -798,6 +808,7 @@
 
             var parsed = await response.Content.ReadFromJsonAsync<ParsedDispatchDto>();
             _importedRows = parsed?.Deliveries ?? new();
+            _importRawLines = parsed?.RawLines;
             _importStatus = parsed?.Warning ?? $"Found {_importedRows.Count} deliveries.";
             _importStatusSuccess = _importedRows.Count > 0;
         }

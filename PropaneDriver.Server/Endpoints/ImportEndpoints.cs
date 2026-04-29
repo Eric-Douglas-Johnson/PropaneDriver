@@ -37,7 +37,13 @@ namespace PropaneDriver.Server.Endpoints
                     {
                         Deliveries = deliveries.ToList(),
                         PageCount = ocr.Pages?.Count ?? 0,
-                        Warning = deliveries.Count == 0 ? "No addresses detected." : null
+                        Warning = deliveries.Count == 0 ? "No addresses detected." : null,
+                        // Diagnostic aid: when the parser finds nothing,
+                        // hand back the raw OCR lines so the user (or
+                        // we) can see what to tune the regex against.
+                        RawLines = deliveries.Count == 0
+                            ? DispatchScreenshotParser.FlattenLines(ocr).ToList()
+                            : null
                     });
                 }
                 catch (Exception ex)

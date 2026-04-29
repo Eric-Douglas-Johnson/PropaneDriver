@@ -19,6 +19,13 @@ namespace PropaneDriver.Server.Services
             @"^\s*([A-Za-z\.\-'’ ]+?),?\s+([A-Z]{2})\s+(\d{5})(?:-\d{4})?\s*$",
             RegexOptions.Compiled);
 
+        // Exposes the parser's view of the OCR result as plain top-to-bottom
+        // text lines. Used by the import endpoint to attach a diagnostic
+        // dump when no addresses are detected, so we can see what we're
+        // actually trying to match.
+        public static IReadOnlyList<string> FlattenLines(AnalyzeResult ocrResult)
+            => Flatten(ocrResult).Select(l => l.Text).ToList();
+
         public static IReadOnlyList<ParsedDeliveryDto> Parse(AnalyzeResult ocrResult)
         {
             var lines = Flatten(ocrResult);
