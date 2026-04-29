@@ -148,22 +148,13 @@
         {
             <h5>Delivery Details</h5>
             <div class="detail-card">
-                <div class="detail-row detail-back-in">
-                    <label>Back In</label>
-                    @if (_selectedDelivery.Location.BackIn)
-                    {
+                @if (_selectedDelivery.Location.BackIn)
+                {
+                    <div class="detail-row detail-back-in">
+                        <label>Back In</label>
                         <img src="icons/back-in.svg" alt="Back In" class="back-in-icon-img" />
-                    }
-                    else
-                    {
-                        <button class="btn-back-in-set"
-                                @onclick="SetBackIn"
-                                disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
-                                title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Mark this driveway as requiring the truck to back in")">
-                            @(_settingBackIn ? "Saving…" : "+ Back In")
-                        </button>
-                    }
-                </div>
+                    </div>
+                }
                 @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
                 {
                     <div class="detail-row">
@@ -195,6 +186,15 @@
                         title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
                     @(string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation) ? "Set Tank Location" : "Edit Tank Location")
                 </button>
+                @if (!_selectedDelivery.Location.BackIn)
+                {
+                    <button class="btn btn-lg btn-danger"
+                            @onclick="SetBackIn"
+                            disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
+                            title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Mark this driveway as requiring the truck to back in")">
+                        @(_settingBackIn ? "Saving…" : "+ Back In")
+                    </button>
+                }
             </div>
             @if (!string.IsNullOrEmpty(_addressGpsStatus))
             {
