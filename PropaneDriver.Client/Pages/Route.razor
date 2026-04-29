@@ -177,18 +177,18 @@
             </div>
             <div class="detail-actions">
                 <button class="btn btn-lg btn-primary" @onclick="NavigateToSelected">Navigate</button>
-                <button class="btn btn-sm btn-outline-info"
+                <button class="btn btn-lg btn-info"
                         @onclick="SetAddressGpsFromTruck"
                         disabled="@_settingAddressGps"
                         title="Overwrite this address's stored coordinates with the truck's current GPS fix">
                     @(_settingAddressGps ? "Saving…" : "Set GPS Pin")
                 </button>
-                <button class="btn btn-sm btn-outline-warning"
+                <button class="btn btn-lg btn-warning"
                         @onclick="BeginAddAlert"
                         disabled="@_addingAlertOpen">
                     Add Alert
                 </button>
-                <button class="btn btn-sm btn-outline-secondary"
+                <button class="btn btn-lg btn-secondary"
                         @onclick="BeginEditTankLocation"
                         disabled="@(_editingTankLocation || _selectedDelivery.Location.Id == Guid.Empty)"
                         title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
