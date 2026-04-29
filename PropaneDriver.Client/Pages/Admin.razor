@@ -256,7 +256,7 @@
             <div class="admin-field flex-2">
                 <label>Import from dispatch screenshot</label>
                 <InputFile @key="_importFileKey" OnChange="OnImportFileSelected" accept="image/*"
-                           class="form-control form-control-sm" disabled="@_importing" />
+                           class="form-control form-control-sm" />
             </div>
         </div>
         @if (_importing)
@@ -829,14 +829,13 @@
         }
     }
 
-    // On Android Chrome the first OpenReadStream call after the file picker
-    // closes intermittently throws "the requested file could not be read"
-    // because the JS-side file handle hasn't fully settled. Empirically the
-    // window during which it stays unreadable can be several seconds, so we
-    // retry aggressively with a capped backoff before giving up.
+    // The first OpenReadStream call after the file picker closes can
+    // intermittently throw "the requested file could not be read" while the
+    // JS-side file handle settles. A few quick retries clear the transient
+    // case without hiding a genuine read failure behind a long spin.
     private static async Task<byte[]> ReadWithRetryAsync(IBrowserFile file, long maxBytes)
     {
-        const int maxAttempts = 40;
+        const int maxAttempts = 3;
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -848,8 +847,7 @@
             }
             catch when (attempt < maxAttempts)
             {
-                // Linear backoff capped at 400 ms — total worst case ~14 s.
-                await Task.Delay(Math.Min(100 + (50 * attempt), 400));
+                await Task.Delay(150);
             }
         }
     }
