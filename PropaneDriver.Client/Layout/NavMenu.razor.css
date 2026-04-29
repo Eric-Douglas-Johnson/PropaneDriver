@@ -107,13 +107,12 @@
         white-space: nowrap;
     }
 
-/* Active link is rendered as a black "ribbon" matching the main page
-   background (#0d1117). Negative horizontal margins cancel the .nav-item
-   px-3 padding so the highlight extends edge-to-edge across the sidebar,
-   and 1rem of internal padding keeps the text in the same position as
-   the inactive rows. */
+/* Active link is rendered as a pure-black ribbon. Negative horizontal
+   margins cancel the .nav-item px-3 padding so the highlight extends
+   edge-to-edge across the sidebar, and 1rem of internal padding keeps
+   the text in the same position as the inactive rows. */
 .nav-item ::deep a.active {
-    background-color: #0d1117;
+    background-color: #000000;
     color: white;
     margin-left: -1rem;
     margin-right: -1rem;
