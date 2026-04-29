@@ -131,6 +131,13 @@
     color: white;
 }
 
+/* Without this, hovering the freshly-clicked active link reapplies the
+   generic .nav-link:hover background and the pure-black ribbon shifts
+   to purple until the cursor moves away. */
+.nav-item ::deep a.active:hover {
+    background-color: #000000;
+}
+
 .nav-scrollable {
     display: none;
 }
