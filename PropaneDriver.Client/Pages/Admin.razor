@@ -768,18 +768,30 @@
 
         try
         {
+            // Buffer the file in memory before posting. The streaming-from-
+            // IBrowserFile pattern is fragile on mobile browsers (the JS file
+            // handle can go stale mid-read), and these screenshots are small
+            // enough that buffering is fine.
+            byte[] bytes;
+            await using (var src = file.OpenReadStream(maxBytes))
+            await using (var ms = new MemoryStream())
+            {
+                await src.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
+
             using var content = new MultipartFormDataContent();
-            var stream = file.OpenReadStream(maxBytes);
-            var streamContent = new StreamContent(stream);
-            streamContent.Headers.ContentType =
+            var byteContent = new ByteArrayContent(bytes);
+            byteContent.Headers.ContentType =
                 new System.Net.Http.Headers.MediaTypeHeaderValue(
                     string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
-            content.Add(streamContent, "file", file.Name);
+            content.Add(byteContent, "file", file.Name);
 
             var response = await Http.PostAsync("api/imports/dispatch-screenshot", content);
             if (!response.IsSuccessStatusCode)
             {
-                _importStatus = $"Upload failed: {(int)response.StatusCode} {response.StatusCode}";
+                var body = await response.Content.ReadAsStringAsync();
+                _importStatus = $"Upload failed: {(int)response.StatusCode} {response.StatusCode} — {body}";
                 _importStatusSuccess = false;
                 return;
             }
@@ -791,7 +803,10 @@
         }
         catch (Exception ex)
         {
-            _importStatus = $"Error: {ex.Message}";
+            // Surface the inner exception too — Blazor wraps the real cause
+            // (e.g., browser file-API errors) in a generic outer message.
+            var detail = ex.InnerException is null ? ex.Message : $"{ex.Message} — {ex.InnerException.Message}";
+            _importStatus = $"Error: {detail}";
             _importStatusSuccess = false;
         }
         finally
