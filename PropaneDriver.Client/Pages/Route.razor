@@ -148,21 +148,6 @@
         {
             <h5>Delivery Details</h5>
             <div class="detail-card">
-                <div class="detail-row">
-                    <label>Customer</label>
-                    <span>@_selectedDelivery.CustomerName</span>
-                </div>
-                <div class="detail-row">
-                    <label>Address</label>
-                    <span>@_selectedDelivery.Location.FullAddress</span>
-                </div>
-                @if (_selectedDelivery.Location.HasCoordinates)
-                {
-                    <div class="detail-row">
-                        <label>GPS</label>
-                        <span>@_selectedDelivery.Location.Latitude.ToString("F6"), @_selectedDelivery.Location.Longitude.ToString("F6")</span>
-                    </div>
-                }
                 @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
                 {
                     <div class="detail-row">
