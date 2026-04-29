@@ -10,7 +10,9 @@ main {
 
 .sidebar {
     background-color: #1a1a2e;
-    border-right: 1px solid #2a2a4a;
+    /* Pure black so it disappears against the active ribbon's right edge
+       instead of leaving a purple-grey sliver where they meet. */
+    border-right: 1px solid #000000;
 }
 
 .top-row {
