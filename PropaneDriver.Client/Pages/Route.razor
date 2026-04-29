@@ -148,13 +148,22 @@
         {
             <h5>Delivery Details</h5>
             <div class="detail-card">
-                @if (_selectedDelivery.Location.BackIn)
-                {
-                    <div class="detail-row detail-back-in">
-                        <label>Back In</label>
+                <div class="detail-row detail-back-in">
+                    <label>Back In</label>
+                    @if (_selectedDelivery.Location.BackIn)
+                    {
                         <img src="icons/back-in.svg" alt="Back In" class="back-in-icon-img" />
-                    </div>
-                }
+                    }
+                    else
+                    {
+                        <button class="btn-back-in-set"
+                                @onclick="SetBackIn"
+                                disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
+                                title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Mark this driveway as requiring the truck to back in")">
+                            @(_settingBackIn ? "Saving…" : "+ Back In")
+                        </button>
+                    }
+                </div>
                 @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
                 {
                     <div class="detail-row">
@@ -349,6 +358,10 @@
     private bool _settingAddressGps;
     private string? _addressGpsStatus;
     private bool _addressGpsSuccess;
+
+    // Disables the "+ Back In" button while the PUT is in flight so a
+    // double-tap can't fire two writes.
+    private bool _settingBackIn;
 
     // Inline "Add Alert" editor state for the selected delivery.
     private bool _addingAlertOpen;
@@ -754,6 +767,27 @@
         _editingTankLocation = false;
         _tankLocationDraft = string.Empty;
         _tankLocationStatus = null;
+    }
+
+    // One-way: tapping "+ Back In" flips the flag from off → on. Clearing
+    // it back off lives on the Navigation page (tap the red icon there);
+    // we don't surface a clear here to keep this row compact.
+    private async Task SetBackIn()
+    {
+        if (_selectedDelivery is null || _settingBackIn) return;
+        var addressId = _selectedDelivery.Location.Id;
+        if (addressId == Guid.Empty) return;
+
+        _settingBackIn = true;
+        StateHasChanged();
+
+        var ok = await AddressApi.UpdateBackInAsync(addressId, true);
+        if (ok)
+        {
+            _selectedDelivery.Location.BackIn = true;
+        }
+
+        _settingBackIn = false;
     }
 
     private void BeginAddAlert()

@@ -332,6 +332,31 @@
     filter: drop-shadow(0 0 4px rgba(201, 42, 31, 0.45));
 }
 
+/* Off-state button shown in place of the icon when BackIn is false. Red
+   outline keeps the visual association with the icon it'll be replaced
+   by, but stays subdued so an unset row doesn't shout for attention. */
+.btn-back-in-set {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    background-color: transparent;
+    color: #c92a1f;
+    border: 1px solid #c92a1f;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-back-in-set:hover:not(:disabled) {
+    background-color: rgba(201, 42, 31, 0.12);
+}
+
+.btn-back-in-set:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* Solid divider between read-only details (above) and action buttons
    (below) so the panel reads as two distinct zones — info vs. actions
    — instead of one long undifferentiated stack. */
