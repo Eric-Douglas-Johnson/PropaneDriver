@@ -783,15 +783,11 @@
         {
             // Buffer the file in memory before posting. The streaming-from-
             // IBrowserFile pattern is fragile on mobile browsers (the JS file
-            // handle can go stale mid-read), and these screenshots are small
-            // enough that buffering is fine.
-            byte[] bytes;
-            await using (var src = file.OpenReadStream(maxBytes))
-            await using (var ms = new MemoryStream())
-            {
-                await src.CopyToAsync(ms);
-                bytes = ms.ToArray();
-            }
+            // handle isn't always ready immediately after the picker returns),
+            // and these screenshots are small enough that buffering is fine.
+            // Retry the read on transient failures so the user doesn't have
+            // to keep tapping Upload until it sticks.
+            byte[] bytes = await ReadWithRetryAsync(file, maxBytes);
 
             using var content = new MultipartFormDataContent();
             var byteContent = new ByteArrayContent(bytes);
@@ -827,6 +823,29 @@
         {
             _importing = false;
             _importFileKey++;
+        }
+    }
+
+    // On Android Chrome the first OpenReadStream call after the file picker
+    // closes sometimes throws "the requested file could not be read" because
+    // the JS-side file handle hasn't fully settled yet. Empirically a few
+    // retries with a small delay get past it without user intervention.
+    private static async Task<byte[]> ReadWithRetryAsync(IBrowserFile file, long maxBytes)
+    {
+        const int maxAttempts = 5;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var src = file.OpenReadStream(maxBytes);
+                await using var ms = new MemoryStream();
+                await src.CopyToAsync(ms);
+                return ms.ToArray();
+            }
+            catch when (attempt < maxAttempts)
+            {
+                await Task.Delay(150 * attempt);
+            }
         }
     }
 
