@@ -372,6 +372,13 @@
                     disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
                 Add Delivery
             </button>
+            @if (_loadedRoute is not null)
+            {
+                <button class="btn btn-sm btn-outline-success mt-2 ms-2" @onclick="AddDeliveryToLoadedRoute"
+                        disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                    @(_appendingToRoute ? "Adding…" : "Add to Loaded Route")
+                </button>
+            }
         </div>
 
         <!-- Pending deliveries -->
@@ -468,6 +475,7 @@
     private string? _createStatus;
     private bool _createSuccess;
     private bool _creating;
+    private bool _appendingToRoute;
 
     // Screenshot-import (OCR) state
     private bool _importing;
@@ -719,6 +727,65 @@
         _newLongRunning = false;
         _geocodeStatus = null;
         _lastGeocodedAddress = string.Empty;
+    }
+
+    // Append the current form's delivery directly onto _loadedRoute via the
+    // server endpoint. Bypasses _pendingDeliveries — that list is only for
+    // building a brand-new route. On success, refresh the loaded route so
+    // the new stop shows up at the bottom of the table.
+    private async Task AddDeliveryToLoadedRoute()
+    {
+        if (_loadedRoute is null) return;
+        if (string.IsNullOrWhiteSpace(_newCustomer) ||
+            string.IsNullOrWhiteSpace(_newStreet) ||
+            string.IsNullOrWhiteSpace(_newCity) ||
+            string.IsNullOrWhiteSpace(_newState) ||
+            string.IsNullOrWhiteSpace(_newZip)) return;
+
+        double.TryParse(_newLatStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lat);
+        double.TryParse(_newLonStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lon);
+
+        var dto = new CreateDeliveryDto
+        {
+            CustomerName = _newCustomer.Trim(),
+            Street = _newStreet.Trim(),
+            City = _newCity.Trim(),
+            State = _newState.Trim(),
+            ZipCode = _newZip.Trim(),
+            Latitude = lat,
+            Longitude = lon,
+            LongRunning = _newLongRunning
+        };
+
+        _appendingToRoute = true;
+        StateHasChanged();
+
+        var ok = await RouteApi.AddDeliveryToRouteAsync(_loadedRoute.Id, dto);
+
+        if (ok)
+        {
+            _routeStatus = $"Added {dto.CustomerName} to the route.";
+            _routeStatusSuccess = true;
+
+            _newCustomer = string.Empty;
+            _newStreet = string.Empty;
+            _newLatStr = string.Empty;
+            _newLonStr = string.Empty;
+            _newLongRunning = false;
+            _geocodeStatus = null;
+            _lastGeocodedAddress = string.Empty;
+
+            await LoadRoute();
+        }
+        else
+        {
+            _routeStatus = "Failed to add delivery — check error logs.";
+            _routeStatusSuccess = false;
+        }
+
+        _appendingToRoute = false;
     }
 
     // Toggle LongRunning on an existing address by hitting the PUT endpoint.

@@ -119,5 +119,31 @@ namespace PropaneDriver.Client.Services
                 return false;
             }
         }
+
+        public async Task<bool> AddDeliveryToRouteAsync(string routeId, CreateDeliveryDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(routeId)) return false;
+
+            try
+            {
+                var response = await _http.PostAsJsonAsync($"api/routes/{routeId}/deliveries", dto);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "RouteApiService.AddDeliveryToRouteAsync",
+                        $"POST api/routes/{routeId}/deliveries returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "RouteApiService.AddDeliveryToRouteAsync",
+                    $"Exception adding delivery to route {routeId}: {ex.Message}");
+                return false;
+            }
+        }
     }
 }

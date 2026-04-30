@@ -323,6 +323,123 @@ namespace PropaneDriver.Server.Endpoints
                 }
             });
 
+            // Append a single delivery to the end of an existing route.
+            // Mirrors the address-upsert logic from POST api/routes so a brand-
+            // new address gets created and an existing one is reused (with a
+            // case-insensitive collation match). SortOrder is max+1 so the new
+            // stop renders last in the table.
+            group.MapPost("{routeId:guid}/deliveries", async (
+                Guid routeId,
+                CreateDeliveryDto dto,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                if (string.IsNullOrWhiteSpace(dto.CustomerName) ||
+                    string.IsNullOrWhiteSpace(dto.Street) ||
+                    string.IsNullOrWhiteSpace(dto.City) ||
+                    string.IsNullOrWhiteSpace(dto.State) ||
+                    string.IsNullOrWhiteSpace(dto.ZipCode))
+                    return Results.BadRequest(new { Message = "Customer name and all address fields are required." });
+
+                try
+                {
+                    var route = await db.Routes
+                        .Include(r => r.Deliveries)
+                        .FirstOrDefaultAsync(r => r.Id == routeId);
+                    if (route is null) return Results.NotFound();
+
+                    var street = dto.Street.Trim();
+                    var city = dto.City.Trim();
+                    var state = dto.State.Trim();
+                    var zip = dto.ZipCode.Trim();
+
+                    const string ci = "SQL_Latin1_General_CP1_CI_AS";
+                    var address = await db.Addresses.FirstOrDefaultAsync(a =>
+                        EF.Functions.Collate(a.Street, ci) == street
+                        && EF.Functions.Collate(a.City, ci) == city
+                        && EF.Functions.Collate(a.State, ci) == state
+                        && EF.Functions.Collate(a.ZipCode, ci) == zip);
+
+                    var tankLocation = string.IsNullOrWhiteSpace(dto.TankLocation)
+                        ? null
+                        : dto.TankLocation.Trim();
+
+                    if (address is null)
+                    {
+                        address = new AddressDbRecord
+                        {
+                            Id = Guid.NewGuid(),
+                            Street = street,
+                            City = city,
+                            State = state,
+                            ZipCode = zip,
+                            Latitude = dto.Latitude,
+                            Longitude = dto.Longitude,
+                            AvgDeliveryTimeSeconds = 0,
+                            TankLocation = tankLocation,
+                            BackIn = dto.BackIn,
+                            LongRunning = dto.LongRunning
+                        };
+                        db.Addresses.Add(address);
+                    }
+                    else
+                    {
+                        if (dto.Latitude != 0 || dto.Longitude != 0)
+                        {
+                            address.Latitude = dto.Latitude;
+                            address.Longitude = dto.Longitude;
+                        }
+                        if (tankLocation is not null)
+                        {
+                            address.TankLocation = tankLocation;
+                        }
+                    }
+                    await db.SaveChangesAsync();
+
+                    var nextSort = route.Deliveries.Count == 0
+                        ? 0
+                        : route.Deliveries.Max(d => d.SortOrder) + 1;
+
+                    var delivery = new DeliveryDbRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        RouteId = route.Id,
+                        AddressId = address.Id,
+                        CustomerName = dto.CustomerName.Trim(),
+                        AvgDeliveryTimeMinutes = dto.AvgDeliveryTimeMinutes,
+                        SortOrder = nextSort,
+                        Status = 0,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    db.Deliveries.Add(delivery);
+                    await db.SaveChangesAsync();
+
+                    // Recompute estimated route time now that the new stop is in.
+                    var allDeliveries = await db.Deliveries
+                        .Where(d => d.RouteId == route.Id)
+                        .ToListAsync();
+                    var addressIds = allDeliveries.Select(d => d.AddressId).Distinct().ToList();
+                    var allAddresses = await db.Addresses
+                        .Where(a => addressIds.Contains(a.Id))
+                        .ToListAsync();
+                    route.EstimatedRouteTime = await GPSHelperService.GetEstimatedRouteTime(
+                        allDeliveries, allAddresses);
+                    await db.SaveChangesAsync();
+
+                    return Results.Ok(new
+                    {
+                        delivery.Id,
+                        delivery.SortOrder,
+                        route.EstimatedRouteTime
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to add delivery to route {RouteId}", routeId);
+                    return Results.Problem(detail: ex.Message, title: "Failed to add delivery", statusCode: 500);
+                }
+            });
+
             return app;
         }
     }
