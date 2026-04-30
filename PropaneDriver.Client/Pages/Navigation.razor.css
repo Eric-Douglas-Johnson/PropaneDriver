@@ -46,6 +46,26 @@
     min-width: 0;
 }
 
+/* Alerts row sits directly under the back-in / tank-location row so
+   the driver sees any warnings tied to this delivery the moment they
+   arrive on the nav page. Reuses the amber-on-dark palette the route
+   page uses for its alert badges. */
+.nav-alerts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.6rem;
+}
+
+.nav-alert {
+    font-size: 1.05rem;
+    font-weight: 500;
+    padding: 0.35rem 0.8rem;
+    border-radius: 4px;
+    background-color: #3b2a10;
+    color: #f59e0b;
+}
+
 /* Container button for the red Back-In icon image. Transparent so the
    SVG carries all the visual weight; minor padding + drop-shadow give
    it presence on the dark header without competing with the icon. */

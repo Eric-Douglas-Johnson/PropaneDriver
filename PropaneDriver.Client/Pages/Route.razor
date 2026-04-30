@@ -658,7 +658,7 @@
         // page can show the note below the address without an extra
         // server round-trip, and knows which address to PUT against
         // when the driver taps "Add tank location".
-        var qs = $"destination={dest}&addressId={delivery.Location.Id}";
+        var qs = $"destination={dest}&addressId={delivery.Location.Id}&deliveryId={delivery.Id}";
         if (!string.IsNullOrWhiteSpace(delivery.Location.TankLocation))
         {
             qs += $"&tankLocation={Uri.EscapeDataString(delivery.Location.TankLocation)}";
