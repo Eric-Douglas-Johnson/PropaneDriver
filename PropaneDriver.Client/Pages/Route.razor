@@ -164,7 +164,7 @@
                 }
                 <div class="detail-row">
                     <label>Avg Delivery Time</label>
-                    <span>@_selectedDelivery.AvgDeliveryTimeMinutes min</span>
+                    <span>@((_selectedDelivery.Location.AvgDeliveryTimeSeconds / 60.0).ToString("F1")) min</span>
                 </div>
             </div>
             <div class="detail-actions">
