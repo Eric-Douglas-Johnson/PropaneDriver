@@ -308,6 +308,48 @@
             });
         };
 
+        // Same as above but returns every file selected on the input as an
+        // array. Used by the dispatch-import flow when the operator picks
+        // multiple screenshots at once. Read sequentially so a single
+        // unreadable file rejects the whole batch and the caller can show
+        // a useful error rather than a partial silent success.
+        window.readAllDispatchFilesAsBase64 = function (inputId) {
+            return new Promise(function (resolve, reject) {
+                var input = document.getElementById(inputId);
+                if (!input || !input.files || input.files.length === 0) {
+                    resolve([]);
+                    return;
+                }
+                var files = Array.prototype.slice.call(input.files);
+                var results = [];
+                function readNext(i) {
+                    if (i >= files.length) {
+                        resolve(results);
+                        return;
+                    }
+                    var file = files[i];
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        var dataUrl = reader.result || '';
+                        var commaIdx = dataUrl.indexOf(',');
+                        var base64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : '';
+                        results.push({
+                            base64: base64,
+                            contentType: file.type || '',
+                            fileName: file.name || '',
+                            size: file.size || 0
+                        });
+                        readNext(i + 1);
+                    };
+                    reader.onerror = function () {
+                        reject((reader.error && reader.error.message) || 'FileReader failed');
+                    };
+                    reader.readAsDataURL(file);
+                }
+                readNext(0);
+            });
+        };
+
         // ===== Speech recognition interop =====
         window.startDictation = function () {
             return new Promise(function (resolve) {
