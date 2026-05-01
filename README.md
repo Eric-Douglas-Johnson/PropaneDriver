@@ -4,8 +4,6 @@ A full-stack delivery app for propane bobtail drivers. Built solo, with AI assis
 
 > "Driver first. Everything else second."
 
-This README is written for hiring managers evaluating engineers who work fluently with AI tooling. It describes what the project is, how it's built, and which decisions were made by a human rather than handed off to a model.
-
 ---
 
 ## What it is
@@ -118,6 +116,4 @@ PropaneDriver.Tests/ Endpoint and service tests (xUnit)
 
 ## On AI assistance, plainly
 
-The engineer behind this project uses AI assistants the way a senior engineer uses a fast junior who never gets tired: it drafts, refactors, and chases down boilerplate while the human owns the design, reviews the diff, and decides what ships. The decisions in the *Notable engineering decisions* section above were not produced by a prompt — they were imposed on the code by someone who has seen what happens when you get them wrong.
-
-If you are hiring engineers who work this way, the right thing to evaluate is not whether they used AI but whether they knew what to do with what it gave them. The codebase is the answer to that question.
+The engineer behind this project used Claude the way a senior engineer uses a fast junior who never gets tired: it drafts, refactors, and chases down boilerplate while the human owns the design, reviews the diff, and decides what ships. The decisions in the *Notable engineering decisions* section above were not produced by a prompt — they were imposed on the code by someone who has seen what happens when you get them wrong.
