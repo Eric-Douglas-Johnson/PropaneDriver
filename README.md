@@ -1,6 +1,6 @@
 # PropaneDriver
 
-A full-stack delivery app for propane bobtail drivers. Built solo, with heavy AI assistance, by an engineer who spent a decade behind the wheel of one.
+A full-stack delivery app for propane bobtail drivers. Built solo, with AI assistance from Claude.
 
 > "Driver first. Everything else second."
 
@@ -12,7 +12,7 @@ This README is written for hiring managers evaluating engineers who work fluentl
 
 PropaneDriver is a working Blazor WebAssembly + ASP.NET Core 8 application that handles the day-to-day workflow of a propane delivery driver: routes, deliveries, addresses with gate codes and tank locations, geofenced arrival detection, voice prompts for hands-on-the-wheel use, dispatch screenshot ingestion, and per-address delivery-time history.
 
-The domain is not a toy. The author drove propane for ten years — eight winters, 4 a.m. starts, frozen tanks, dispatch software that crashed for months at a time. Every UI decision has a reason behind it that a product manager could not have surfaced from a focus group.
+The domain is not a toy. The author is currently a propane driver. Every UI decision has a reason behind it that a product manager could not have surfaced from a focus group.
 
 ## Screenshots
 
