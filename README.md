@@ -48,7 +48,7 @@ Pick a driver and a date, edit the route. Addresses are normalized through Googl
 
 ---
 
-## What it demonstrates to a hiring manager
+## What it demonstrates
 
 - **A complete, deployed application** — not a tutorial fork or a half-finished side project. Auth, persistence, cloud services, OCR, email, geocoding, and a passing test suite all coexist in one repo.
 - **AI used as a force multiplier, not a substitute for judgment.** The architecture, the domain model, the trade-offs, the security choices, the data shape — all driven by the engineer. The model wrote a lot of the keystrokes; it did not pick the destination.
