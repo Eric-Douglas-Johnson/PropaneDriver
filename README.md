@@ -1,10 +1,8 @@
 # PropaneDriver
 
-A full-stack delivery app for propane bobtail drivers. Built solo, with heavy AI assistance, by an engineer who spent a decade behind the wheel of one.
+A full-stack delivery app for propane bobtail drivers. Built solo, with AI assistance from Claude.
 
 > "Driver first. Everything else second."
-
-This README is written for hiring managers evaluating engineers who work fluently with AI tooling. It describes what the project is, how it's built, and which decisions were made by a human rather than handed off to a model.
 
 ---
 
@@ -12,7 +10,7 @@ This README is written for hiring managers evaluating engineers who work fluentl
 
 PropaneDriver is a working Blazor WebAssembly + ASP.NET Core 8 application that handles the day-to-day workflow of a propane delivery driver: routes, deliveries, addresses with gate codes and tank locations, geofenced arrival detection, voice prompts for hands-on-the-wheel use, dispatch screenshot ingestion, and per-address delivery-time history.
 
-The domain is not a toy. The author drove propane for ten years — eight winters, 4 a.m. starts, frozen tanks, dispatch software that crashed for months at a time. Every UI decision has a reason behind it that a product manager could not have surfaced from a focus group.
+The domain is not a toy. The author is currently a propane driver. Every UI decision has a reason behind it that a product manager could not have surfaced from a focus group.
 
 ## Screenshots
 
@@ -26,22 +24,22 @@ Driver-role auth backed by BCrypt-hashed passwords stored in Azure SQL. Includes
 ### Route overview
 ![Route list with active delivery and progress](docs/screenshots/route.png)
 
-The driver's day at a glance: today's stops with addresses, gallon counts, and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to view GPS, navigate to the active stop, or force-advance past a stop without recording a time. This is the page a driver actually lives on during a shift.
+The driver's day at a glance: today's stops with addresses and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to view GPS, navigate to the active stop. This is the page a driver actually lives on during a shift.
 
 ### Navigation with tank-location notes and alerts
 ![Navigation page with tank-location note and active alert](docs/screenshots/navigation.png)
 
-Turn-by-turn destination view that pulls tank location, back-in flag, and any alerts attached to the delivery from the database. Alerts surface at the top in oversized text so they're readable through a dirty windshield. Edits to the tank-location note PUT back to the address row so the next driver inherits the fix.
+Turn-by-turn destination view that pulls tank location, back-in flag, and any alerts attached to the delivery from the database. Alerts surface at the top in oversized text so they're easy to read. Edits to the tank-location note PUT back to the address row so the next driver inherits the fix.
 
 ### Geofenced arrival + spoken cues
 ![Geofence trigger and spoken arrival cue](docs/screenshots/geofence.png)
 
-Client-side `GeoFenceService` watches the browser's geolocation stream and fires when the driver enters the radius around the destination. `SpeechService` speaks the cue aloud through the Web Speech API so the driver doesn't have to look at the phone. Arrival times are recorded and roll into the per-address average shown on the route page.
+Client-side `GeoFenceService` watches the browser's geolocation stream and fires when the driver enters the radius around the destination. `SpeechService` speaks the cue aloud through the Web Speech API so the driver doesn't have to enter text manually. Arrival times are recorded and roll into the per-address average shown on the route page.
 
 ### Dispatch screenshot import (OCR)
 ![Bulk dispatch screenshot import preview](docs/screenshots/dispatch-import.png)
 
-Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParser`) walks the OCR output to extract customer, address, and gallon count for each row. Multi-image upload is supported so a whole route can be ingested in one pass. The parser also exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
+Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParser`) walks the OCR output to extract customer and address for each row. Multi-image upload is supported so a whole route can be ingested in one pass. The parser also exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
 
 ### Route admin
 ![Route admin page: per-driver, per-date](docs/screenshots/admin.png)
@@ -50,7 +48,7 @@ Pick a driver and a date, edit the route. Addresses are normalized through Googl
 
 ---
 
-## What it demonstrates to a hiring manager
+## What it demonstrates
 
 - **A complete, deployed application** — not a tutorial fork or a half-finished side project. Auth, persistence, cloud services, OCR, email, geocoding, and a passing test suite all coexist in one repo.
 - **AI used as a force multiplier, not a substitute for judgment.** The architecture, the domain model, the trade-offs, the security choices, the data shape — all driven by the engineer. The model wrote a lot of the keystrokes; it did not pick the destination.
@@ -118,6 +116,4 @@ PropaneDriver.Tests/ Endpoint and service tests (xUnit)
 
 ## On AI assistance, plainly
 
-The engineer behind this project uses AI assistants the way a senior engineer uses a fast junior who never gets tired: it drafts, refactors, and chases down boilerplate while the human owns the design, reviews the diff, and decides what ships. The decisions in the *Notable engineering decisions* section above were not produced by a prompt — they were imposed on the code by someone who has seen what happens when you get them wrong.
-
-If you are hiring engineers who work this way, the right thing to evaluate is not whether they used AI but whether they knew what to do with what it gave them. The codebase is the answer to that question.
+The engineer behind this project used Claude the way a senior engineer uses a fast junior who never gets tired: it drafts, refactors, and chases down boilerplate while the human owns the design, reviews the diff, and decides what ships. The decisions in the *Notable engineering decisions* section above were not produced by a prompt — they were imposed on the code by someone who has seen what happens when you get them wrong.
