@@ -24,22 +24,22 @@ Driver-role auth backed by BCrypt-hashed passwords stored in Azure SQL. Includes
 ### Route overview
 ![Route list with active delivery and progress](docs/screenshots/route.png)
 
-The driver's day at a glance: today's stops with addresses, gallon counts, and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to view GPS, navigate to the active stop, or force-advance past a stop without recording a time. This is the page a driver actually lives on during a shift.
+The driver's day at a glance: today's stops with addresses and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to view GPS, navigate to the active stop. This is the page a driver actually lives on during a shift.
 
 ### Navigation with tank-location notes and alerts
 ![Navigation page with tank-location note and active alert](docs/screenshots/navigation.png)
 
-Turn-by-turn destination view that pulls tank location, back-in flag, and any alerts attached to the delivery from the database. Alerts surface at the top in oversized text so they're readable through a dirty windshield. Edits to the tank-location note PUT back to the address row so the next driver inherits the fix.
+Turn-by-turn destination view that pulls tank location, back-in flag, and any alerts attached to the delivery from the database. Alerts surface at the top in oversized text so they're easy to read. Edits to the tank-location note PUT back to the address row so the next driver inherits the fix.
 
 ### Geofenced arrival + spoken cues
 ![Geofence trigger and spoken arrival cue](docs/screenshots/geofence.png)
 
-Client-side `GeoFenceService` watches the browser's geolocation stream and fires when the driver enters the radius around the destination. `SpeechService` speaks the cue aloud through the Web Speech API so the driver doesn't have to look at the phone. Arrival times are recorded and roll into the per-address average shown on the route page.
+Client-side `GeoFenceService` watches the browser's geolocation stream and fires when the driver enters the radius around the destination. `SpeechService` speaks the cue aloud through the Web Speech API so the driver doesn't have to enter text manually. Arrival times are recorded and roll into the per-address average shown on the route page.
 
 ### Dispatch screenshot import (OCR)
 ![Bulk dispatch screenshot import preview](docs/screenshots/dispatch-import.png)
 
-Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParser`) walks the OCR output to extract customer, address, and gallon count for each row. Multi-image upload is supported so a whole route can be ingested in one pass. The parser also exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
+Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParser`) walks the OCR output to extract customer and address for each row. Multi-image upload is supported so a whole route can be ingested in one pass. The parser also exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
 
 ### Route admin
 ![Route admin page: per-driver, per-date](docs/screenshots/admin.png)
