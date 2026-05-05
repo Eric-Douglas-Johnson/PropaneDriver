@@ -304,11 +304,20 @@
                             var row = _importedRows[i];
                             var idx = i;
                             var dupe = IsDuplicateImportedRow(idx);
-                            <tr class="@(dupe ? "duplicate-row" : "")"
+                            // Inline style on each cell so the highlight can't be lost
+                            // to a stale scoped-CSS bundle or specificity collision.
+                            var dupeStyle = dupe ? "background-color:#7c4a00;color:#fde68a;" : null;
+                            <tr class="@(dupe ? "duplicate-row" : null)"
                                 title="@(dupe ? "Duplicate address — already on this route, in pending, or scanned twice" : null)">
-                                <td>@(i + 1)</td>
-                                <td>@row.Street, @row.City, @row.State @row.ZipCode</td>
-                                <td>
+                                <td style="@dupeStyle">@(i + 1)</td>
+                                <td style="@dupeStyle">
+                                    @row.Street, @row.City, @row.State @row.ZipCode
+                                    @if (dupe)
+                                    {
+                                        <span style="margin-left:0.5rem;padding:0 0.4rem;border-radius:3px;background:#b45309;color:#fff;font-size:0.7rem;font-weight:600;">⚠ DUPLICATE</span>
+                                    }
+                                </td>
+                                <td style="@dupeStyle">
                                     <button class="btn btn-sm btn-outline-info py-0 px-1"
                                             @onclick="() => LoadImportedRow(idx)">Load</button>
                                 </td>
@@ -839,6 +848,19 @@
             // Chrome with "the requested file could not be read".
             var jsResults = await JS.InvokeAsync<JsFileResult[]?>(
                 "readAllDispatchFilesAsBase64", "dispatch-import-file");
+
+            // Sort by filename so imported deliveries appear in a predictable
+            // order — image 1's stops first (top-to-bottom from the OCR), then
+            // image 2's, etc. The browser's FileList order varies by OS and
+            // selection method, which previously left the order at the mercy
+            // of whichever screenshot the user happened to click first.
+            if (jsResults is not null && jsResults.Length > 1)
+            {
+                jsResults = jsResults
+                    .OrderBy(f => f.FileName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
             if (jsResults is null || jsResults.Length == 0)
             {
                 _importStatus = "No file selected.";
