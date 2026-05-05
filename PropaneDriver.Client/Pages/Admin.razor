@@ -62,7 +62,6 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Customer</th>
                             <th>Address</th>
                             <th>GPS</th>
                             <th>Status</th>
@@ -82,7 +81,6 @@
                             var addressId = del.Location.Id;
                             <tr>
                                 <td>@idx</td>
-                                <td>@del.CustomerName</td>
                                 <td>@del.Location.FullAddress</td>
                                 <td>
                                     @if (del.Location.HasCoordinates)
@@ -117,7 +115,7 @@
             {
                 <div class="alerts-panel mt-3 p-3" style="background:#12142a; border:1px solid #2a2a4a; border-radius:6px;">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="m-0">Alerts for @_alertDelivery.CustomerName</h6>
+                        <h6 class="m-0">Alerts for @_alertDelivery.Location.FullAddress</h6>
                         <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="CloseAlerts">Close</button>
                     </div>
 
@@ -287,24 +285,15 @@
             <div class="mt-2">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <h6 class="m-0">Detected deliveries (@_importedRows.Count)</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-success py-0 px-2"
-                                @onclick="AddAllImportedToPending"
-                                disabled="@_bulkImporting">
-                            @(_bulkImporting ? (_bulkProgress ?? "Importing…") : "Add all to pending")
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                                @onclick="ClearImportedRows"
-                                disabled="@_bulkImporting">
-                            Clear
-                        </button>
-                    </div>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                            @onclick="ClearImportedRows">
+                        Clear
+                    </button>
                 </div>
                 <table class="admin-table">
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Customer</th>
                             <th>Address</th>
                             <th></th>
                         </tr>
@@ -314,9 +303,10 @@
                         {
                             var row = _importedRows[i];
                             var idx = i;
-                            <tr>
+                            var dupe = IsDuplicateImportedRow(idx);
+                            <tr class="@(dupe ? "duplicate-row" : "")"
+                                title="@(dupe ? "Duplicate address — already on this route, in pending, or scanned twice" : null)">
                                 <td>@(i + 1)</td>
-                                <td>@row.CustomerName</td>
                                 <td>@row.Street, @row.City, @row.State @row.ZipCode</td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-info py-0 px-1"
@@ -332,10 +322,6 @@
         <!-- Add delivery form -->
         <div class="add-delivery-form">
             <div class="admin-row">
-                <div class="admin-field flex-2">
-                    <label>Customer Name</label>
-                    <input type="text" class="form-control form-control-sm" @bind="_newCustomer" />
-                </div>
                 <div class="admin-field flex-2">
                     <label>Street</label>
                     <input type="text" class="form-control form-control-sm"
@@ -383,13 +369,13 @@
                 <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
             }
             <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
-                    disabled="@(string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                    disabled="@(string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
                 Add Delivery
             </button>
             @if (_loadedRoute is not null)
             {
                 <button class="btn btn-sm btn-outline-success mt-2 ms-2" @onclick="AddDeliveryToLoadedRoute"
-                        disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newCustomer) || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                        disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
                     @(_appendingToRoute ? "Adding…" : "Add to Loaded Route")
                 </button>
             }
@@ -403,7 +389,6 @@
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Customer</th>
                         <th>Address</th>
                         <th>GPS</th>
                         <th>
@@ -420,7 +405,6 @@
                         var capturedIndex = i;
                         <tr>
                             <td>@(i + 1)</td>
-                            <td>@delivery.CustomerName</td>
                             <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
                             <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
                             <td>@(delivery.LongRunning ? "Yes" : "No")</td>
@@ -463,7 +447,6 @@
     private string? _deletingRouteId;
 
     // New delivery form fields
-    private string _newCustomer = string.Empty;
     private string _newStreet = string.Empty;
     private string _newCity = string.Empty;
     private string _newState = "MN";
@@ -501,10 +484,6 @@
     // Bumped after every upload attempt so the InputFile remounts and
     // the browser file handle from the prior pick can't be reused.
     private int _importFileKey;
-
-    // Bulk "Add all to pending" state
-    private bool _bulkImporting;
-    private string? _bulkProgress;
 
     // Alert management
     private IDelivery? _alertDelivery;
@@ -714,8 +693,7 @@
 
     private void AddDeliveryToList()
     {
-        if (string.IsNullOrWhiteSpace(_newCustomer) ||
-            string.IsNullOrWhiteSpace(_newStreet) ||
+        if (string.IsNullOrWhiteSpace(_newStreet) ||
             string.IsNullOrWhiteSpace(_newCity) ||
             string.IsNullOrWhiteSpace(_newState) ||
             string.IsNullOrWhiteSpace(_newZip)) return;
@@ -727,7 +705,6 @@
 
         _pendingDeliveries.Add(new CreateDeliveryDto
         {
-            CustomerName = _newCustomer.Trim(),
             Street = _newStreet.Trim(),
             City = _newCity.Trim(),
             State = _newState.Trim(),
@@ -739,7 +716,6 @@
         });
 
         // Reset form (keep city/state/zip since they're often the same)
-        _newCustomer = string.Empty;
         _newStreet = string.Empty;
         _newLatStr = string.Empty;
         _newLonStr = string.Empty;
@@ -755,8 +731,7 @@
     private async Task AddDeliveryToLoadedRoute()
     {
         if (_loadedRoute is null) return;
-        if (string.IsNullOrWhiteSpace(_newCustomer) ||
-            string.IsNullOrWhiteSpace(_newStreet) ||
+        if (string.IsNullOrWhiteSpace(_newStreet) ||
             string.IsNullOrWhiteSpace(_newCity) ||
             string.IsNullOrWhiteSpace(_newState) ||
             string.IsNullOrWhiteSpace(_newZip)) return;
@@ -768,7 +743,6 @@
 
         var dto = new CreateDeliveryDto
         {
-            CustomerName = _newCustomer.Trim(),
             Street = _newStreet.Trim(),
             City = _newCity.Trim(),
             State = _newState.Trim(),
@@ -785,10 +759,9 @@
 
         if (ok)
         {
-            _routeStatus = $"Added {dto.CustomerName} to the route.";
+            _routeStatus = $"Added {dto.Street} to the route.";
             _routeStatusSuccess = true;
 
-            _newCustomer = string.Empty;
             _newStreet = string.Empty;
             _newLatStr = string.Empty;
             _newLonStr = string.Empty;
@@ -826,12 +799,12 @@
         if (ok)
         {
             delivery.Location.LongRunning = newValue;
-            _routeStatus = $"Updated Long Running for {delivery.CustomerName} → {(newValue ? "On" : "Off")}.";
+            _routeStatus = $"Updated Long Running for {delivery.Location.Street} → {(newValue ? "On" : "Off")}.";
             _routeStatusSuccess = true;
         }
         else
         {
-            _routeStatus = $"Failed to update Long Running for {delivery.CustomerName} — see ErrorLog.";
+            _routeStatus = $"Failed to update Long Running for {delivery.Location.Street} — see ErrorLog.";
             _routeStatusSuccess = false;
         }
 
@@ -971,7 +944,6 @@
     {
         if (index < 0 || index >= _importedRows.Count) return;
         var row = _importedRows[index];
-        _newCustomer = row.CustomerName;
         _newStreet = row.Street;
         _newCity = row.City;
         _newState = string.IsNullOrWhiteSpace(row.State) ? _newState : row.State;
@@ -983,84 +955,58 @@
         await TryGeocode();
     }
 
-    // Geocode every detected row and append it to _pendingDeliveries. Rows
-    // that fail geocoding are still added with lat/lon = 0 so the operator
-    // can fix them up before submitting the route — same fallback as the
-    // single-row Add Delivery button.
-    private async Task AddAllImportedToPending()
-    {
-        if (_importedRows.Count == 0 || _bulkImporting) return;
-
-        _bulkImporting = true;
-        _bulkProgress = null;
-        var added = 0;
-        var failed = 0;
-
-        try
-        {
-            for (var i = 0; i < _importedRows.Count; i++)
-            {
-                var row = _importedRows[i];
-                _bulkProgress = $"Importing {i + 1} of {_importedRows.Count}…";
-                StateHasChanged();
-
-                if (string.IsNullOrWhiteSpace(row.CustomerName) ||
-                    string.IsNullOrWhiteSpace(row.Street) ||
-                    string.IsNullOrWhiteSpace(row.City) ||
-                    string.IsNullOrWhiteSpace(row.ZipCode))
-                {
-                    failed++;
-                    continue;
-                }
-
-                var state = string.IsNullOrWhiteSpace(row.State) ? _newState : row.State;
-                double lat = 0, lon = 0;
-                try
-                {
-                    var geo = await Geocoder.GeocodeAsync(row.Street, row.City, state, row.ZipCode);
-                    if (geo is not null)
-                    {
-                        lat = geo.Latitude;
-                        lon = geo.Longitude;
-                    }
-                }
-                catch
-                {
-                    // Treat as not-yet-geocoded; row still gets added.
-                }
-
-                _pendingDeliveries.Add(new CreateDeliveryDto
-                {
-                    CustomerName = row.CustomerName.Trim(),
-                    Street = row.Street.Trim(),
-                    City = row.City.Trim(),
-                    State = state.Trim(),
-                    ZipCode = row.ZipCode.Trim(),
-                    Latitude = lat,
-                    Longitude = lon,
-                    SortOrder = _pendingDeliveries.Count
-                });
-                added++;
-            }
-
-            _importedRows.Clear();
-            _importStatus = failed == 0
-                ? $"Added {added} deliveries to pending."
-                : $"Added {added} deliveries to pending; {failed} were skipped (missing fields).";
-            _importStatusSuccess = added > 0;
-        }
-        finally
-        {
-            _bulkImporting = false;
-            _bulkProgress = null;
-        }
-    }
-
     private void ClearImportedRows()
     {
         _importedRows.Clear();
         _importRawLines = null;
         _importStatus = null;
+    }
+
+    // True when the detected row at `index` shares its address with another
+    // detected row, an address already on the loaded route, or a queued
+    // pending delivery — so the operator can see at a glance which rows
+    // they probably don't want to load again.
+    private bool IsDuplicateImportedRow(int index)
+    {
+        if (index < 0 || index >= _importedRows.Count) return false;
+        var row = _importedRows[index];
+        var key = NormalizeAddressKey(row.Street, row.City, row.State, row.ZipCode);
+        if (string.IsNullOrEmpty(key)) return false;
+
+        for (var i = 0; i < _importedRows.Count; i++)
+        {
+            if (i == index) continue;
+            var other = _importedRows[i];
+            if (NormalizeAddressKey(other.Street, other.City, other.State, other.ZipCode) == key)
+                return true;
+        }
+
+        if (_loadedRoute is not null)
+        {
+            foreach (var d in _loadedRoute.Deliveries)
+            {
+                if (NormalizeAddressKey(d.Location.Street, d.Location.City, d.Location.State, d.Location.ZipCode) == key)
+                    return true;
+            }
+        }
+
+        foreach (var p in _pendingDeliveries)
+        {
+            if (NormalizeAddressKey(p.Street, p.City, p.State, p.ZipCode) == key)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeAddressKey(string? street, string? city, string? state, string? zip)
+    {
+        var s = (street ?? string.Empty).Trim().ToLowerInvariant();
+        var c = (city ?? string.Empty).Trim().ToLowerInvariant();
+        var st = (state ?? string.Empty).Trim().ToLowerInvariant();
+        var z = (zip ?? string.Empty).Trim().ToLowerInvariant();
+        if (s.Length == 0 && c.Length == 0 && st.Length == 0 && z.Length == 0) return string.Empty;
+        return $"{s}|{c}|{st}|{z}";
     }
 
     private async Task CreateRoute()

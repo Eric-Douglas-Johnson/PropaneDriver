@@ -4,8 +4,6 @@ namespace PropaneDriver.Shared.Dtos
 {
     public class CreateDeliveryDto
     {
-        [Required]
-        [MinLength(1)]
         public string CustomerName { get; set; } = string.Empty;
 
         [Required]

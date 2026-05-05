@@ -99,6 +99,14 @@
     border-bottom: none;
 }
 
+/* Highlight applied to a detected-deliveries row when its address already
+   appears on the loaded route, in pending, or earlier in the same scan —
+   warns the operator before they load it into the form again. */
+.admin-table tr.duplicate-row td {
+    background-color: rgba(245, 158, 11, 0.22);
+    color: #fde68a;
+}
+
 .input-with-mic {
     display: flex;
     align-items: center;

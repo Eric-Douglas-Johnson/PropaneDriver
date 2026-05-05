@@ -293,7 +293,7 @@ namespace PropaneDriver.Client.Services
                 if (_activeDelivery.Location.Id == Guid.Empty)
                 {
                     await ErrorLogService.LogErrorAsync(
-                        "GeoFenceService", $"Delivery '{_activeDelivery.CustomerName}' has no AddressId — cannot save time");
+                        "GeoFenceService", $"Delivery '{_activeDelivery.Id}' has no AddressId — cannot save time");
                     return;
                 }
 

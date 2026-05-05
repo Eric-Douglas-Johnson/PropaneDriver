@@ -55,7 +55,7 @@
             // AlertDto directly — this lets us track per-alert Seen state
             // and mark it seen on click.
             var allAlerts = _deliveries
-                .SelectMany(d => d.Alerts.Select(a => (Customer: d.CustomerName, Alert: a, IsActive: _activeDelivery?.Id == d.Id)))
+                .SelectMany(d => d.Alerts.Select(a => (Stop: d.Location.Street, Alert: a, IsActive: _activeDelivery?.Id == d.Id)))
                 .ToList();
         }
         @if (allAlerts.Count == 0)
@@ -69,7 +69,7 @@
                 var captured = entry.Alert;
                 <span class="alert-badge alert-warning @(captured.Seen ? "alert-seen" : entry.IsActive ? "alert-flashing" : "alert-static")"
                       @onclick="() => MarkAlertSeen(captured)">
-                    @entry.Customer: @entry.Alert.Message
+                    @entry.Stop: @entry.Alert.Message
                 </span>
             }
         }
@@ -108,7 +108,7 @@
                 // name, the Complete tag, and the duration on a single line.
                 <div class="delivery-item delivery-item-minimized @statusClass @(isSelected ? "selected" : "")"
                      @onclick="() => SelectDelivery(delivery)">
-                    <span class="delivery-item-name">@delivery.CustomerName</span>
+                    <span class="delivery-item-name">@delivery.Location.Street</span>
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                     <span class="delivery-time">@FormatCompletedDuration(delivery)</span>
                 </div>
@@ -129,7 +129,7 @@
                         }
                         <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                     </div>
-                    <div class="delivery-item-name">@delivery.CustomerName</div>
+                    <div class="delivery-item-name">@delivery.Location.Street</div>
                     <div class="delivery-item-address">@delivery.Location.FullAddress</div>
                 </div>
             }
@@ -309,7 +309,7 @@
                 var distanceFt = distance * 3.28084;
                 var insideFence = distance <= GeoFenceService.FenceRadiusMeters;
 
-                <div><strong>Distance to @_activeDelivery.CustomerName:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
+                <div><strong>Distance to @_activeDelivery.Location.Street:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
                 <div>
                     <strong>Geofence (@GeoFenceService.FenceRadiusFeet.ToString("F0") ft):</strong>
                     @if (insideFence)
@@ -523,10 +523,10 @@
             .FirstOrDefault();
 
         var promptText =
-            $"Force-advance past {current.CustomerName}?\n\n" +
-            $"Current active: {current.CustomerName}\n" +
+            $"Force-advance past {current.Location.FullAddress}?\n\n" +
+            $"Current active: {current.Location.FullAddress}\n" +
             (nextCandidate is not null
-                ? $"Will advance to: {nextCandidate.CustomerName}\n\n"
+                ? $"Will advance to: {nextCandidate.Location.FullAddress}\n\n"
                 : "No more pending deliveries after this — active marker will be cleared.\n\n") +
             "Enter the delivery time in MINUTES (e.g. 12 or 7.5).\n" +
             "Cancel or leave blank to abort.";
@@ -548,7 +548,7 @@
 
         if (current.Location.Id == Guid.Empty)
         {
-            _saveStatus = $"✗ {current.CustomerName} has no linked address — cannot record a delivery time.";
+            _saveStatus = $"✗ This stop has no linked address — cannot record a delivery time.";
             _saveSuccess = false;
             StateHasChanged();
             return;
@@ -586,7 +586,7 @@
             // Time row saved but status update failed — surface the mismatch
             // so the driver knows the stop isn't fully reconciled. The server
             // logs the HTTP failure via ErrorLogService already.
-            _saveStatus = $"✗ Saved time but failed to mark {current.CustomerName} complete — see ErrorLog.";
+            _saveStatus = $"✗ Saved time but failed to mark {current.Location.Street} complete — see ErrorLog.";
             _saveSuccess = false;
             _forcingNext = false;
             StateHasChanged();
@@ -602,8 +602,8 @@
         var next = FindNextDelivery();
         await SetActiveDeliveryAsync(next); // null clears the active marker when route is done
 
-        _saveStatus = $"✓ Saved {minutes:F1} min for {current.CustomerName}"
-            + (next is not null ? $" — now active: {next.CustomerName}" : " — no more pending deliveries");
+        _saveStatus = $"✓ Saved {minutes:F1} min for {current.Location.Street}"
+            + (next is not null ? $" — now active: {next.Location.Street}" : " — no more pending deliveries");
         _saveSuccess = true;
         _forcingNext = false;
         StateHasChanged();
@@ -715,11 +715,11 @@
         // Native browser confirm. Good enough for a driver-on-a-phone UX
         // and avoids pulling in a modal library just for this one prompt.
         var prompt = hadCoords
-            ? $"Overwrite stored GPS for {_selectedDelivery.CustomerName}?\n\n" +
+            ? $"Overwrite stored GPS for {_selectedDelivery.Location.FullAddress}?\n\n" +
               $"Current: ({oldLat:F6}, {oldLon:F6})\n" +
               $"New:     ({lat:F6}, {lon:F6})\n" +
               $"Change:  ~{moveFeet:F0} ft"
-            : $"Set GPS for {_selectedDelivery.CustomerName} to ({lat:F6}, {lon:F6})?\n\n" +
+            : $"Set GPS for {_selectedDelivery.Location.FullAddress} to ({lat:F6}, {lon:F6})?\n\n" +
               "(No coordinates currently stored.)";
 
         var confirmed = await JS.InvokeAsync<bool>("confirm", prompt);
