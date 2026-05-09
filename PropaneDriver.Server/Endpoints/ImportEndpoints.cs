@@ -9,16 +9,14 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/imports");
 
-            // OCR a dispatch-app screenshot and return the parsed delivery
-            // rows as a DTO. The client uses these to pre-fill the existing
-            // Add Delivery form on Admin.razor — nothing is written to the DB
-            // here. The 10 MB cap matches a generous mobile screenshot size
+            // OCR (Ocular Character Recognition) a dispatch-app screenshot and return the parsed delivery
+            // rows as a DTO. The 10 MB cap matches a generous mobile screenshot size
             // and keeps malicious uploads from chewing up the free OCR tier.
             group.MapPost("dispatch-screenshot", async (
                 IFormFile file,
-                DocumentIntelligenceService docs,
+                DocumentIntelligenceService docIntelService,
                 ILogger<Program> logger,
-                CancellationToken ct) =>
+                CancellationToken cancelToken) =>
             {
                 if (file is null || file.Length == 0)
                     return Results.BadRequest(new { Message = "No file uploaded." });
@@ -29,20 +27,20 @@ namespace PropaneDriver.Server.Endpoints
 
                 try
                 {
-                    await using var stream = file.OpenReadStream();
-                    var ocr = await docs.AnalyzeReadAsync(stream, ct);
-                    var deliveries = DispatchScreenshotParser.Parse(ocr);
+                    await using var imgStream = file.OpenReadStream();
+                    var ocrData = await docIntelService.RunDocAnalysis(imgStream, cancelToken);
+                    var deliveries = DispatchScreenshotParser.Parse(ocrData);
 
                     return Results.Ok(new ParsedDispatchDto
                     {
                         Deliveries = deliveries.ToList(),
-                        PageCount = ocr.Pages?.Count ?? 0,
+                        PageCount = ocrData.Pages?.Count ?? 0,
                         Warning = deliveries.Count == 0 ? "No addresses detected." : null,
                         // Diagnostic aid: when the parser finds nothing,
                         // hand back the raw OCR lines so the user (or
                         // we) can see what to tune the regex against.
                         RawLines = deliveries.Count == 0
-                            ? DispatchScreenshotParser.FlattenLines(ocr).ToList()
+                            ? DispatchScreenshotParser.FlattenLines(ocrData).ToList()
                             : null
                     });
                 }

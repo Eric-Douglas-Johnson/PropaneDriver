@@ -36,6 +36,8 @@ namespace PropaneDriver.Server.Services
             @"^\s*(?:\d{1,3}|\d+(?:\.\d+)?\s*gal\.?|propane|\(\d{3}\)\s*\d{3}-\d{4}|>+|<+|[Vv]|\.{2,})\s*$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        private record FlatLine(string Text, double Y, double X);
+
         // Exposes the parser's view of the OCR result as plain top-to-bottom
         // text lines. Used by the import endpoint to attach a diagnostic
         // dump when no addresses are detected, so we can see what we're
@@ -43,9 +45,9 @@ namespace PropaneDriver.Server.Services
         public static IReadOnlyList<string> FlattenLines(AnalyzeResult ocrResult)
             => Flatten(ocrResult).Select(l => l.Text).ToList();
 
-        public static IReadOnlyList<ParsedDeliveryDto> Parse(AnalyzeResult ocrResult)
+        public static IReadOnlyList<ParsedDeliveryDto> Parse(AnalyzeResult ocrData)
         {
-            var lines = Flatten(ocrResult);
+            var lines = Flatten(ocrData);
             if (lines.Count == 0) return Array.Empty<ParsedDeliveryDto>();
 
             var results = new List<ParsedDeliveryDto>();
@@ -106,30 +108,6 @@ namespace PropaneDriver.Server.Services
             return results;
         }
 
-        // Walks upward from an address line to find the customer name,
-        // skipping known noise (gallons, "Propane", row#, phone, glyphs)
-        // and stopping when it hits the previous delivery's address.
-        private static string FindCustomerNameAbove(
-            List<FlatLine> lines, int addressIndex, HashSet<int> consumed)
-        {
-            for (var k = addressIndex - 1; k >= Math.Max(0, addressIndex - 8); k--)
-            {
-                if (consumed.Contains(k)) continue;
-                var text = lines[k].Text.Trim();
-                if (text.Length == 0) continue;
-                if (JunkLineRegex.IsMatch(text)) continue;
-                if (AddressLineRegex.IsMatch(text)) break;
-                if (StreetOnlyRegex.IsMatch(text)) break;
-                if (CityStateZipRegex.IsMatch(text)) continue;
-
-                consumed.Add(k);
-                return text;
-            }
-            return string.Empty;
-        }
-
-        private record FlatLine(string Text, double Y, double X);
-
         private static List<FlatLine> Flatten(AnalyzeResult ocrResult)
         {
             var flat = new List<FlatLine>();
@@ -161,6 +139,28 @@ namespace PropaneDriver.Server.Services
                 .OrderBy(l => l.Y)
                 .ThenBy(l => l.X)
                 .ToList();
+        }
+
+        // Walks upward from an address line to find the customer name,
+        // skipping known noise (gallons, "Propane", row#, phone, glyphs)
+        // and stopping when it hits the previous delivery's address.
+        private static string FindCustomerNameAbove(
+            List<FlatLine> lines, int addressIndex, HashSet<int> consumed)
+        {
+            for (var k = addressIndex - 1; k >= Math.Max(0, addressIndex - 8); k--)
+            {
+                if (consumed.Contains(k)) continue;
+                var text = lines[k].Text.Trim();
+                if (text.Length == 0) continue;
+                if (JunkLineRegex.IsMatch(text)) continue;
+                if (AddressLineRegex.IsMatch(text)) break;
+                if (StreetOnlyRegex.IsMatch(text)) break;
+                if (CityStateZipRegex.IsMatch(text)) continue;
+
+                consumed.Add(k);
+                return text;
+            }
+            return string.Empty;
         }
 
         private static (double Y, double X) AverageXY(IReadOnlyList<float>? polygon)

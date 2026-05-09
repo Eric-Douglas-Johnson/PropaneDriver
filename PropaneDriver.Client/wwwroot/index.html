@@ -26,7 +26,9 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
+
     <script src="_framework/blazor.webassembly.js"></script>
+
     <script>
         // GPS watch position for geofence monitoring
         window._geoWatchId = null;
@@ -274,65 +276,37 @@
             });
         };
 
-        // ===== Dispatch screenshot file reader =====
-        // Reads the first file from a <input type="file"> element and returns
-        // its bytes as base64 plus metadata. Avoids Blazor's IBrowserFile.
-        // OpenReadStream, which intermittently throws "the requested file
-        // could not be read" on Android Chrome because it streams the file in
-        // small chunks across JS interop and any single chunk failure aborts
-        // the whole read. FileReader does it in one shot.
-        window.readDispatchFileAsBase64 = function (inputId) {
-            return new Promise(function (resolve, reject) {
-                var input = document.getElementById(inputId);
-                if (!input || !input.files || input.files.length === 0) {
-                    resolve(null);
-                    return;
-                }
-                var file = input.files[0];
-                var reader = new FileReader();
-                reader.onload = function () {
-                    var dataUrl = reader.result || '';
-                    var commaIdx = dataUrl.indexOf(',');
-                    var base64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : '';
-                    resolve({
-                        base64: base64,
-                        contentType: file.type || '',
-                        fileName: file.name || '',
-                        size: file.size || 0
-                    });
-                };
-                reader.onerror = function () {
-                    reject((reader.error && reader.error.message) || 'FileReader failed');
-                };
-                reader.readAsDataURL(file);
-            });
-        };
-
-        // Same as above but returns every file selected on the input as an
-        // array. Used by the dispatch-import flow when the operator picks
-        // multiple screenshots at once. Read sequentially so a single
-        // unreadable file rejects the whole batch and the caller can show
-        // a useful error rather than a partial silent success.
+        //Pulls data from the selected image files
         window.readAllDispatchFilesAsBase64 = function (inputId) {
+
             return new Promise(function (resolve, reject) {
+
                 var input = document.getElementById(inputId);
+
                 if (!input || !input.files || input.files.length === 0) {
                     resolve([]);
                     return;
                 }
+
                 var files = Array.prototype.slice.call(input.files);
                 var results = [];
+
                 function readNext(i) {
+
                     if (i >= files.length) {
                         resolve(results);
                         return;
                     }
+
                     var file = files[i];
                     var reader = new FileReader();
+
                     reader.onload = function () {
+
                         var dataUrl = reader.result || '';
                         var commaIdx = dataUrl.indexOf(',');
                         var base64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : '';
+
                         results.push({
                             base64: base64,
                             contentType: file.type || '',
@@ -341,9 +315,11 @@
                         });
                         readNext(i + 1);
                     };
+
                     reader.onerror = function () {
                         reject((reader.error && reader.error.message) || 'FileReader failed');
                     };
+
                     reader.readAsDataURL(file);
                 }
                 readNext(0);

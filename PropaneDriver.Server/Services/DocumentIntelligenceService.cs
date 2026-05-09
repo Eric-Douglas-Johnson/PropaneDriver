@@ -24,23 +24,25 @@ namespace PropaneDriver.Server.Services
                 : new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
         }
 
-        public async Task<AnalyzeResult> AnalyzeReadAsync(Stream imageStream, CancellationToken ct)
+        public async Task<AnalyzeResult> RunDocAnalysis(Stream stream, CancellationToken cancelToken)
         {
-            var sw = Stopwatch.StartNew();
-            var binary = await BinaryData.FromStreamAsync(imageStream, ct);
+            var stopWatch = Stopwatch.StartNew();
+            var binaryData = await BinaryData.FromStreamAsync(stream, cancelToken);
 
             var operation = await _client.AnalyzeDocumentAsync(
                 WaitUntil.Completed,
                 "prebuilt-read",
-                binary,
-                cancellationToken: ct);
+                binaryData,
+                cancellationToken: cancelToken);
 
-            var result = operation.Value;
+            var docAnalysisResult = operation.Value;
+
             _logger.LogInformation(
                 "Document Intelligence prebuilt-read finished in {ElapsedMs} ms; {PageCount} page(s)",
-                sw.ElapsedMilliseconds,
-                result.Pages?.Count ?? 0);
-            return result;
+                stopWatch.ElapsedMilliseconds,
+                docAnalysisResult.Pages?.Count ?? 0);
+
+            return docAnalysisResult;
         }
     }
 }

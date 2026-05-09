@@ -17,10 +17,14 @@
 
     <!-- Driver + Date picker -->
     <div class="admin-card">
+
         <h5>Select Route</h5>
+
         <div class="admin-row">
             <div class="admin-field">
+
                 <label>Driver</label>
+
                 <select class="form-select form-select-sm" @bind="_selectedDriverId" @bind:after="OnDriverChanged">
                     <option value="">-- Select a driver --</option>
                     @foreach (var d in _drivers)
@@ -29,10 +33,12 @@
                     }
                 </select>
             </div>
+
             <div class="admin-field">
                 <label>Date</label>
                 <input type="date" class="form-control form-control-sm" @bind="_selectedDate" />
             </div>
+
             <div class="admin-field" style="align-self: flex-end;">
                 <button class="btn btn-sm btn-primary" @onclick="LoadRoute"
                         disabled="@(string.IsNullOrEmpty(_selectedDriverId))">
@@ -40,6 +46,7 @@
                 </button>
             </div>
         </div>
+
         @if (!string.IsNullOrEmpty(_routeStatus))
         {
             <div class="@(_routeStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
@@ -52,10 +59,12 @@
     @if (_loadedRoute is not null)
     {
         <div class="admin-card">
+
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <h5 class="m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
                 <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
             </div>
+
             @if (_loadedRoute.Deliveries.Count > 0)
             {
                 <table class="admin-table">
@@ -155,7 +164,9 @@
 
                     <div class="admin-row mt-2">
                         <div class="admin-field flex-2">
+
                             <label>New alert message</label>
+
                             <div class="input-with-mic">
                                 <input type="text" class="form-control form-control-sm"
                                        @bind="_newAlertMessage"
@@ -194,6 +205,7 @@
                     @(_loadingDriverRoutes ? "Loading…" : "Refresh")
                 </button>
             </div>
+
             @if (_driverRoutes.Count == 0 && !_loadingDriverRoutes)
             {
                 <div style="font-size:0.85rem; color:#8892b0;">No routes found for this driver.</div>
@@ -237,6 +249,7 @@
                     </tbody>
                 </table>
             }
+
             @if (!string.IsNullOrEmpty(_driverRoutesStatus))
             {
                 <div class="@(_driverRoutesStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
@@ -248,6 +261,7 @@
 
     <!-- Create New Route -->
     <div class="admin-card">
+
         <h5>Create New Route</h5>
 
         <!-- Import from screenshot -->
@@ -259,6 +273,7 @@
                        @onchange="OnImportFileSelected" />
             </div>
         </div>
+
         @if (_importing)
         {
             <div class="d-flex align-items-center gap-2" style="font-size:0.8rem; color:#8892b0;">
@@ -827,6 +842,12 @@
             _pendingDeliveries.RemoveAt(index);
     }
 
+    private sealed record DispatchImageFile(
+        [property: System.Text.Json.Serialization.JsonPropertyName("base64")] string Base64,
+        [property: System.Text.Json.Serialization.JsonPropertyName("contentType")] string ContentType,
+        [property: System.Text.Json.Serialization.JsonPropertyName("fileName")] string FileName,
+        [property: System.Text.Json.Serialization.JsonPropertyName("size")] long Size);
+
     private async Task OnImportFileSelected()
     {
         _importing = true;
@@ -842,26 +863,16 @@
 
         try
         {
-            // Read every picked file via FileReader in JS rather than
-            // IBrowserFile.OpenReadStream — the latter streams the file in
-            // chunks across JS interop and intermittently fails on Android
-            // Chrome with "the requested file could not be read".
-            var jsResults = await JS.InvokeAsync<JsFileResult[]?>(
-                "readAllDispatchFilesAsBase64", "dispatch-import-file");
+            var imageFiles = await JS.InvokeAsync<DispatchImageFile[]?>("readAllDispatchFilesAsBase64", "dispatch-import-file");
 
-            // Sort by filename so imported deliveries appear in a predictable
-            // order — image 1's stops first (top-to-bottom from the OCR), then
-            // image 2's, etc. The browser's FileList order varies by OS and
-            // selection method, which previously left the order at the mercy
-            // of whichever screenshot the user happened to click first.
-            if (jsResults is not null && jsResults.Length > 1)
+            if (imageFiles is not null && imageFiles.Length > 1)
             {
-                jsResults = jsResults
+                imageFiles = imageFiles
                     .OrderBy(f => f.FileName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
 
-            if (jsResults is null || jsResults.Length == 0)
+            if (imageFiles is null || imageFiles.Length == 0)
             {
                 _importStatus = "No file selected.";
                 _importStatusSuccess = false;
@@ -870,19 +881,20 @@
 
             const long maxBytes = 10 * 1024 * 1024;
 
-            for (var i = 0; i < jsResults.Length; i++)
+            for (var i = 0; i < imageFiles.Length; i++)
             {
-                var jsResult = jsResults[i];
-                var label = string.IsNullOrEmpty(jsResult.FileName) ? $"file #{i + 1}" : jsResult.FileName;
-                _importProgress = $"Reading screenshot {i + 1} of {jsResults.Length}…";
+                var imageFile = imageFiles[i];
+                var label = string.IsNullOrEmpty(imageFile.FileName) ? $"file #{i + 1}" : imageFile.FileName;
+                _importProgress = $"Reading screenshot {i + 1} of {imageFiles.Length}…";
                 StateHasChanged();
 
-                if (string.IsNullOrEmpty(jsResult.Base64))
+                if (string.IsNullOrEmpty(imageFile.Base64))
                 {
                     perFileErrors.Add($"{label}: empty file.");
                     continue;
                 }
-                if (jsResult.Size > maxBytes)
+
+                if (imageFile.Size > maxBytes)
                 {
                     perFileErrors.Add($"{label}: exceeds 10 MB.");
                     continue;
@@ -890,16 +902,17 @@
 
                 try
                 {
-                    var bytes = Convert.FromBase64String(jsResult.Base64);
-
+                    var bytes = Convert.FromBase64String(imageFile.Base64);
                     using var content = new MultipartFormDataContent();
                     var byteContent = new ByteArrayContent(bytes);
+
                     byteContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
-                        string.IsNullOrEmpty(jsResult.ContentType) ? "application/octet-stream" : jsResult.ContentType);
-                    content.Add(byteContent, "file",
-                        string.IsNullOrEmpty(jsResult.FileName) ? "screenshot" : jsResult.FileName);
+                        string.IsNullOrEmpty(imageFile.ContentType) ? "application/octet-stream" : imageFile.ContentType);
+
+                    content.Add(byteContent, "file", string.IsNullOrEmpty(imageFile.FileName) ? "screenshot" : imageFile.FileName);
 
                     var response = await Http.PostAsync("api/imports/dispatch-screenshot", content);
+
                     if (!response.IsSuccessStatusCode)
                     {
                         var body = await response.Content.ReadAsStringAsync();
@@ -908,14 +921,17 @@
                     }
 
                     var parsed = await response.Content.ReadFromJsonAsync<ParsedDispatchDto>();
+
                     if (parsed?.Deliveries is { Count: > 0 } found)
                     {
                         _importedRows.AddRange(found);
                     }
+
                     if (!string.IsNullOrEmpty(parsed?.Warning))
                     {
                         perFileWarnings.Add($"{label}: {parsed.Warning}");
                     }
+
                     if (parsed?.RawLines is { Count: > 0 } lines)
                     {
                         if (rawLines.Count > 0) rawLines.Add(string.Empty);
@@ -934,7 +950,7 @@
 
             var statusParts = new List<string>
             {
-                $"Found {_importedRows.Count} deliveries across {jsResults.Length} screenshot{(jsResults.Length == 1 ? "" : "s")}."
+                $"Found {_importedRows.Count} deliveries across {imageFiles.Length} screenshot{(imageFiles.Length == 1 ? "" : "s")}."
             };
             if (perFileWarnings.Count > 0) statusParts.Add(string.Join(" ", perFileWarnings));
             if (perFileErrors.Count > 0) statusParts.Add("Errors: " + string.Join(" | ", perFileErrors));
@@ -955,12 +971,6 @@
             _importFileKey++;
         }
     }
-
-    private sealed record JsFileResult(
-        [property: System.Text.Json.Serialization.JsonPropertyName("base64")] string Base64,
-        [property: System.Text.Json.Serialization.JsonPropertyName("contentType")] string ContentType,
-        [property: System.Text.Json.Serialization.JsonPropertyName("fileName")] string FileName,
-        [property: System.Text.Json.Serialization.JsonPropertyName("size")] long Size);
 
     private async Task LoadImportedRow(int index)
     {
