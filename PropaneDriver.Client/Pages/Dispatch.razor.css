@@ -1,0 +1,197 @@
+/* Page shell — bigger gap than Admin so the per-section accent bar
+   reads as a clear divider rather than crowded cards. */
+.dispatch-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    padding-bottom: 2rem;
+}
+
+.dispatch-header {
+    border-bottom: 1px solid #2a2a4a;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.dispatch-title {
+    color: whitesmoke;
+    margin: 0;
+}
+
+.dispatch-subtitle {
+    color: #8892b0;
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0 0;
+}
+
+/* Each section is a card with a 4px accent bar on the left edge — color
+   varies per section so the page reads as four distinct workflows
+   instead of a uniform stack of identical cards. */
+.dispatch-section {
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-left-width: 4px;
+    border-radius: 8px;
+    padding: 1rem 1.25rem 1.25rem 1.25rem;
+}
+
+.dispatch-section--load     { border-left-color: #3b82f6; } /* blue   — read */
+.dispatch-section--current  { border-left-color: #22c55e; } /* green  — active */
+.dispatch-section--routes   { border-left-color: #a855f7; } /* purple — list */
+.dispatch-section--create   { border-left-color: #f59e0b; } /* amber  — write */
+
+/* Header strip inside each section: title + one-line hint, divider
+   underneath. Gives the eye a clear "this is where the section starts"
+   anchor before the controls. */
+.dispatch-section-header {
+    border-bottom: 1px solid #2a2a4a;
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.85rem;
+}
+
+.dispatch-section-title {
+    color: whitesmoke;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dispatch-section-hint {
+    color: #8892b0;
+    font-size: 0.78rem;
+    margin: 0.2rem 0 0 0;
+}
+
+/* Pill-style count next to "My Routes" so the number is visually
+   distinct from the heading text. */
+.dispatch-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6rem;
+    padding: 0 0.5rem;
+    height: 1.4rem;
+    border-radius: 999px;
+    background-color: #2a2a4a;
+    color: #cdd6f4;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Used for the empty-state lines (pre-load hint, "no routes yet"). */
+.dispatch-empty-hint {
+    color: #8892b0;
+    font-size: 0.85rem;
+    padding: 0.4rem 0;
+}
+
+/* Below: the same admin-* utility styles Admin.razor.css defines, but
+   re-declared here because Blazor scopes CSS per component — Admin's
+   styles wouldn't apply to our markup, so the form rows and tables
+   would otherwise render unstyled. */
+
+.admin-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.admin-field {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 160px;
+}
+
+.admin-field.flex-2 {
+    flex: 2 1 200px;
+}
+
+.admin-field label {
+    color: #8892b0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.2rem;
+}
+
+.admin-field input,
+.admin-field select {
+    background-color: #0f0f1e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+}
+
+.admin-field input::placeholder {
+    color: #8892b0;
+}
+
+.add-delivery-form {
+    border: 1px dashed #2a2a4a;
+    border-radius: 6px;
+    padding: 0.75rem;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.admin-table th {
+    color: #8892b0;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid #2a2a4a;
+    text-align: left;
+}
+
+.admin-table td {
+    color: whitesmoke;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.admin-table tr:last-child td {
+    border-bottom: none;
+}
+
+.admin-table tr.duplicate-row td {
+    background-color: rgba(245, 158, 11, 0.22);
+    color: #fde68a;
+}
+
+.input-with-mic {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background-color: #2a2a4a;
+    color: #93c5fd;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: help;
+    user-select: none;
+    margin-left: 0.25rem;
+}
+
+.info-icon:hover {
+    background-color: #3a3a6a;
+    color: #ffffff;
+}

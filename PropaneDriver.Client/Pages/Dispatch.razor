@@ -15,16 +15,20 @@
 
 <PageTitle>Dispatch</PageTitle>
 
-<div class="admin-page">
-    <h4 class="admin-title">Dispatch</h4>
-    <p class="admin-subtitle" style="color:#8892b0; margin-top:-0.5rem; font-size:0.85rem;">
-        Plan and create your own routes. Only data tied to your account is shown here.
-    </p>
+<div class="dispatch-page">
+    <header class="dispatch-header">
+        <h4 class="dispatch-title">Dispatch</h4>
+        <p class="dispatch-subtitle">
+            Plan and create your own routes. Only data tied to your account is shown here.
+        </p>
+    </header>
 
-    <!-- Date picker / load route -->
-    <div class="admin-card">
-
-        <h5>Select Route Date</h5>
+    <!-- Section: Pick a date and load that day's route -->
+    <section class="dispatch-section dispatch-section--load">
+        <div class="dispatch-section-header">
+            <h5 class="dispatch-section-title">Select Route Date</h5>
+            <p class="dispatch-section-hint">Pick a date to view or edit a route you've already created.</p>
+        </div>
 
         <div class="admin-row">
             <div class="admin-field">
@@ -46,16 +50,17 @@
                 @_routeStatus
             </div>
         }
-    </div>
+    </section>
 
-    <!-- Existing Route -->
+    <!-- Section: Currently-loaded route detail -->
     @if (_loadedRoute is not null)
     {
-        <div class="admin-card">
-
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
-                <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
+        <section class="dispatch-section dispatch-section--current">
+            <div class="dispatch-section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="dispatch-section-title m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
+                </div>
             </div>
 
             @if (_loadedRoute.Deliveries.Count > 0)
@@ -184,24 +189,57 @@
                     }
                 </div>
             }
-        </div>
+        </section>
     }
 
-    <!-- My routes -->
+    <!-- Section: All of this driver's routes — load on demand -->
     @if (!string.IsNullOrEmpty(_currentDriverId))
     {
-        <div class="admin-card">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="m-0">My Routes (@_driverRoutes.Count)</h5>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverRoutes"
-                        disabled="@_loadingDriverRoutes">
-                    @(_loadingDriverRoutes ? "Loading…" : "Refresh")
-                </button>
+        <section class="dispatch-section dispatch-section--routes">
+            <div class="dispatch-section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="dispatch-section-title m-0">
+                        My Routes
+                        @if (_hasLoadedDriverRoutes)
+                        {
+                            <span class="dispatch-count-badge">@_driverRoutes.Count</span>
+                        }
+                    </h5>
+                    <button class="btn btn-sm btn-primary" @onclick="LoadDriverRoutes"
+                            disabled="@_loadingDriverRoutes">
+                        @if (_loadingDriverRoutes)
+                        {
+                            <text>Loading…</text>
+                        }
+                        else if (_hasLoadedDriverRoutes)
+                        {
+                            <text>Refresh</text>
+                        }
+                        else
+                        {
+                            <text>Load My Routes</text>
+                        }
+                    </button>
+                </div>
+                <p class="dispatch-section-hint">
+                    @if (!_hasLoadedDriverRoutes)
+                    {
+                        <text>Click <strong>Load My Routes</strong> to fetch every route tied to your account.</text>
+                    }
+                    else
+                    {
+                        <text>Showing every route tied to your account. Use Refresh to pull in changes.</text>
+                    }
+                </p>
             </div>
 
-            @if (_driverRoutes.Count == 0 && !_loadingDriverRoutes)
+            @if (!_hasLoadedDriverRoutes && !_loadingDriverRoutes)
             {
-                <div style="font-size:0.85rem; color:#8892b0;">No routes found yet. Build your first route below.</div>
+                <div class="dispatch-empty-hint">Routes haven't been loaded yet.</div>
+            }
+            else if (_driverRoutes.Count == 0 && !_loadingDriverRoutes)
+            {
+                <div class="dispatch-empty-hint">No routes found yet. Build your first route below.</div>
             }
             else if (_driverRoutes.Count > 0)
             {
@@ -249,13 +287,15 @@
                     @_driverRoutesStatus
                 </div>
             }
-        </div>
+        </section>
     }
 
-    <!-- Create New Route -->
-    <div class="admin-card">
-
-        <h5>Create New Route</h5>
+    <!-- Section: Build a brand-new route from screenshots or manual entry -->
+    <section class="dispatch-section dispatch-section--create">
+        <div class="dispatch-section-header">
+            <h5 class="dispatch-section-title">Create New Route</h5>
+            <p class="dispatch-section-hint">Import dispatch screenshots, geocode addresses, or enter stops by hand — then save them all as a route.</p>
+        </div>
 
         <!-- Import from screenshot -->
         <div class="admin-row mb-2">
@@ -443,7 +483,7 @@
                 @_createStatus
             </div>
         }
-    </div>
+    </section>
 </div>
 
 @code {
@@ -464,6 +504,10 @@
 
     private List<RouteListItemDto> _driverRoutes = new();
     private bool _loadingDriverRoutes;
+    // True after the first successful (or attempted) load. Drives the
+    // empty-state copy and the load button label so we don't tell the
+    // user "no routes" before they've even asked the server.
+    private bool _hasLoadedDriverRoutes;
     private string? _driverRoutesStatus;
     private bool _driverRoutesStatusSuccess;
     private string? _deletingRouteId;
@@ -514,13 +558,12 @@
         // also exposes CurrentUser, but the cascading auth state task is the
         // canonical source — and awaits any in-flight token-restore from
         // localStorage on a hard refresh.
+        //
+        // Routes are NOT auto-loaded — the driver clicks "Load My Routes"
+        // when they want to see them, so a fresh page render doesn't
+        // unnecessarily round-trip to the server.
         var authState = await AuthenticationStateTask;
         _currentDriverId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
-
-        if (!string.IsNullOrEmpty(_currentDriverId))
-        {
-            await LoadDriverRoutes();
-        }
     }
 
     private async Task LoadDriverRoutes()
@@ -534,6 +577,7 @@
         try
         {
             _driverRoutes = await RouteApi.GetRoutesForDriverAsync(_currentDriverId);
+            _hasLoadedDriverRoutes = true;
         }
         catch (Exception ex)
         {
