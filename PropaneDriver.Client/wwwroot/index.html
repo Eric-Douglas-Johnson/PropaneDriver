@@ -326,6 +326,17 @@
             });
         };
 
+        // Names-only peek at the picker's current selection. Used by pages
+        // that want to show the user what they picked before paying for the
+        // full base64 read + upload.
+        window.getDispatchFileNames = function (inputId) {
+            var input = document.getElementById(inputId);
+            if (!input || !input.files) return [];
+            return Array.prototype.slice.call(input.files).map(function (file) {
+                return file.name || '';
+            });
+        };
+
         // ===== Speech recognition interop =====
         window.startDictation = function () {
             return new Promise(function (resolve) {

@@ -69,6 +69,35 @@
     border: 1px solid #2a2a4a;
 }
 
+/* Holding area for files the user has picked but not yet scanned. Same
+   dashed-border look as .tools-document but distinct content — gives the
+   user a clear "ready to scan" affordance before they pay for OCR. */
+.tools-selection {
+    border: 1px dashed #2a2a4a;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.tools-selection-header {
+    color: #8892b0;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+
+.tools-selection-list {
+    color: whitesmoke;
+    font-size: 0.85rem;
+    margin: 0 0 0.75rem 1.25rem;
+    padding: 0;
+}
+
+.tools-selection-list li {
+    padding: 0.1rem 0;
+}
+
 /* One block per scanned image, separated from the next by a dashed rule
    so multiple uploads stack cleanly without each needing its own card. */
 .tools-document {

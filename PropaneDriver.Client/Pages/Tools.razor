@@ -1,5 +1,6 @@
 @page "/tools"
 @using PropaneDriver.Shared.Dtos
+@using PropaneDriver.Shared.Enums
 @inject HttpClient Http
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
@@ -12,11 +13,21 @@
     <div class="tools-card">
         <h5>Document Scanner</h5>
         <p class="tools-hint">
-            Upload one or more image files. Each file is run through Azure Document
-            Intelligence and the raw OCR lines per page are shown below.
+            Pick one or more image files, then press <strong>Scan</strong> to run
+            them through Azure Document Intelligence. The raw OCR lines per page
+            are shown below.
         </p>
 
         <div class="admin-row">
+            <div class="admin-field" style="max-width: 220px;">
+                <label>Model</label>
+                <select class="form-select form-select-sm" @bind="_selectedModel" disabled="@_scanning">
+                    @foreach (var modelOption in Enum.GetValues<AzureDocumentIntelligenceModel>())
+                    {
+                        <option value="@modelOption">@modelOption</option>
+                    }
+                </select>
+            </div>
             <div class="admin-field flex-2">
                 <label>Select image file(s)</label>
                 <input type="file" id="tools-document-file" @key="_fileInputKey"
@@ -25,11 +36,40 @@
             </div>
         </div>
 
+        @if (_selectedFileNames.Count > 0)
+        {
+            <div class="tools-selection">
+                <div class="tools-selection-header">
+                    Selected (@_selectedFileNames.Count) — not scanned yet
+                </div>
+                <ol class="tools-selection-list">
+                    @foreach (var fileName in _selectedFileNames)
+                    {
+                        <li>@(string.IsNullOrEmpty(fileName) ? "(unnamed)" : fileName)</li>
+                    }
+                </ol>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-primary"
+                            @onclick="OnScanClicked"
+                            disabled="@_scanning">
+                        @(_scanning
+                            ? "Scanning…"
+                            : $"Scan {_selectedFileNames.Count} file{(_selectedFileNames.Count == 1 ? "" : "s")}")
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            @onclick="ClearSelection"
+                            disabled="@_scanning">
+                        Clear selection
+                    </button>
+                </div>
+            </div>
+        }
+
         @if (_scanning)
         {
             <div class="d-flex align-items-center gap-2 mt-2" style="font-size:0.8rem; color:#8892b0;">
                 <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-                <span>@(_scanProgress ?? "Reading files…")</span>
+                <span>@(_scanProgress ?? "Scanning files…")</span>
             </div>
         }
         else if (!string.IsNullOrEmpty(_scanStatus))
@@ -86,23 +126,58 @@
     private bool _scanStatusSuccess;
     private string? _scanProgress;
 
-    // Bumped after every upload attempt so the <input type="file"> remounts
-    // and the browser's prior selection can't be silently reused.
+    // Bumped to remount the <input type="file"> when we want to clear its
+    // current selection — either after a scan completes or when the user
+    // explicitly hits "Clear selection".
     private int _fileInputKey;
 
+    // The model the user wants Azure Document Intelligence to run against.
+    // Defaults to Read (general OCR) so the page works out of the box.
+    private AzureDocumentIntelligenceModel _selectedModel = AzureDocumentIntelligenceModel.Read;
+
+    private readonly List<string> _selectedFileNames = new();
     private readonly List<OcrDocumentDto> _scannedDocuments = new();
 
-    // Mirrors the shape returned by readAllDispatchFilesAsBase64 — we reuse
-    // that JS helper here since it's already a generic
-    // (input id) -> base64-file-list reader, not Dispatch-specific.
+    // Mirrors the shape returned by readAllDispatchFilesAsBase64. The JS
+    // helper is fully generic (input id → base64 file list), not
+    // Dispatch-specific, so reusing it here is fine.
     private sealed record ToolsImageFile(
         [property: System.Text.Json.Serialization.JsonPropertyName("base64")] string Base64,
         [property: System.Text.Json.Serialization.JsonPropertyName("contentType")] string ContentType,
         [property: System.Text.Json.Serialization.JsonPropertyName("fileName")] string FileName,
         [property: System.Text.Json.Serialization.JsonPropertyName("size")] long Size);
 
+    // Only stash the picked file names — the full base64 read and the
+    // (paid) Document Intelligence call don't happen until the user
+    // explicitly hits Scan.
     private async Task OnFileSelected()
     {
+        _selectedFileNames.Clear();
+        _scanStatus = null;
+        _scanStatusSuccess = false;
+        StateHasChanged();
+
+        try
+        {
+            var names = await JS.InvokeAsync<string[]?>(
+                "getDispatchFileNames", "tools-document-file");
+
+            if (names is null || names.Length == 0) return;
+
+            _selectedFileNames.AddRange(
+                names.OrderBy(name => name ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            _scanStatus = $"Error reading selection: {ex.Message}";
+            _scanStatusSuccess = false;
+        }
+    }
+
+    private async Task OnScanClicked()
+    {
+        if (_selectedFileNames.Count == 0) return;
+
         _scanning = true;
         _scanStatus = null;
         _scanProgress = null;
@@ -113,6 +188,9 @@
 
         try
         {
+            // Re-read the picker right before scanning so we operate on
+            // exactly what the user has selected now — even if they swapped
+            // the picker contents after the initial selection.
             var imageFiles = await JS.InvokeAsync<ToolsImageFile[]?>(
                 "readAllDispatchFilesAsBase64", "tools-document-file");
 
@@ -123,8 +201,6 @@
                 return;
             }
 
-            // Sort by filename so multi-file scans show up in a predictable
-            // order regardless of how the OS handed them to us.
             if (imageFiles.Length > 1)
             {
                 imageFiles = imageFiles
@@ -138,7 +214,7 @@
             {
                 var imageFile = imageFiles[fileIndex];
                 var label = string.IsNullOrEmpty(imageFile.FileName) ? $"file #{fileIndex + 1}" : imageFile.FileName;
-                _scanProgress = $"Reading file {fileIndex + 1} of {imageFiles.Length}…";
+                _scanProgress = $"Scanning file {fileIndex + 1} of {imageFiles.Length}…";
                 StateHasChanged();
 
                 if (string.IsNullOrEmpty(imageFile.Base64))
@@ -162,7 +238,8 @@
                         string.IsNullOrEmpty(imageFile.ContentType) ? "application/octet-stream" : imageFile.ContentType);
                     content.Add(byteContent, "file", string.IsNullOrEmpty(imageFile.FileName) ? "document" : imageFile.FileName);
 
-                    var response = await Http.PostAsync("api/imports/tools-document", content);
+                    var response = await Http.PostAsync(
+                        $"api/imports/tools-document?model={_selectedModel}", content);
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -207,8 +284,16 @@
         {
             _scanning = false;
             _scanProgress = null;
+            _selectedFileNames.Clear();
             _fileInputKey++;
         }
+    }
+
+    private void ClearSelection()
+    {
+        _selectedFileNames.Clear();
+        _scanStatus = null;
+        _fileInputKey++;
     }
 
     private void ClearScannedDocuments()

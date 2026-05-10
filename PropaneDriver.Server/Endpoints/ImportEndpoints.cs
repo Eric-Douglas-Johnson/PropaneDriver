@@ -65,7 +65,8 @@ namespace PropaneDriver.Server.Endpoints
                 IFormFile file,
                 DocumentIntelligenceService docIntelService,
                 ILogger<Program> logger,
-                CancellationToken cancelToken) =>
+                CancellationToken cancelToken,
+                AzureDocumentIntelligenceModel? model) =>
             {
                 if (file is null || file.Length == 0)
                     return Results.BadRequest(new { Message = "No file uploaded." });
@@ -74,10 +75,17 @@ namespace PropaneDriver.Server.Endpoints
                 if (string.IsNullOrEmpty(file.ContentType) || !file.ContentType.StartsWith("image/"))
                     return Results.BadRequest(new { Message = "Only image files are supported." });
 
+                // Defaults to Read so callers that don't care about the model
+                // still get plain OCR — the Tools page will always send the
+                // value, but the contract stays forgiving.
+                var modelToUse = model ?? AzureDocumentIntelligenceModel.Read;
+                if (!Enum.IsDefined(modelToUse))
+                    return Results.BadRequest(new { Message = $"Unknown model: {modelToUse}." });
+
                 try
                 {
                     await using var imageStream = file.OpenReadStream();
-                    var ocrResult = await docIntelService.RunDocAnalysis(imageStream, AzureDocumentIntelligenceModel.Read, cancelToken);
+                    var ocrResult = await docIntelService.RunDocAnalysis(imageStream, modelToUse, cancelToken);
 
                     var pages = new List<OcrPageDto>();
                     if (ocrResult.Pages is not null)
