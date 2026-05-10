@@ -1,6 +1,9 @@
+using System.Text;
 using Azure.Identity;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Server.Endpoints;
 using PropaneDriver.Server.Services;
@@ -28,12 +31,50 @@ builder.Services.AddDbContext<PropaneDriverDbContext>(options =>
 
 builder.Services.AddSingleton<EmailService>();
 builder.Services.AddSingleton<DocumentIntelligenceService>();
+builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddHttpClient();
+
+// JWT bearer auth. The signing key, issuer, and audience all come from the
+// "Jwt" config block. Endpoints opt into auth via .RequireAuthorization(...);
+// nothing is implicitly protected, so unsecured endpoints (geocoding, login,
+// password reset) keep working.
+var jwtSection = builder.Configuration.GetSection("Jwt");
+var jwtKey = jwtSection["Key"]
+    ?? throw new InvalidOperationException("Jwt:Key is not configured. Set it via appsettings or User Secrets.");
+var jwtIssuer = jwtSection["Issuer"] ?? "PropaneDriver";
+var jwtAudience = jwtSection["Audience"] ?? "PropaneDriverClient";
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
+    options.AddPolicy("AuthenticatedDriver", policy => policy.RequireAuthenticatedUser());
+});
 
 var app = builder.Build();
 
 // Bootstrap the database schema (idempotent raw SQL; we don't use EF migrations).
 DatabaseInitializer.EnsureCreated(app.Services, app.Logger);
+
+// Seed/refresh the admin account from "AdminSeed" config. Runs every startup
+// but is idempotent — won't overwrite an existing admin's password.
+AdminAccountSeeder.EnsureAdminSeeded(app.Services, app.Logger);
 
 if (app.Environment.IsDevelopment())
 {
@@ -48,6 +89,9 @@ app.UseHttpsRedirection();
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 app.UseRouting();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapRazorPages();
 app.MapControllers();
@@ -69,3 +113,7 @@ app.MapImportEndpoints();
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+// Marker partial declaration so PropaneDriver.Tests can target the
+// implicit Program class via WebApplicationFactory<Program>.
+public partial class Program { }

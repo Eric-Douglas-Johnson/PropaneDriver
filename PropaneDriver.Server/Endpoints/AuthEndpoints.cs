@@ -11,7 +11,13 @@ namespace PropaneDriver.Server.Endpoints
         public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
         {
             // Authenticate a driver. Route name casing preserved for existing clients.
-            app.MapPost("api/Authenticate", async (CredsDto creds, PropaneDriverDbContext db) =>
+            // On success returns a JWT bearer token + the full driver profile, so
+            // the client doesn't need a second GET /driver/{id} round-trip and
+            // can populate role-aware claims (admin vs driver) immediately.
+            app.MapPost("api/Authenticate", async (
+                CredsDto creds,
+                PropaneDriverDbContext db,
+                JwtTokenService jwtTokenService) =>
             {
                 var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == creds.UserName);
 
@@ -20,7 +26,6 @@ namespace PropaneDriver.Server.Endpoints
                     return Results.Ok(new AuthResponseDto
                     {
                         IsAuthenticated = false,
-                        Role = 0,
                         UserId = Guid.Empty,
                         StatusMessage = $"No driver found with user name '{creds.UserName}'."
                     });
@@ -31,18 +36,30 @@ namespace PropaneDriver.Server.Endpoints
                     return Results.Ok(new AuthResponseDto
                     {
                         IsAuthenticated = false,
-                        Role = 0,
                         UserId = Guid.Empty,
                         StatusMessage = "Invalid password."
                     });
                 }
 
+                var bearerToken = jwtTokenService.CreateTokenForDriver(driver);
+
                 return Results.Ok(new AuthResponseDto
                 {
                     IsAuthenticated = true,
-                    Role = 1,
                     UserId = driver.Id,
-                    StatusMessage = "Authenticated"
+                    StatusMessage = "Authenticated",
+                    Token = bearerToken,
+                    Driver = new DriverDto
+                    {
+                        Id = driver.Id.ToString(),
+                        UserName = driver.UserName,
+                        Role = string.IsNullOrWhiteSpace(driver.Role) ? "driver" : driver.Role,
+                        FirstName = driver.FirstName,
+                        MiddleName = driver.MiddleName,
+                        LastName = driver.LastName,
+                        Email = driver.Email,
+                        PhoneNumber = driver.PhoneNumber
+                    }
                 });
             });
 

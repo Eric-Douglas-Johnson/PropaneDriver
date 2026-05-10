@@ -8,7 +8,8 @@ namespace PropaneDriver.Server.Endpoints
     {
         public static IEndpointRouteBuilder MapDriverEndpoints(this IEndpointRouteBuilder app)
         {
-            // List all drivers (for admin route-builder)
+            // List all drivers (for admin route-builder). Admin-only — the
+            // driver picker on the Admin page is the sole consumer.
             app.MapGet("api/drivers", async (PropaneDriverDbContext db) =>
             {
                 var drivers = await db.Drivers
@@ -27,10 +28,13 @@ namespace PropaneDriver.Server.Endpoints
                     })
                     .ToListAsync();
                 return Results.Ok(drivers);
-            });
+            }).RequireAuthorization("AdminOnly");
 
             // Get driver by ID. Note: non-api prefix retained for backward compat
-            // with existing clients that hit /driver/{id}.
+            // with existing clients that hit /driver/{id}. Authenticated users can
+            // fetch any driver record (used by the Route page to load the
+            // currently-signed-in driver's name); the listing endpoint above is
+            // the one that's admin-gated.
             app.MapGet("driver/{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
             {
                 var driver = await db.Drivers.FindAsync(id);
@@ -49,7 +53,7 @@ namespace PropaneDriver.Server.Endpoints
                     Email = driver.Email,
                     PhoneNumber = driver.PhoneNumber
                 });
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             return app;
         }

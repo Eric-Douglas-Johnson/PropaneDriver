@@ -8,7 +8,8 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/alerts");
 
-            // Delete an alert
+            // Delete an alert — admin-only (called from the Admin page's
+            // alert-management panel).
             group.MapDelete("{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
             {
                 var alert = await db.Alerts.FindAsync(id);
@@ -17,9 +18,11 @@ namespace PropaneDriver.Server.Endpoints
                 db.Alerts.Remove(alert);
                 await db.SaveChangesAsync();
                 return Results.Ok(new { Deleted = true, AlertId = id });
-            });
+            }).RequireAuthorization("AdminOnly");
 
-            // Mark an alert as seen (idempotent)
+            // Mark an alert as seen (idempotent). Available to any authenticated
+            // driver since the driver-side Navigation page dismisses alerts as
+            // the route is run.
             group.MapPut("{id:guid}/seen", async (Guid id, PropaneDriverDbContext db) =>
             {
                 var alert = await db.Alerts.FindAsync(id);
@@ -32,7 +35,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
 
                 return Results.Ok(new { alert.Id, alert.Seen });
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             return app;
         }

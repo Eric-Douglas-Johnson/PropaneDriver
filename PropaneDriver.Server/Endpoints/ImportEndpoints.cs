@@ -9,7 +9,7 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/imports");
 
-            // OCR (Ocular Character Recognition) a dispatch-app screenshot and return the parsed delivery
+            // OCR (Optical Character Recognition) a dispatch-app screenshot and return the parsed delivery
             // rows as a DTO. The 10 MB cap matches a generous mobile screenshot size
             // and keeps malicious uploads from chewing up the free OCR tier.
             group.MapPost("dispatch-screenshot", async (
@@ -52,7 +52,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "OCR failed",
                         statusCode: 502);
                 }
-            }).DisableAntiforgery();
+            }).DisableAntiforgery().RequireAuthorization("AdminOnly");
 
             return app;
         }

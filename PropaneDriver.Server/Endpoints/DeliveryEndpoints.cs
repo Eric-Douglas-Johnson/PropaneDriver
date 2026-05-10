@@ -10,7 +10,8 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/deliveries");
 
-            // List alerts for a delivery
+            // List alerts for a delivery — readable by any signed-in driver
+            // since the driver-side route page surfaces them while running.
             group.MapGet("{id:guid}/alerts", async (Guid id, PropaneDriverDbContext db) =>
             {
                 var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
@@ -31,9 +32,10 @@ namespace PropaneDriver.Server.Endpoints
                     .ToListAsync();
 
                 return Results.Ok(alerts);
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
-            // Create an alert for a delivery
+            // Create an alert for a delivery — admin-only (called from the
+            // Admin page's per-delivery alert manager).
             group.MapPost("{id:guid}/alerts", async (Guid id, CreateAlertDto dto, PropaneDriverDbContext db) =>
             {
                 if (string.IsNullOrWhiteSpace(dto.Message))
@@ -60,9 +62,9 @@ namespace PropaneDriver.Server.Endpoints
                     Message = alert.Message,
                     CreatedAt = alert.CreatedAt
                 });
-            });
+            }).RequireAuthorization("AdminOnly");
 
-            // Update a delivery's status
+            // Update a delivery's status — driver-side action when running a route.
             group.MapPut("{id:guid}/status", async (
                 Guid id,
                 DeliveryStatusUpdateDto dto,
@@ -84,7 +86,7 @@ namespace PropaneDriver.Server.Endpoints
                     logger.LogError(ex, "Failed to update status for delivery {Id}", id);
                     return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
                 }
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             return app;
         }

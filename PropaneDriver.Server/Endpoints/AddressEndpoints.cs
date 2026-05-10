@@ -39,7 +39,7 @@ namespace PropaneDriver.Server.Endpoints
                 return address is null
                     ? Results.NotFound(new { Message = $"Address {id} not found." })
                     : Results.Ok(address);
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Overwrite the stored coordinates on an Address row. Used by the
             // driver-side "set pin here" button when the geocoded location is
@@ -86,7 +86,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "Failed to update coordinates",
                         statusCode: 500);
                 }
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Overwrite the TankLocation note on an Address row. Called
             // from the Navigation page when a driver taps the "Add tank
@@ -127,7 +127,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "Failed to update tank location",
                         statusCode: 500);
                 }
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Toggle the BackIn flag on an Address row. Used by the
             // admin/driver UI to mark driveways where the truck must
@@ -161,7 +161,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "Failed to update back-in flag",
                         statusCode: 500);
                 }
-            });
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Toggle the LongRunning flag on an Address row. When true,
             // the driver client uses Start/Stop buttons instead of the
@@ -195,7 +195,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "Failed to update long-running flag",
                         statusCode: 500);
                 }
-            });
+            }).RequireAuthorization("AdminOnly");
 
             return app;
         }

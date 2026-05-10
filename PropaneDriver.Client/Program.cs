@@ -9,12 +9,22 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-builder.Services.AddScoped(sp => new HttpClient
+builder.Services.AddScoped<BrowserStorageService>();
+builder.Services.AddScoped<BearerTokenHandler>();
+
+// Wrap the HttpClient in a BearerTokenHandler so every outbound request gets
+// the persisted JWT (when present) — the server now requires it on every
+// admin-gated endpoint.
+builder.Services.AddScoped(sp =>
 {
-    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+    var bearerHandler = sp.GetRequiredService<BearerTokenHandler>();
+    bearerHandler.InnerHandler = new HttpClientHandler();
+    return new HttpClient(bearerHandler)
+    {
+        BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+    };
 });
 
-builder.Services.AddScoped<BrowserStorageService>();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<CustomAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(provider =>

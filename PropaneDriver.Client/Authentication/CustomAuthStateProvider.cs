@@ -35,24 +35,13 @@ namespace PropaneDriver.Client.Authentication
             {
                 return EmptyAuthState;
             }
-            else
-            {
-                CurrentUser = user;
 
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                    new Claim(ClaimTypes.Name, user.UserName),
-                    new Claim(ClaimTypes.GivenName, user.FirstName),
-                    new Claim(ClaimTypes.Surname, user.LastName),
-                    new Claim(ClaimTypes.Role, user.Role)
-                };
+            CurrentUser = user;
 
-                var identity = new ClaimsIdentity(claims, _authType);
-                var principal = new ClaimsPrincipal(identity);
-                var authState = new AuthenticationState(principal);
-                return authState;
-            }
+            var claims = BuildClaims(user);
+            var identity = new ClaimsIdentity(claims, _authType);
+            var principal = new ClaimsPrincipal(identity);
+            return new AuthenticationState(principal);
         }
 
         public async Task<LoginStatus> LoginAsync(CredsDto creds)
@@ -62,7 +51,7 @@ namespace PropaneDriver.Client.Authentication
                 var requestResultStr = await SendAuthRequest(creds);
                 var authResponseDto = Deserialize<AuthResponseDto>(requestResultStr);
 
-                if (!authResponseDto.IsAuthenticated || authResponseDto.Role == 0)
+                if (!authResponseDto.IsAuthenticated || authResponseDto.Driver is null)
                 {
                     return new LoginStatus
                     {
@@ -73,23 +62,16 @@ namespace PropaneDriver.Client.Authentication
                     };
                 }
 
-                var driverResultStr = await SendGetRequest($"driver/{authResponseDto.UserId}");
-                var driver = Deserialize<DriverDto>(driverResultStr);
-                driver.Role = "driver";
+                // Persist both the JWT (used by BearerTokenHandler on every
+                // subsequent request) and the driver profile (used to rebuild
+                // claims on a page refresh without an extra round-trip).
+                await _browserStorageService.SaveToStorageAsync(
+                    BearerTokenHandler.TokenStorageKey, authResponseDto.Token);
+                await _browserStorageService.SaveToStorageAsync(_userStorageKey, authResponseDto.Driver);
 
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.NameIdentifier, driver.Id.ToString()),
-                    new Claim(ClaimTypes.Name, driver.UserName),
-                    new Claim(ClaimTypes.GivenName, driver.FirstName),
-                    new Claim(ClaimTypes.Surname, driver.LastName),
-                    new Claim(ClaimTypes.Role, driver.Role)
-                };
+                CurrentUser = authResponseDto.Driver;
 
-                await _browserStorageService.SaveToStorageAsync(_userStorageKey, driver);
-                CurrentUser = driver;
-
-                var identity = new ClaimsIdentity(claims, _authType);
+                var identity = new ClaimsIdentity(BuildClaims(authResponseDto.Driver), _authType);
                 var principal = new ClaimsPrincipal(identity);
                 var authState = new AuthenticationState(principal);
 
@@ -147,9 +129,19 @@ namespace PropaneDriver.Client.Authentication
         public async Task LogoutAsync()
         {
             await _browserStorageService.RemoveFromStorage(_userStorageKey);
+            await _browserStorageService.RemoveFromStorage(BearerTokenHandler.TokenStorageKey);
             NotifyAuthenticationStateChanged(Task.FromResult(EmptyAuthState));
             CurrentUser = new UserDto();
         }
+
+        private static List<Claim> BuildClaims(UserDto user) => new()
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id),
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.GivenName, user.FirstName),
+            new Claim(ClaimTypes.Surname, user.LastName),
+            new Claim(ClaimTypes.Role, string.IsNullOrWhiteSpace(user.Role) ? "driver" : user.Role)
+        };
 
         private async Task<string> SendAuthRequest(CredsDto creds)
         {
@@ -165,21 +157,6 @@ namespace PropaneDriver.Client.Authentication
             else
             {
                 throw new InvalidOperationException("Authorization Failed");
-            }
-        }
-
-        private async Task<string> SendGetRequest(string endpoint)
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            using var response = await _httpClient.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                return await response.Content.ReadAsStringAsync();
-            }
-            else
-            {
-                throw new InvalidOperationException($"Request to {endpoint} failed");
             }
         }
 

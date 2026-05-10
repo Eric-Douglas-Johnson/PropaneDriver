@@ -29,6 +29,7 @@ namespace PropaneDriver.Server.Services
             var stopWatch = Stopwatch.StartNew();
             var binaryData = await BinaryData.FromStreamAsync(stream, cancelToken);
 
+            //Take a look at prebuilt-invoice model for Jean's solution
             var operation = await _client.AnalyzeDocumentAsync(
                 WaitUntil.Completed,
                 "prebuilt-read",
