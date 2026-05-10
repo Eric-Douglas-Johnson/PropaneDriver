@@ -33,8 +33,8 @@
      2. A solid colored header band along the top reads as an
         unambiguous "this is the start of a new section". */
 .dispatch-section {
-    --accent: #3b82f6;
-    --accent-tint: rgba(59, 130, 246, 0.08);
+    --accent: #4a6b8a;
+    --accent-tint: rgba(74, 107, 138, 0.08);
 
     background-color: #1a1a2e;
     border: 2px solid var(--accent);
@@ -43,10 +43,13 @@
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
-.dispatch-section--load    { --accent: #3b82f6; --accent-tint: rgba(59, 130, 246, 0.08); }  /* blue   — read */
-.dispatch-section--current { --accent: #22c55e; --accent-tint: rgba(34, 197, 94, 0.08); }   /* green  — active */
-.dispatch-section--routes  { --accent: #a855f7; --accent-tint: rgba(168, 85, 247, 0.08); }  /* purple — list */
-.dispatch-section--create  { --accent: #f59e0b; --accent-tint: rgba(245, 158, 11, 0.08); }  /* amber  — write */
+/* Muted colorway — desaturated and slightly darker than the original
+   "tailwind 500" palette so the four sections still read as distinct
+   on a dark page without yelling for attention. */
+.dispatch-section--load    { --accent: #4a6b8a; --accent-tint: rgba(74, 107, 138, 0.08); }  /* steel blue   — read */
+.dispatch-section--current { --accent: #4f7d5e; --accent-tint: rgba(79, 125, 94, 0.08); }   /* muted forest — active */
+.dispatch-section--routes  { --accent: #7a5f8e; --accent-tint: rgba(122, 95, 142, 0.08); }  /* muted plum   — list */
+.dispatch-section--create  { --accent: #a3784a; --accent-tint: rgba(163, 120, 74, 0.08); }  /* muted bronze — write */
 
 /* Header strip — solid accent fill, white text. Sits flush against the
    top inner edge of the card so the colored band reads as part of the
