@@ -29,27 +29,28 @@
             <h5 class="dispatch-section-title">Select Route Date</h5>
             <p class="dispatch-section-hint">Pick a date to view or edit a route you've already created.</p>
         </div>
+        <div class="dispatch-section-body">
+            <div class="admin-row">
+                <div class="admin-field">
+                    <label>Date</label>
+                    <input type="date" class="form-control form-control-sm" @bind="_selectedDate" />
+                </div>
 
-        <div class="admin-row">
-            <div class="admin-field">
-                <label>Date</label>
-                <input type="date" class="form-control form-control-sm" @bind="_selectedDate" />
+                <div class="admin-field" style="align-self: flex-end;">
+                    <button class="btn btn-sm btn-primary" @onclick="LoadRoute"
+                            disabled="@(string.IsNullOrEmpty(_currentDriverId))">
+                        Load Route
+                    </button>
+                </div>
             </div>
 
-            <div class="admin-field" style="align-self: flex-end;">
-                <button class="btn btn-sm btn-primary" @onclick="LoadRoute"
-                        disabled="@(string.IsNullOrEmpty(_currentDriverId))">
-                    Load Route
-                </button>
-            </div>
+            @if (!string.IsNullOrEmpty(_routeStatus))
+            {
+                <div class="@(_routeStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                    @_routeStatus
+                </div>
+            }
         </div>
-
-        @if (!string.IsNullOrEmpty(_routeStatus))
-        {
-            <div class="@(_routeStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
-                @_routeStatus
-            </div>
-        }
     </section>
 
     <!-- Section: Currently-loaded route detail -->
@@ -59,9 +60,10 @@
             <div class="dispatch-section-header">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="dispatch-section-title m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
-                    <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
+                    <button class="btn btn-sm btn-light" @onclick="DeleteRoute">Delete Route</button>
                 </div>
             </div>
+            <div class="dispatch-section-body">
 
             @if (_loadedRoute.Deliveries.Count > 0)
             {
@@ -189,6 +191,7 @@
                     }
                 </div>
             }
+            </div>
         </section>
     }
 
@@ -232,6 +235,7 @@
                     }
                 </p>
             </div>
+            <div class="dispatch-section-body">
 
             @if (!_hasLoadedDriverRoutes && !_loadingDriverRoutes)
             {
@@ -287,6 +291,7 @@
                     @_driverRoutesStatus
                 </div>
             }
+            </div>
         </section>
     }
 
@@ -296,6 +301,7 @@
             <h5 class="dispatch-section-title">Create New Route</h5>
             <p class="dispatch-section-hint">Import dispatch screenshots, geocode addresses, or enter stops by hand — then save them all as a route.</p>
         </div>
+        <div class="dispatch-section-body">
 
         <!-- Import from screenshot -->
         <div class="admin-row mb-2">
@@ -483,6 +489,7 @@
                 @_createStatus
             </div>
         }
+        </div>
     </section>
 </div>
 

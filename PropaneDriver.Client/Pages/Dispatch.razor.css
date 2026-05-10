@@ -1,9 +1,9 @@
-/* Page shell — bigger gap than Admin so the per-section accent bar
-   reads as a clear divider rather than crowded cards. */
+/* Page shell — generous vertical breathing room so each section reads
+   as a discrete card rather than a continuous strip. */
 .dispatch-page {
     display: flex;
     flex-direction: column;
-    gap: 1.75rem;
+    gap: 2rem;
     padding-bottom: 2rem;
 }
 
@@ -24,45 +24,63 @@
     margin: 0.25rem 0 0 0;
 }
 
-/* Each section is a card with a 4px accent bar on the left edge — color
-   varies per section so the page reads as four distinct workflows
-   instead of a uniform stack of identical cards. */
+/* Each workflow section is its own elevated card. Two pieces of
+   visual separation:
+     1. A 2px outline + drop shadow makes the card lift off the page
+        background. A shared `--accent` custom property is set per
+        modifier and re-used by the outline, header band, and tinted
+        body — so changing one color stays consistent across the card.
+     2. A solid colored header band along the top reads as an
+        unambiguous "this is the start of a new section". */
 .dispatch-section {
+    --accent: #3b82f6;
+    --accent-tint: rgba(59, 130, 246, 0.08);
+
     background-color: #1a1a2e;
-    border: 1px solid #2a2a4a;
-    border-left-width: 4px;
-    border-radius: 8px;
-    padding: 1rem 1.25rem 1.25rem 1.25rem;
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
-.dispatch-section--load     { border-left-color: #3b82f6; } /* blue   — read */
-.dispatch-section--current  { border-left-color: #22c55e; } /* green  — active */
-.dispatch-section--routes   { border-left-color: #a855f7; } /* purple — list */
-.dispatch-section--create   { border-left-color: #f59e0b; } /* amber  — write */
+.dispatch-section--load    { --accent: #3b82f6; --accent-tint: rgba(59, 130, 246, 0.08); }  /* blue   — read */
+.dispatch-section--current { --accent: #22c55e; --accent-tint: rgba(34, 197, 94, 0.08); }   /* green  — active */
+.dispatch-section--routes  { --accent: #a855f7; --accent-tint: rgba(168, 85, 247, 0.08); }  /* purple — list */
+.dispatch-section--create  { --accent: #f59e0b; --accent-tint: rgba(245, 158, 11, 0.08); }  /* amber  — write */
 
-/* Header strip inside each section: title + one-line hint, divider
-   underneath. Gives the eye a clear "this is where the section starts"
-   anchor before the controls. */
+/* Header strip — solid accent fill, white text. Sits flush against the
+   top inner edge of the card so the colored band reads as part of the
+   card, not a label floating above it. */
 .dispatch-section-header {
-    border-bottom: 1px solid #2a2a4a;
-    padding-bottom: 0.6rem;
-    margin-bottom: 0.85rem;
+    background-color: var(--accent);
+    padding: 0.6rem 1.1rem 0.7rem 1.1rem;
 }
 
 .dispatch-section-title {
-    color: whitesmoke;
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.2rem;
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.1rem;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    letter-spacing: 0.01em;
 }
 
+/* Slight transparency on hint text so it reads as secondary info on
+   the colored band without losing legibility. */
 .dispatch-section-hint {
-    color: #8892b0;
+    color: rgba(255, 255, 255, 0.85);
     font-size: 0.78rem;
-    margin: 0.2rem 0 0 0;
+    margin: 0.15rem 0 0 0;
+}
+
+/* Body of the card — subtle accent-tinted background + inner padding.
+   The tint is faint enough that text contrast stays comfortable but
+   strong enough that the four sections read as visually distinct. */
+.dispatch-section-body {
+    background-color: var(--accent-tint);
+    padding: 1.1rem 1.25rem 1.25rem 1.25rem;
 }
 
 /* Pill-style count next to "My Routes" so the number is visually
