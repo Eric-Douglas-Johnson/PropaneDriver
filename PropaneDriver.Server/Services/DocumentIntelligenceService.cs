@@ -15,10 +15,11 @@ namespace PropaneDriver.Server.Services
             _logger = logger;
 
             var endpoint = configuration["DocumentIntelligence:Endpoint"];
+            var apiKey = configuration["DocumentIntelligence:ApiKey"];
+
             if (string.IsNullOrWhiteSpace(endpoint))
                 throw new InvalidOperationException("DocumentIntelligence:Endpoint not configured.");
 
-            var apiKey = configuration["DocumentIntelligence:ApiKey"];
             _client = string.IsNullOrWhiteSpace(apiKey)
                 ? new DocumentIntelligenceClient(new Uri(endpoint), new DefaultAzureCredential())
                 : new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
