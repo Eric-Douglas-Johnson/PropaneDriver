@@ -1,3 +1,4 @@
+using Azure.AI.DocumentIntelligence;
 using PropaneDriver.Server.Services;
 using PropaneDriver.Shared.Dtos;
 
@@ -53,6 +54,71 @@ namespace PropaneDriver.Server.Endpoints
                         statusCode: 502);
                 }
             }).DisableAntiforgery().RequireAuthorization("AuthenticatedDriver");
+
+            // Admin Tools document scan: run the same Document Intelligence OCR
+            // pipeline as the dispatch screenshot import, but return the raw
+            // per-page lines without funneling them through any specific
+            // parser. The Tools page builds on top of this as a foundation
+            // for future, purpose-specific document workflows.
+            group.MapPost("tools-document", async (
+                IFormFile file,
+                DocumentIntelligenceService docIntelService,
+                ILogger<Program> logger,
+                CancellationToken cancelToken) =>
+            {
+                if (file is null || file.Length == 0)
+                    return Results.BadRequest(new { Message = "No file uploaded." });
+                if (file.Length > 10 * 1024 * 1024)
+                    return Results.BadRequest(new { Message = "File exceeds 10 MB limit." });
+                if (string.IsNullOrEmpty(file.ContentType) || !file.ContentType.StartsWith("image/"))
+                    return Results.BadRequest(new { Message = "Only image files are supported." });
+
+                try
+                {
+                    await using var imageStream = file.OpenReadStream();
+                    var ocrResult = await docIntelService.RunDocAnalysis(imageStream, cancelToken);
+
+                    var pages = new List<OcrPageDto>();
+                    if (ocrResult.Pages is not null)
+                    {
+                        var fallbackPageIndex = 0;
+                        foreach (DocumentPage page in ocrResult.Pages)
+                        {
+                            fallbackPageIndex++;
+                            var pageLines = new List<string>();
+                            if (page.Lines is not null)
+                            {
+                                foreach (DocumentLine line in page.Lines)
+                                {
+                                    if (!string.IsNullOrEmpty(line.Content))
+                                        pageLines.Add(line.Content);
+                                }
+                            }
+
+                            pages.Add(new OcrPageDto
+                            {
+                                PageNumber = page.PageNumber > 0 ? page.PageNumber : fallbackPageIndex,
+                                Lines = pageLines
+                            });
+                        }
+                    }
+
+                    return Results.Ok(new OcrDocumentDto
+                    {
+                        FileName = file.FileName ?? string.Empty,
+                        PageCount = pages.Count,
+                        Pages = pages
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Tools document OCR failed");
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "OCR failed",
+                        statusCode: 502);
+                }
+            }).DisableAntiforgery().RequireAuthorization("AdminOnly");
 
             return app;
         }

@@ -52,6 +52,15 @@
             </AuthorizeView>
         </div>
         <div class="nav-item px-3">
+            <AuthorizeView Roles="admin">
+                <Authorized>
+                    <NavLink class="nav-link" href="tools">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Tools
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <div class="nav-item px-3">
             <AuthorizeView>
                 <Authorized>
                     <label class="text-white">
