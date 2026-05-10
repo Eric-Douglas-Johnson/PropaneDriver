@@ -1,6 +1,6 @@
 using Azure;
 using Azure.AI.DocumentIntelligence;
-using Azure.Identity;
+using PropaneDriver.Shared.Enums;
 using System.Diagnostics;
 
 namespace PropaneDriver.Server.Services
@@ -10,37 +10,34 @@ namespace PropaneDriver.Server.Services
         private readonly DocumentIntelligenceClient _client;
         private readonly ILogger<DocumentIntelligenceService> _logger;
 
-        public DocumentIntelligenceService(IConfiguration configuration, ILogger<DocumentIntelligenceService> logger)
+        // Takes the SDK client directly so tests can subclass it and override
+        // AnalyzeDocumentAsync with deterministic results. Production wiring
+        // (see Program.cs) builds the real client from configuration.
+        public DocumentIntelligenceService(DocumentIntelligenceClient client, ILogger<DocumentIntelligenceService> logger)
         {
+            _client = client;
             _logger = logger;
-
-            var endpoint = configuration["DocumentIntelligence:Endpoint"];
-            var apiKey = configuration["DocumentIntelligence:ApiKey"];
-
-            if (string.IsNullOrWhiteSpace(endpoint))
-                throw new InvalidOperationException("DocumentIntelligence:Endpoint not configured.");
-
-            _client = string.IsNullOrWhiteSpace(apiKey)
-                ? new DocumentIntelligenceClient(new Uri(endpoint), new DefaultAzureCredential())
-                : new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(apiKey));
         }
 
-        public async Task<AnalyzeResult> RunDocAnalysis(Stream stream, CancellationToken cancelToken)
+        public async Task<AnalyzeResult> RunDocAnalysis(Stream stream, AzureDocumentIntelligenceModel model, CancellationToken cancelToken)
         {
+            var modelId = model.ToAzureModelId();
+
             var stopWatch = Stopwatch.StartNew();
             var binaryData = await BinaryData.FromStreamAsync(stream, cancelToken);
 
             //Take a look at prebuilt-invoice model for Jean's solution
             var operation = await _client.AnalyzeDocumentAsync(
                 WaitUntil.Completed,
-                "prebuilt-read",
+                modelId,
                 binaryData,
                 cancellationToken: cancelToken);
 
             var docAnalysisResult = operation.Value;
 
             _logger.LogInformation(
-                "Document Intelligence prebuilt-read finished in {ElapsedMs} ms; {PageCount} page(s)",
+                "Document Intelligence {ModelId} finished in {ElapsedMs} ms; {PageCount} page(s)",
+                modelId,
                 stopWatch.ElapsedMilliseconds,
                 docAnalysisResult.Pages?.Count ?? 0);
 

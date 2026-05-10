@@ -30,6 +30,18 @@ builder.Services.AddDbContext<PropaneDriverDbContext>(options =>
 });
 
 builder.Services.AddSingleton<EmailService>();
+builder.Services.AddSingleton(serviceProvider =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var endpoint = configuration["DocumentIntelligence:Endpoint"];
+    if (string.IsNullOrWhiteSpace(endpoint))
+        throw new InvalidOperationException("DocumentIntelligence:Endpoint not configured.");
+
+    var apiKey = configuration["DocumentIntelligence:ApiKey"];
+    return string.IsNullOrWhiteSpace(apiKey)
+        ? new Azure.AI.DocumentIntelligence.DocumentIntelligenceClient(new Uri(endpoint), new Azure.Identity.DefaultAzureCredential())
+        : new Azure.AI.DocumentIntelligence.DocumentIntelligenceClient(new Uri(endpoint), new Azure.AzureKeyCredential(apiKey));
+});
 builder.Services.AddSingleton<DocumentIntelligenceService>();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddHttpClient();

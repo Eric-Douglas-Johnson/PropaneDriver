@@ -303,6 +303,55 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    // ---------- POST /api/imports/tools-document (AdminOnly) ----------
+
+    [Fact]
+    public async Task ToolsDocument_Anonymous_Returns401()
+    {
+        using var client = _factory.CreateAnonymousClient();
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 0x89, 0x50, 0x4E, 0x47 })
+        {
+            Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png") }
+        }, "file", "fake.png");
+        var response = await client.PostAsync("/api/imports/tools-document", content);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ToolsDocument_DriverRole_Returns403()
+    {
+        // The tools-document endpoint is the OCR backbone of the admin
+        // Tools page, so a plain driver token must be denied.
+        var driver = _factory.SeedDriver("tools-driver", role: "driver");
+        using var client = _factory.CreateClientForDriver(driver);
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 0x89, 0x50, 0x4E, 0x47 })
+        {
+            Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png") }
+        }, "file", "fake.png");
+        var response = await client.PostAsync("/api/imports/tools-document", content);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ToolsDocument_AdminRole_PassesAuthFilter()
+    {
+        // Downstream OCR will fail (502) against the fake Doc Intel
+        // endpoint configured for tests — that's fine, we only care
+        // that auth/role checks let admins through.
+        var admin = _factory.SeedDriver("tools-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 0x89, 0x50, 0x4E, 0x47 })
+        {
+            Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png") }
+        }, "file", "fake.png");
+        var response = await client.PostAsync("/api/imports/tools-document", content);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     // ---------- DELETE /api/alerts/{id} (self-or-admin via route ownership) ----------
 
     [Fact]

@@ -1,6 +1,7 @@
 using Azure.AI.DocumentIntelligence;
 using PropaneDriver.Server.Services;
 using PropaneDriver.Shared.Dtos;
+using PropaneDriver.Shared.Enums;
 
 namespace PropaneDriver.Server.Endpoints
 {
@@ -29,7 +30,7 @@ namespace PropaneDriver.Server.Endpoints
                 try
                 {
                     await using var imgStream = file.OpenReadStream();
-                    var ocrData = await docIntelService.RunDocAnalysis(imgStream, cancelToken);
+                    var ocrData = await docIntelService.RunDocAnalysis(imgStream, AzureDocumentIntelligenceModel.Read, cancelToken);
                     var deliveries = DispatchScreenshotParser.Parse(ocrData);
 
                     return Results.Ok(new ParsedDispatchDto
@@ -76,7 +77,7 @@ namespace PropaneDriver.Server.Endpoints
                 try
                 {
                     await using var imageStream = file.OpenReadStream();
-                    var ocrResult = await docIntelService.RunDocAnalysis(imageStream, cancelToken);
+                    var ocrResult = await docIntelService.RunDocAnalysis(imageStream, AzureDocumentIntelligenceModel.Read, cancelToken);
 
                     var pages = new List<OcrPageDto>();
                     if (ocrResult.Pages is not null)
