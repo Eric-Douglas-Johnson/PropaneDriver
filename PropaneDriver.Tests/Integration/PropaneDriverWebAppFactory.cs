@@ -117,6 +117,79 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         return driver;
     }
 
+    // Seed a route owned by the given driver. Used by ownership-enforcement
+    // tests so we can assert "driver A cannot act on driver B's route".
+    public RouteDbRecord SeedRoute(Guid driverId, DateOnly? date = null)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+
+        var route = new RouteDbRecord
+        {
+            Id = Guid.NewGuid(),
+            DriverId = driverId,
+            Date = date ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Routes.Add(route);
+        db.SaveChanges();
+        return route;
+    }
+
+    // Seed a delivery (and a backing address) on the given route. Address
+    // fields are unique-per-call so the unique-key constraint on Addresses
+    // doesn't clash across tests.
+    public DeliveryDbRecord SeedDelivery(Guid routeId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+
+        var address = new AddressDbRecord
+        {
+            Id = Guid.NewGuid(),
+            Street = $"{Random.Shared.Next(100, 9999)} Test St",
+            City = "Testville",
+            State = "MN",
+            ZipCode = "55001",
+            Latitude = 44.0,
+            Longitude = -93.0,
+            AvgDeliveryTimeSeconds = 0,
+        };
+        db.Addresses.Add(address);
+
+        var delivery = new DeliveryDbRecord
+        {
+            Id = Guid.NewGuid(),
+            RouteId = routeId,
+            AddressId = address.Id,
+            CustomerName = "Test Customer",
+            Status = 0,
+            AvgDeliveryTimeMinutes = 0,
+            SortOrder = 0,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Deliveries.Add(delivery);
+        db.SaveChanges();
+        return delivery;
+    }
+
+    public AlertDbRecord SeedAlert(Guid deliveryId, string message = "test alert")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+
+        var alert = new AlertDbRecord
+        {
+            Id = Guid.NewGuid(),
+            DeliveryId = deliveryId,
+            Message = message,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Alerts.Add(alert);
+        db.SaveChanges();
+        return alert;
+    }
+
     // Issues a JWT signed with the same key the test app validates against.
     public string IssueToken(DriverDbRecord driver)
     {

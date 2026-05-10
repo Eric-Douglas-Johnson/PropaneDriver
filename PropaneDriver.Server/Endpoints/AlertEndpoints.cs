@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using PropaneDriver.Server.Authorization;
 using PropaneDriver.Server.Data;
 
 namespace PropaneDriver.Server.Endpoints
@@ -8,33 +11,55 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/alerts");
 
-            // Delete an alert — admin-only (called from the Admin page's
-            // alert-management panel).
-            group.MapDelete("{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
+            // Delete an alert. Drivers can delete alerts on their own
+            // deliveries (Dispatch); admins can delete any (Admin). The
+            // alert → delivery → route → driver chain is what we walk to
+            // check ownership.
+            group.MapDelete("{id:guid}", async (
+                Guid id,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
-                var alert = await db.Alerts.FindAsync(id);
-                if (alert is null) return Results.NotFound();
+                var alertWithRoute = await db.Alerts
+                    .Where(a => a.Id == id)
+                    .Select(a => new { Alert = a, RouteDriverId = a.Delivery!.Route!.DriverId })
+                    .FirstOrDefaultAsync();
 
-                db.Alerts.Remove(alert);
+                if (alertWithRoute is null) return Results.NotFound();
+
+                if (!user.CanAccessDriverData(alertWithRoute.RouteDriverId))
+                    return Results.Forbid();
+
+                db.Alerts.Remove(alertWithRoute.Alert);
                 await db.SaveChangesAsync();
                 return Results.Ok(new { Deleted = true, AlertId = id });
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
-            // Mark an alert as seen (idempotent). Available to any authenticated
-            // driver since the driver-side Navigation page dismisses alerts as
-            // the route is run.
-            group.MapPut("{id:guid}/seen", async (Guid id, PropaneDriverDbContext db) =>
+            // Mark an alert as seen (idempotent). Available to any
+            // authenticated driver — but still ownership-guarded so a
+            // driver can't dismiss someone else's alerts.
+            group.MapPut("{id:guid}/seen", async (
+                Guid id,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
-                var alert = await db.Alerts.FindAsync(id);
-                if (alert is null) return Results.NotFound();
+                var alertWithRoute = await db.Alerts
+                    .Where(a => a.Id == id)
+                    .Select(a => new { Alert = a, RouteDriverId = a.Delivery!.Route!.DriverId })
+                    .FirstOrDefaultAsync();
 
-                if (!alert.Seen)
+                if (alertWithRoute is null) return Results.NotFound();
+
+                if (!user.CanAccessDriverData(alertWithRoute.RouteDriverId))
+                    return Results.Forbid();
+
+                if (!alertWithRoute.Alert.Seen)
                 {
-                    alert.Seen = true;
+                    alertWithRoute.Alert.Seen = true;
                     await db.SaveChangesAsync();
                 }
 
-                return Results.Ok(new { alert.Id, alert.Seen });
+                return Results.Ok(new { alertWithRoute.Alert.Id, alertWithRoute.Alert.Seen });
             }).RequireAuthorization("AuthenticatedDriver");
 
             return app;

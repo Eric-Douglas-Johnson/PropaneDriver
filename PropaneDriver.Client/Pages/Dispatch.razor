@@ -1,0 +1,1121 @@
+@page "/dispatch"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PropaneDriver.Client.Authentication
+@using PropaneDriver.Client.Services
+@using PropaneDriver.Shared.Dtos
+@using PropaneDriver.Shared.Interfaces
+@inject RouteApiService RouteApi
+@inject GeocodingService Geocoder
+@inject HttpClient Http
+@inject SpeechService SpeechService
+@inject IJSRuntime JS
+@inject CustomAuthStateProvider AuthStateProvider
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+<PageTitle>Dispatch</PageTitle>
+
+<div class="admin-page">
+    <h4 class="admin-title">Dispatch</h4>
+    <p class="admin-subtitle" style="color:#8892b0; margin-top:-0.5rem; font-size:0.85rem;">
+        Plan and create your own routes. Only data tied to your account is shown here.
+    </p>
+
+    <!-- Date picker / load route -->
+    <div class="admin-card">
+
+        <h5>Select Route Date</h5>
+
+        <div class="admin-row">
+            <div class="admin-field">
+                <label>Date</label>
+                <input type="date" class="form-control form-control-sm" @bind="_selectedDate" />
+            </div>
+
+            <div class="admin-field" style="align-self: flex-end;">
+                <button class="btn btn-sm btn-primary" @onclick="LoadRoute"
+                        disabled="@(string.IsNullOrEmpty(_currentDriverId))">
+                    Load Route
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_routeStatus))
+        {
+            <div class="@(_routeStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                @_routeStatus
+            </div>
+        }
+    </div>
+
+    <!-- Existing Route -->
+    @if (_loadedRoute is not null)
+    {
+        <div class="admin-card">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
+                <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
+            </div>
+
+            @if (_loadedRoute.Deliveries.Count > 0)
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Address</th>
+                            <th>GPS</th>
+                            <th>Status</th>
+                            <th>
+                                Long Running
+                                <span class="info-icon" title="@LongRunningDescription">?</span>
+                            </th>
+                            <th>Alerts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var idx = 0; }
+                        @foreach (var del in _loadedRoute.Deliveries)
+                        {
+                            idx++;
+                            var captured = del;
+                            <tr>
+                                <td>@idx</td>
+                                <td>@del.Location.FullAddress</td>
+                                <td>
+                                    @if (del.Location.HasCoordinates)
+                                    {
+                                        <span>@del.Location.Latitude.ToString("F4"), @del.Location.Longitude.ToString("F4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:#8892b0;">None</span>
+                                    }
+                                </td>
+                                <td>@StatusText(del.Status)</td>
+                                <td>
+                                    @* Read-only on Dispatch — Address.LongRunning is shared
+                                       across all drivers using this address, so toggling it
+                                       lives on the Admin page. Drivers set it at delivery
+                                       creation time via the form below. *@
+                                    @(del.Location.LongRunning ? "Yes" : "No")
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-warning py-0 px-2"
+                                            @onclick="() => OpenAlerts(captured)">
+                                        Manage (@del.Alerts.Count)
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            @if (_alertDelivery is not null)
+            {
+                <div class="alerts-panel mt-3 p-3" style="background:#12142a; border:1px solid #2a2a4a; border-radius:6px;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="m-0">Alerts for @_alertDelivery.Location.FullAddress</h6>
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="CloseAlerts">Close</button>
+                    </div>
+
+                    @if (_alertDelivery.Alerts.Count == 0)
+                    {
+                        <div style="font-size:0.85rem; color:#8892b0;">No alerts for this delivery.</div>
+                    }
+                    else
+                    {
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Message</th>
+                                    <th>Created</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in _alertDelivery.Alerts)
+                                {
+                                    var alertId = a.Id;
+                                    <tr>
+                                        <td>@a.Message</td>
+                                        <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                                    @onclick="() => DeleteAlert(alertId)"
+                                                    disabled="@(_deletingAlertId == alertId)">
+                                                @(_deletingAlertId == alertId ? "…" : "X")
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+
+                    <div class="admin-row mt-2">
+                        <div class="admin-field flex-2">
+
+                            <label>New alert message</label>
+
+                            <div class="input-with-mic">
+                                <input type="text" class="form-control form-control-sm"
+                                       @bind="_newAlertMessage"
+                                       @onkeydown="OnAlertKeyDown" />
+                                <button class="btn-mic @(_dictatingAlert ? "btn-mic-active" : "")"
+                                        @onclick="DictateAlert" disabled="@_dictatingAlert"
+                                        title="Dictate">&#x1F399;</button>
+                            </div>
+                        </div>
+                        <div class="admin-field" style="align-self:flex-end; max-width:120px;">
+                            <button class="btn btn-sm btn-primary" @onclick="AddAlert"
+                                    disabled="@(_addingAlert || string.IsNullOrWhiteSpace(_newAlertMessage))">
+                                @(_addingAlert ? "Adding…" : "Add Alert")
+                            </button>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_alertStatus))
+                    {
+                        <div class="@(_alertStatusSuccess ? "text-success" : "text-danger") mt-2" style="font-size:0.85rem;">
+                            @_alertStatus
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- My routes -->
+    @if (!string.IsNullOrEmpty(_currentDriverId))
+    {
+        <div class="admin-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="m-0">My Routes (@_driverRoutes.Count)</h5>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverRoutes"
+                        disabled="@_loadingDriverRoutes">
+                    @(_loadingDriverRoutes ? "Loading…" : "Refresh")
+                </button>
+            </div>
+
+            @if (_driverRoutes.Count == 0 && !_loadingDriverRoutes)
+            {
+                <div style="font-size:0.85rem; color:#8892b0;">No routes found yet. Build your first route below.</div>
+            }
+            else if (_driverRoutes.Count > 0)
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Deliveries</th>
+                            <th>Completed</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _driverRoutes)
+                        {
+                            var routeId = r.Id;
+                            var routeDate = r.Date;
+                            <tr>
+                                <td>@r.Date.ToString("yyyy-MM-dd")</td>
+                                <td>@r.DeliveryCount</td>
+                                <td>@r.CompletedCount</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info py-0 px-2"
+                                            @onclick="() => LoadRouteById(routeDate)">
+                                        Load
+                                    </button>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                            @onclick="() => DeleteDriverRoute(routeId)"
+                                            disabled="@(_deletingRouteId == routeId)">
+                                        @(_deletingRouteId == routeId ? "Deleting…" : "Delete")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            @if (!string.IsNullOrEmpty(_driverRoutesStatus))
+            {
+                <div class="@(_driverRoutesStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                    @_driverRoutesStatus
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Create New Route -->
+    <div class="admin-card">
+
+        <h5>Create New Route</h5>
+
+        <!-- Import from screenshot -->
+        <div class="admin-row mb-2">
+            <div class="admin-field flex-2">
+                <label>Import from dispatch screenshots (one or more)</label>
+                <input type="file" id="dispatch-import-file" @key="_importFileKey"
+                       accept="image/*" multiple class="form-control form-control-sm"
+                       @onchange="OnImportFileSelected" />
+            </div>
+        </div>
+
+        @if (_importing)
+        {
+            <div class="d-flex align-items-center gap-2" style="font-size:0.8rem; color:#8892b0;">
+                <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+                <span>@(_importProgress ?? "Reading screenshots… (this can take a few seconds)")</span>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(_importStatus))
+        {
+            <div class="@(_importStatusSuccess ? "text-success" : "text-warning")"
+                 style="font-size:0.8rem;">@_importStatus</div>
+        }
+
+        @if (_importRawLines is not null && _importRawLines.Count > 0)
+        {
+            <div class="mt-2">
+                <h6>OCR raw text (no addresses matched)</h6>
+                <pre style="background:#1c2333;color:#cdd6f4;padding:0.5rem;border-radius:4px;font-size:0.75rem;max-height:300px;overflow:auto;">@string.Join("\n", _importRawLines)</pre>
+            </div>
+        }
+
+        @if (_importedRows.Count > 0)
+        {
+            <div class="mt-2">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="m-0">Detected deliveries (@_importedRows.Count)</h6>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                            @onclick="ClearImportedRows">
+                        Clear
+                    </button>
+                </div>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Address</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < _importedRows.Count; i++)
+                        {
+                            var row = _importedRows[i];
+                            var rowIndex = i;
+                            var isDuplicate = IsDuplicateImportedRow(rowIndex);
+                            var dupeStyle = isDuplicate ? "background-color:#7c4a00;color:#fde68a;" : null;
+                            <tr class="@(isDuplicate ? "duplicate-row" : null)"
+                                title="@(isDuplicate ? "Duplicate address — already on this route, in pending, or scanned twice" : null)">
+                                <td style="@dupeStyle">@(i + 1)</td>
+                                <td style="@dupeStyle">
+                                    @row.Street, @row.City, @row.State @row.ZipCode
+                                    @if (isDuplicate)
+                                    {
+                                        <span style="margin-left:0.5rem;padding:0 0.4rem;border-radius:3px;background:#b45309;color:#fff;font-size:0.7rem;font-weight:600;">⚠ DUPLICATE</span>
+                                    }
+                                </td>
+                                <td style="@dupeStyle">
+                                    <button class="btn btn-sm btn-outline-info py-0 px-1"
+                                            @onclick="() => LoadImportedRow(rowIndex)">Load</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <!-- Add delivery form -->
+        <div class="add-delivery-form">
+            <div class="admin-row">
+                <div class="admin-field flex-2">
+                    <label>Street</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newStreet" @onfocusout="TryGeocode" />
+                </div>
+            </div>
+            <div class="admin-row">
+                <div class="admin-field">
+                    <label>City</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newCity" @onfocusout="TryGeocode" />
+                </div>
+                <div class="admin-field" style="max-width:80px;">
+                    <label>State</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newState" @onfocusout="TryGeocode" />
+                </div>
+                <div class="admin-field" style="max-width:110px;">
+                    <label>Zip</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="_newZip" @onfocusout="TryGeocode" />
+                </div>
+                <div class="admin-field" style="max-width:160px;">
+                    <label>Latitude</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newLatStr" />
+                </div>
+                <div class="admin-field" style="max-width:160px;">
+                    <label>Longitude</label>
+                    <input type="text" class="form-control form-control-sm" @bind="_newLonStr" />
+                </div>
+                <div class="admin-field" style="align-self:flex-end; padding-bottom:0.35rem;">
+                    <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
+                        <input type="checkbox" @bind="_newLongRunning" />
+                        Long Running
+                        <span class="info-icon" title="@LongRunningDescription">?</span>
+                    </label>
+                </div>
+            </div>
+            @if (_geocoding)
+            {
+                <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">Looking up coordinates…</div>
+            }
+            else if (!string.IsNullOrEmpty(_geocodeStatus))
+            {
+                <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
+            }
+            <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
+                    disabled="@(string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                Add Delivery
+            </button>
+            @if (_loadedRoute is not null)
+            {
+                <button class="btn btn-sm btn-outline-success mt-2 ms-2" @onclick="AddDeliveryToLoadedRoute"
+                        disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                    @(_appendingToRoute ? "Adding…" : "Add to Loaded Route")
+                </button>
+            }
+        </div>
+
+        <!-- Pending deliveries -->
+        @if (_pendingDeliveries.Count > 0)
+        {
+            <h6 class="mt-3">Pending Deliveries (@_pendingDeliveries.Count)</h6>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Address</th>
+                        <th>GPS</th>
+                        <th>
+                            Long Running
+                            <span class="info-icon" title="@LongRunningDescription">?</span>
+                        </th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < _pendingDeliveries.Count; i++)
+                    {
+                        var delivery = _pendingDeliveries[i];
+                        var capturedIndex = i;
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
+                            <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
+                            <td>@(delivery.LongRunning ? "Yes" : "No")</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RemovePending(capturedIndex)">X</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <button class="btn btn-primary mt-2" @onclick="CreateRoute"
+                    disabled="@(string.IsNullOrEmpty(_currentDriverId) || _creating)">
+                @(_creating ? "Creating…" : "Create Route")
+            </button>
+        }
+
+        @if (!string.IsNullOrEmpty(_createStatus))
+        {
+            <div class="@(_createSuccess ? "text-success" : "text-danger") mt-2" style="font-size:0.85rem;">
+                @_createStatus
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    // The signed-in driver's id, derived from the auth state. All API calls
+    // on this page operate on this driver's data only — server enforces
+    // it too via self-or-admin ownership checks, but we set it here so
+    // the UI can pre-fill DriverId in the create-route DTO.
+    private string _currentDriverId = string.Empty;
+
+    private DateTime _selectedDate = DateTime.Today;
+
+    private RouteDto? _loadedRoute;
+    private string? _routeStatus;
+    private bool _routeStatusSuccess;
+
+    private List<RouteListItemDto> _driverRoutes = new();
+    private bool _loadingDriverRoutes;
+    private string? _driverRoutesStatus;
+    private bool _driverRoutesStatusSuccess;
+    private string? _deletingRouteId;
+
+    // New delivery form fields
+    private string _newStreet = string.Empty;
+    private string _newCity = string.Empty;
+    private string _newState = "MN";
+    private string _newZip = string.Empty;
+    private string _newLatStr = string.Empty;
+    private string _newLonStr = string.Empty;
+    private bool _newLongRunning;
+    private bool _geocoding;
+    private string? _geocodeStatus;
+    private string _lastGeocodedAddress = string.Empty;
+
+    // Single source of truth for the help-tooltip copy.
+    private const string LongRunningDescription =
+        "Use Start/Stop buttons on the delivery page to record delivery time.";
+
+    private List<CreateDeliveryDto> _pendingDeliveries = new();
+    private string? _createStatus;
+    private bool _createSuccess;
+    private bool _creating;
+    private bool _appendingToRoute;
+
+    // Screenshot-import (OCR) state
+    private bool _importing;
+    private string? _importStatus;
+    private bool _importStatusSuccess;
+    private string? _importProgress;
+    private List<ParsedDeliveryDto> _importedRows = new();
+    private List<string>? _importRawLines;
+    private int _importFileKey;
+
+    // Alert management
+    private IDelivery? _alertDelivery;
+    private string _newAlertMessage = string.Empty;
+    private string? _deletingAlertId;
+    private bool _addingAlert;
+    private bool _dictatingAlert;
+    private string? _alertStatus;
+    private bool _alertStatusSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Resolve the signed-in driver's id once. The CustomAuthStateProvider
+        // also exposes CurrentUser, but the cascading auth state task is the
+        // canonical source — and awaits any in-flight token-restore from
+        // localStorage on a hard refresh.
+        var authState = await AuthenticationStateTask;
+        _currentDriverId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(_currentDriverId))
+        {
+            await LoadDriverRoutes();
+        }
+    }
+
+    private async Task LoadDriverRoutes()
+    {
+        if (string.IsNullOrEmpty(_currentDriverId)) return;
+
+        _loadingDriverRoutes = true;
+        _driverRoutesStatus = null;
+        StateHasChanged();
+
+        try
+        {
+            _driverRoutes = await RouteApi.GetRoutesForDriverAsync(_currentDriverId);
+        }
+        catch (Exception ex)
+        {
+            _driverRoutesStatus = $"Error loading routes: {ex.Message}";
+            _driverRoutesStatusSuccess = false;
+        }
+        finally
+        {
+            _loadingDriverRoutes = false;
+        }
+    }
+
+    private async Task LoadRouteById(DateOnly date)
+    {
+        _selectedDate = date.ToDateTime(TimeOnly.MinValue);
+        await LoadRoute();
+    }
+
+    private async Task DeleteDriverRoute(string routeId)
+    {
+        if (string.IsNullOrEmpty(routeId)) return;
+
+        _deletingRouteId = routeId;
+        _driverRoutesStatus = null;
+        StateHasChanged();
+
+        var success = await RouteApi.DeleteRouteAsync(routeId);
+
+        if (success)
+        {
+            _driverRoutesStatus = "Route deleted.";
+            _driverRoutesStatusSuccess = true;
+
+            if (_loadedRoute?.Id == routeId)
+            {
+                _loadedRoute = null;
+                _routeStatus = null;
+            }
+
+            await LoadDriverRoutes();
+        }
+        else
+        {
+            _driverRoutesStatus = "Failed to delete route.";
+            _driverRoutesStatusSuccess = false;
+        }
+
+        _deletingRouteId = null;
+    }
+
+    private async Task LoadRoute()
+    {
+        if (string.IsNullOrEmpty(_currentDriverId)) return;
+
+        _loadedRoute = null;
+        _routeStatus = null;
+
+        try
+        {
+            var date = DateOnly.FromDateTime(_selectedDate);
+            var response = await Http.GetAsync($"api/routes/{_currentDriverId}/{date:yyyy-MM-dd}");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _routeStatus = $"No route found for {date}.";
+                _routeStatusSuccess = false;
+                return;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedRoute = await response.Content.ReadFromJsonAsync<RouteDto>();
+                _routeStatus = $"Route loaded — {_loadedRoute?.Deliveries.Count ?? 0} deliveries.";
+                _routeStatusSuccess = true;
+            }
+            else
+            {
+                _routeStatus = $"Error loading route: {(int)response.StatusCode}";
+                _routeStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _routeStatus = $"Error: {ex.Message}";
+            _routeStatusSuccess = false;
+        }
+    }
+
+    private async Task DeleteRoute()
+    {
+        if (_loadedRoute is null) return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/routes/{_loadedRoute.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                _loadedRoute = null;
+                _routeStatus = "Route deleted.";
+                _routeStatusSuccess = true;
+                await LoadDriverRoutes();
+            }
+            else
+            {
+                _routeStatus = $"Delete failed: {(int)response.StatusCode}";
+                _routeStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _routeStatus = $"Error: {ex.Message}";
+            _routeStatusSuccess = false;
+        }
+    }
+
+    private async Task TryGeocode()
+    {
+        if (string.IsNullOrWhiteSpace(_newStreet)) return;
+
+        var addressKey = $"{_newStreet}|{_newCity}|{_newState}|{_newZip}";
+        if (addressKey == _lastGeocodedAddress) return;
+        _lastGeocodedAddress = addressKey;
+
+        _geocoding = true;
+        _geocodeStatus = null;
+        StateHasChanged();
+
+        var result = await Geocoder.GeocodeAsync(_newStreet, _newCity, _newState, _newZip);
+
+        if (result is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(result.Street)) _newStreet = result.Street;
+            if (!string.IsNullOrWhiteSpace(result.City)) _newCity = result.City;
+            if (!string.IsNullOrWhiteSpace(result.State)) _newState = result.State;
+            if (!string.IsNullOrWhiteSpace(result.ZipCode)) _newZip = result.ZipCode;
+
+            _newLatStr = result.Latitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            _newLonStr = result.Longitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+            var sourceTag = string.IsNullOrWhiteSpace(result.Source) ? "" : $" [{result.Source}]";
+            _geocodeStatus = $"Found{sourceTag}: {result.DisplayName}";
+        }
+        else
+        {
+            _geocodeStatus = "Could not find this address.";
+        }
+
+        _geocoding = false;
+    }
+
+    private void AddDeliveryToList()
+    {
+        if (string.IsNullOrWhiteSpace(_newStreet) ||
+            string.IsNullOrWhiteSpace(_newCity) ||
+            string.IsNullOrWhiteSpace(_newState) ||
+            string.IsNullOrWhiteSpace(_newZip)) return;
+
+        double.TryParse(_newLatStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lat);
+        double.TryParse(_newLonStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lon);
+
+        _pendingDeliveries.Add(new CreateDeliveryDto
+        {
+            Street = _newStreet.Trim(),
+            City = _newCity.Trim(),
+            State = _newState.Trim(),
+            ZipCode = _newZip.Trim(),
+            Latitude = lat,
+            Longitude = lon,
+            SortOrder = _pendingDeliveries.Count,
+            LongRunning = _newLongRunning
+        });
+
+        _newStreet = string.Empty;
+        _newLatStr = string.Empty;
+        _newLonStr = string.Empty;
+        _newLongRunning = false;
+        _geocodeStatus = null;
+        _lastGeocodedAddress = string.Empty;
+    }
+
+    private async Task AddDeliveryToLoadedRoute()
+    {
+        if (_loadedRoute is null) return;
+        if (string.IsNullOrWhiteSpace(_newStreet) ||
+            string.IsNullOrWhiteSpace(_newCity) ||
+            string.IsNullOrWhiteSpace(_newState) ||
+            string.IsNullOrWhiteSpace(_newZip)) return;
+
+        double.TryParse(_newLatStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lat);
+        double.TryParse(_newLonStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var lon);
+
+        var dto = new CreateDeliveryDto
+        {
+            Street = _newStreet.Trim(),
+            City = _newCity.Trim(),
+            State = _newState.Trim(),
+            ZipCode = _newZip.Trim(),
+            Latitude = lat,
+            Longitude = lon,
+            LongRunning = _newLongRunning
+        };
+
+        _appendingToRoute = true;
+        StateHasChanged();
+
+        var ok = await RouteApi.AddDeliveryToRouteAsync(_loadedRoute.Id, dto);
+
+        if (ok)
+        {
+            _routeStatus = $"Added {dto.Street} to the route.";
+            _routeStatusSuccess = true;
+
+            _newStreet = string.Empty;
+            _newLatStr = string.Empty;
+            _newLonStr = string.Empty;
+            _newLongRunning = false;
+            _geocodeStatus = null;
+            _lastGeocodedAddress = string.Empty;
+
+            await LoadRoute();
+        }
+        else
+        {
+            _routeStatus = "Failed to add delivery — check error logs.";
+            _routeStatusSuccess = false;
+        }
+
+        _appendingToRoute = false;
+    }
+
+    private void RemovePending(int index)
+    {
+        if (index >= 0 && index < _pendingDeliveries.Count)
+            _pendingDeliveries.RemoveAt(index);
+    }
+
+    private sealed record DispatchImageFile(
+        [property: System.Text.Json.Serialization.JsonPropertyName("base64")] string Base64,
+        [property: System.Text.Json.Serialization.JsonPropertyName("contentType")] string ContentType,
+        [property: System.Text.Json.Serialization.JsonPropertyName("fileName")] string FileName,
+        [property: System.Text.Json.Serialization.JsonPropertyName("size")] long Size);
+
+    private async Task OnImportFileSelected()
+    {
+        _importing = true;
+        _importStatus = null;
+        _importProgress = null;
+        _importedRows.Clear();
+        _importRawLines = null;
+        StateHasChanged();
+
+        var perFileErrors = new List<string>();
+        var perFileWarnings = new List<string>();
+        var rawLines = new List<string>();
+
+        try
+        {
+            var imageFiles = await JS.InvokeAsync<DispatchImageFile[]?>("readAllDispatchFilesAsBase64", "dispatch-import-file");
+
+            if (imageFiles is not null && imageFiles.Length > 1)
+            {
+                imageFiles = imageFiles
+                    .OrderBy(f => f.FileName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
+            if (imageFiles is null || imageFiles.Length == 0)
+            {
+                _importStatus = "No file selected.";
+                _importStatusSuccess = false;
+                return;
+            }
+
+            const long maxBytes = 10 * 1024 * 1024;
+
+            for (var i = 0; i < imageFiles.Length; i++)
+            {
+                var imageFile = imageFiles[i];
+                var label = string.IsNullOrEmpty(imageFile.FileName) ? $"file #{i + 1}" : imageFile.FileName;
+                _importProgress = $"Reading screenshot {i + 1} of {imageFiles.Length}…";
+                StateHasChanged();
+
+                if (string.IsNullOrEmpty(imageFile.Base64))
+                {
+                    perFileErrors.Add($"{label}: empty file.");
+                    continue;
+                }
+
+                if (imageFile.Size > maxBytes)
+                {
+                    perFileErrors.Add($"{label}: exceeds 10 MB.");
+                    continue;
+                }
+
+                try
+                {
+                    var bytes = Convert.FromBase64String(imageFile.Base64);
+                    using var content = new MultipartFormDataContent();
+                    var byteContent = new ByteArrayContent(bytes);
+
+                    byteContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                        string.IsNullOrEmpty(imageFile.ContentType) ? "application/octet-stream" : imageFile.ContentType);
+
+                    content.Add(byteContent, "file", string.IsNullOrEmpty(imageFile.FileName) ? "screenshot" : imageFile.FileName);
+
+                    var response = await Http.PostAsync("api/imports/dispatch-screenshot", content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        perFileErrors.Add($"{label}: {(int)response.StatusCode} {response.StatusCode} — {body}");
+                        continue;
+                    }
+
+                    var parsed = await response.Content.ReadFromJsonAsync<ParsedDispatchDto>();
+
+                    if (parsed?.Deliveries is { Count: > 0 } found)
+                    {
+                        _importedRows.AddRange(found);
+                    }
+
+                    if (!string.IsNullOrEmpty(parsed?.Warning))
+                    {
+                        perFileWarnings.Add($"{label}: {parsed.Warning}");
+                    }
+
+                    if (parsed?.RawLines is { Count: > 0 } lines)
+                    {
+                        if (rawLines.Count > 0) rawLines.Add(string.Empty);
+                        rawLines.Add($"--- {label} ---");
+                        rawLines.AddRange(lines);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var detail = ex.InnerException is null ? ex.Message : $"{ex.Message} — {ex.InnerException.Message}";
+                    perFileErrors.Add($"{label}: {detail}");
+                }
+            }
+
+            _importRawLines = rawLines.Count > 0 ? rawLines : null;
+
+            var statusParts = new List<string>
+            {
+                $"Found {_importedRows.Count} deliveries across {imageFiles.Length} screenshot{(imageFiles.Length == 1 ? "" : "s")}."
+            };
+            if (perFileWarnings.Count > 0) statusParts.Add(string.Join(" ", perFileWarnings));
+            if (perFileErrors.Count > 0) statusParts.Add("Errors: " + string.Join(" | ", perFileErrors));
+
+            _importStatus = string.Join(" ", statusParts);
+            _importStatusSuccess = _importedRows.Count > 0 && perFileErrors.Count == 0;
+        }
+        catch (Exception ex)
+        {
+            var detail = ex.InnerException is null ? ex.Message : $"{ex.Message} — {ex.InnerException.Message}";
+            _importStatus = $"Error: {detail}";
+            _importStatusSuccess = false;
+        }
+        finally
+        {
+            _importing = false;
+            _importProgress = null;
+            _importFileKey++;
+        }
+    }
+
+    private async Task LoadImportedRow(int index)
+    {
+        if (index < 0 || index >= _importedRows.Count) return;
+        var row = _importedRows[index];
+        _newStreet = row.Street;
+        _newCity = row.City;
+        _newState = string.IsNullOrWhiteSpace(row.State) ? _newState : row.State;
+        _newZip = row.ZipCode;
+        _newLatStr = string.Empty;
+        _newLonStr = string.Empty;
+        _lastGeocodedAddress = string.Empty;
+        await TryGeocode();
+    }
+
+    private void ClearImportedRows()
+    {
+        _importedRows.Clear();
+        _importRawLines = null;
+        _importStatus = null;
+    }
+
+    private bool IsDuplicateImportedRow(int index)
+    {
+        if (index < 0 || index >= _importedRows.Count) return false;
+        var row = _importedRows[index];
+        var key = NormalizeAddressKey(row.Street, row.City, row.State, row.ZipCode);
+        if (string.IsNullOrEmpty(key)) return false;
+
+        for (var i = 0; i < _importedRows.Count; i++)
+        {
+            if (i == index) continue;
+            var other = _importedRows[i];
+            if (NormalizeAddressKey(other.Street, other.City, other.State, other.ZipCode) == key)
+                return true;
+        }
+
+        if (_loadedRoute is not null)
+        {
+            foreach (var d in _loadedRoute.Deliveries)
+            {
+                if (NormalizeAddressKey(d.Location.Street, d.Location.City, d.Location.State, d.Location.ZipCode) == key)
+                    return true;
+            }
+        }
+
+        foreach (var p in _pendingDeliveries)
+        {
+            if (NormalizeAddressKey(p.Street, p.City, p.State, p.ZipCode) == key)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeAddressKey(string? street, string? city, string? state, string? zip)
+    {
+        var s = (street ?? string.Empty).Trim().ToLowerInvariant();
+        var c = (city ?? string.Empty).Trim().ToLowerInvariant();
+        var st = (state ?? string.Empty).Trim().ToLowerInvariant();
+        var z = (zip ?? string.Empty).Trim().ToLowerInvariant();
+        if (s.Length == 0 && c.Length == 0 && st.Length == 0 && z.Length == 0) return string.Empty;
+        return $"{s}|{c}|{st}|{z}";
+    }
+
+    private async Task CreateRoute()
+    {
+        if (string.IsNullOrEmpty(_currentDriverId) || _pendingDeliveries.Count == 0) return;
+
+        _creating = true;
+        _createStatus = null;
+
+        var dto = new CreateRouteDto
+        {
+            DriverId = _currentDriverId,
+            Date = DateOnly.FromDateTime(_selectedDate),
+            Deliveries = _pendingDeliveries
+        };
+
+        var success = await RouteApi.CreateRouteAsync(dto);
+
+        if (success)
+        {
+            _createStatus = $"Route created with {_pendingDeliveries.Count} deliveries.";
+            _createSuccess = true;
+            _pendingDeliveries.Clear();
+
+            await LoadRoute();
+            await LoadDriverRoutes();
+        }
+        else
+        {
+            _createStatus = "Failed to create route. Check error logs.";
+            _createSuccess = false;
+        }
+
+        _creating = false;
+    }
+
+    private void OpenAlerts(IDelivery delivery)
+    {
+        _alertDelivery = delivery;
+        _newAlertMessage = string.Empty;
+        _alertStatus = null;
+    }
+
+    private void CloseAlerts()
+    {
+        _alertDelivery = null;
+        _newAlertMessage = string.Empty;
+        _alertStatus = null;
+    }
+
+    private async Task DictateAlert()
+    {
+        _dictatingAlert = true;
+        StateHasChanged();
+
+        var text = await SpeechService.DictateAsync();
+        if (!string.IsNullOrEmpty(text))
+            _newAlertMessage = text;
+
+        _dictatingAlert = false;
+        StateHasChanged();
+    }
+
+    private async Task OnAlertKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_addingAlert && !string.IsNullOrWhiteSpace(_newAlertMessage))
+        {
+            await AddAlert();
+        }
+    }
+
+    private async Task AddAlert()
+    {
+        if (_alertDelivery is null || string.IsNullOrWhiteSpace(_newAlertMessage)) return;
+
+        _addingAlert = true;
+        _alertStatus = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/deliveries/{_alertDelivery.Id}/alerts",
+                new CreateAlertDto { Message = _newAlertMessage.Trim() });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var created = await response.Content.ReadFromJsonAsync<AlertDto>();
+                if (created is not null)
+                {
+                    _alertDelivery.Alerts.Add(created);
+                }
+                _newAlertMessage = string.Empty;
+                _alertStatus = "Alert added.";
+                _alertStatusSuccess = true;
+            }
+            else
+            {
+                _alertStatus = $"Failed to add alert: {(int)response.StatusCode}";
+                _alertStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _alertStatus = $"Error: {ex.Message}";
+            _alertStatusSuccess = false;
+        }
+        finally
+        {
+            _addingAlert = false;
+        }
+    }
+
+    private async Task DeleteAlert(string alertId)
+    {
+        if (_alertDelivery is null || string.IsNullOrEmpty(alertId)) return;
+
+        _deletingAlertId = alertId;
+        _alertStatus = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/alerts/{alertId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _alertDelivery.Alerts.RemoveAll(a => a.Id == alertId);
+                _alertStatus = "Alert deleted.";
+                _alertStatusSuccess = true;
+            }
+            else
+            {
+                _alertStatus = $"Failed to delete alert: {(int)response.StatusCode}";
+                _alertStatusSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _alertStatus = $"Error: {ex.Message}";
+            _alertStatusSuccess = false;
+        }
+        finally
+        {
+            _deletingAlertId = null;
+        }
+    }
+
+    private static string StatusText(int status) => status switch
+    {
+        0 => "Pending",
+        2 => "Complete",
+        3 => "Unable",
+        _ => "Unknown"
+    };
+}

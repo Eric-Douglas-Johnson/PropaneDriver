@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using PropaneDriver.Server.Authorization;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 using PropaneDriver.Server.Services;
@@ -12,13 +14,19 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/routes");
 
-            // Authenticated drivers may fetch a route for themselves; admin
-            // pulls any driver's route. Server-side per-driver ownership isn't
-            // enforced yet — UI nav already keeps drivers off other drivers'
-            // routes — so authenticated is the floor for this endpoint.
-            // The list/create/delete operations below are stricter (admin-only).
-            group.MapGet("{driverId:guid}/{date}", async (Guid driverId, DateOnly date, PropaneDriverDbContext db) =>
+            // Authenticated drivers may fetch routes for themselves; admin
+            // pulls any driver's route. Self-or-admin ownership is enforced
+            // server-side via the JWT NameIdentifier claim — a driver can't
+            // peek at another driver's route by guessing the URL.
+            group.MapGet("{driverId:guid}/{date}", async (
+                Guid driverId,
+                DateOnly date,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
+                if (!user.CanAccessDriverData(driverId))
+                    return Results.Forbid();
+
                 var route = await db.Routes
                     .AsNoTracking()
                     .Where(r => r.DriverId == driverId && r.Date == date)
@@ -70,11 +78,17 @@ namespace PropaneDriver.Server.Endpoints
                 return route is null ? Results.NotFound() : Results.Ok(route);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // List all routes for a driver (summary info). Admin-only — only
-            // the Admin page calls this (driver-side flows look up the route
-            // for a specific date).
-            group.MapGet("driver/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
+            // List all routes for a driver (summary info). Drivers may list
+            // their own routes (Dispatch page); admins can list anyone's
+            // (Admin page).
+            group.MapGet("driver/{driverId:guid}", async (
+                Guid driverId,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
+                if (!user.CanAccessDriverData(driverId))
+                    return Results.Forbid();
+
                 var routes = await db.Routes
                     .AsNoTracking()
                     .Where(r => r.DriverId == driverId)
@@ -89,18 +103,25 @@ namespace PropaneDriver.Server.Endpoints
                     .ToListAsync();
 
                 return Results.Ok(routes);
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
-            // Delete a route and its deliveries — admin-only.
-            group.MapDelete("{id:guid}", async (Guid id, PropaneDriverDbContext db) =>
+            // Delete a route and its deliveries. A driver can delete their
+            // own routes (Dispatch); an admin can delete any (Admin).
+            group.MapDelete("{id:guid}", async (
+                Guid id,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
                 var route = await db.Routes.FindAsync(id);
                 if (route is null) return Results.NotFound();
 
+                if (!user.CanAccessDriverData(route.DriverId))
+                    return Results.Forbid();
+
                 db.Routes.Remove(route); // cascade deletes deliveries
                 await db.SaveChangesAsync();
                 return Results.Ok(new { Deleted = true, RouteId = id });
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Get today's route (with deliveries + alerts) for a driver.
             // "Today" is computed in Central time because that's the driver's
@@ -194,11 +215,23 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(route);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Create a route with deliveries — admin-only.
-            group.MapPost("", async (CreateRouteDto dto, PropaneDriverDbContext db, ILogger<Program> logger) =>
+            // Create a route with deliveries. Drivers create their own
+            // routes via the Dispatch page; admins create on behalf of any
+            // driver via the Admin page. The DriverId in the body is what's
+            // used, but we reject it if a non-admin tries to create a route
+            // for someone else.
+            group.MapPost("", async (
+                CreateRouteDto dto,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
             {
                 if (!Guid.TryParse(dto.DriverId, out var driverId))
                     return Results.BadRequest(new { Message = "DriverId must be a valid GUID." });
+
+                if (!user.CanAccessDriverData(driverId))
+                    return Results.Forbid();
+
 
                 var invalidDelivery = dto.Deliveries.FirstOrDefault(d =>
                     string.IsNullOrWhiteSpace(d.Street) ||
@@ -327,7 +360,7 @@ namespace PropaneDriver.Server.Endpoints
                     logger.LogError(ex, "Failed to create route for driver {DriverId}", dto.DriverId);
                     return Results.Problem(detail: ex.Message, title: "Failed to create route", statusCode: 500);
                 }
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
             // Append a single delivery to the end of an existing route.
             // Mirrors the address-upsert logic from POST api/routes so a brand-
@@ -337,6 +370,7 @@ namespace PropaneDriver.Server.Endpoints
             group.MapPost("{routeId:guid}/deliveries", async (
                 Guid routeId,
                 CreateDeliveryDto dto,
+                ClaimsPrincipal user,
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
@@ -353,6 +387,9 @@ namespace PropaneDriver.Server.Endpoints
                         .Include(r => r.Deliveries)
                         .FirstOrDefaultAsync(r => r.Id == routeId);
                     if (route is null) return Results.NotFound();
+
+                    if (!user.CanAccessDriverData(route.DriverId))
+                        return Results.Forbid();
 
                     var street = dto.Street.Trim();
                     var city = dto.City.Trim();
@@ -444,7 +481,7 @@ namespace PropaneDriver.Server.Endpoints
                     logger.LogError(ex, "Failed to add delivery to route {RouteId}", routeId);
                     return Results.Problem(detail: ex.Message, title: "Failed to add delivery", statusCode: 500);
                 }
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
             return app;
         }

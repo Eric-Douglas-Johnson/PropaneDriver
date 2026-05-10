@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using PropaneDriver.Server.Authorization;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
@@ -10,12 +12,22 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/deliveries");
 
-            // List alerts for a delivery — readable by any signed-in driver
-            // since the driver-side route page surfaces them while running.
-            group.MapGet("{id:guid}/alerts", async (Guid id, PropaneDriverDbContext db) =>
+            // List alerts for a delivery — readable by any signed-in
+            // driver who owns the delivery, plus admins.
+            group.MapGet("{id:guid}/alerts", async (
+                Guid id,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
-                var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
-                if (!deliveryExists) return Results.NotFound();
+                var deliveryWithRoute = await db.Deliveries
+                    .Where(d => d.Id == id)
+                    .Select(d => new { Exists = true, RouteDriverId = d.Route!.DriverId })
+                    .FirstOrDefaultAsync();
+
+                if (deliveryWithRoute is null) return Results.NotFound();
+
+                if (!user.CanAccessDriverData(deliveryWithRoute.RouteDriverId))
+                    return Results.Forbid();
 
                 var alerts = await db.Alerts
                     .AsNoTracking()
@@ -34,15 +46,27 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(alerts);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Create an alert for a delivery — admin-only (called from the
-            // Admin page's per-delivery alert manager).
-            group.MapPost("{id:guid}/alerts", async (Guid id, CreateAlertDto dto, PropaneDriverDbContext db) =>
+            // Create an alert for a delivery. Drivers can add alerts to
+            // their own deliveries (Dispatch); admins can add to any
+            // (Admin). Ownership is checked through the route.
+            group.MapPost("{id:guid}/alerts", async (
+                Guid id,
+                CreateAlertDto dto,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
             {
                 if (string.IsNullOrWhiteSpace(dto.Message))
                     return Results.BadRequest(new { Message = "Alert message is required." });
 
-                var deliveryExists = await db.Deliveries.AnyAsync(d => d.Id == id);
-                if (!deliveryExists) return Results.NotFound();
+                var deliveryWithRoute = await db.Deliveries
+                    .Where(d => d.Id == id)
+                    .Select(d => new { Exists = true, RouteDriverId = d.Route!.DriverId })
+                    .FirstOrDefaultAsync();
+
+                if (deliveryWithRoute is null) return Results.NotFound();
+
+                if (!user.CanAccessDriverData(deliveryWithRoute.RouteDriverId))
+                    return Results.Forbid();
 
                 var alert = new AlertDbRecord
                 {
@@ -62,20 +86,27 @@ namespace PropaneDriver.Server.Endpoints
                     Message = alert.Message,
                     CreatedAt = alert.CreatedAt
                 });
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("AuthenticatedDriver");
 
-            // Update a delivery's status — driver-side action when running a route.
+            // Update a delivery's status — driver-side action when running
+            // a route. Ownership-checked so a driver can't mark another
+            // driver's delivery complete.
             group.MapPut("{id:guid}/status", async (
                 Guid id,
                 DeliveryStatusUpdateDto dto,
+                ClaimsPrincipal user,
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
                 try
                 {
-                    var delivery = await db.Deliveries.FindAsync(id);
-                    if (delivery is null)
-                        return Results.NotFound();
+                    var delivery = await db.Deliveries
+                        .Include(d => d.Route)
+                        .FirstOrDefaultAsync(d => d.Id == id);
+                    if (delivery is null) return Results.NotFound();
+
+                    if (!user.CanAccessDriverData(delivery.Route!.DriverId))
+                        return Results.Forbid();
 
                     delivery.Status = dto.Status;
                     await db.SaveChangesAsync();

@@ -52,7 +52,7 @@ namespace PropaneDriver.Server.Endpoints
                         title: "OCR failed",
                         statusCode: 502);
                 }
-            }).DisableAntiforgery().RequireAuthorization("AdminOnly");
+            }).DisableAntiforgery().RequireAuthorization("AuthenticatedDriver");
 
             return app;
         }
