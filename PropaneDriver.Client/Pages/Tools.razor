@@ -118,6 +118,200 @@
             }
         </div>
     }
+
+    <div class="tools-section-divider">
+        <span class="tools-section-divider-label">Analytics</span>
+    </div>
+
+    <div class="tools-card tools-card--stats">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="m-0">Delivery Time Statistics</h5>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    @onclick="LoadDeliveryStats"
+                    disabled="@_statsLoading">
+                @(_statsLoading ? "Loading…" : "Refresh")
+            </button>
+        </div>
+        <p class="tools-hint">
+            Aggregate stats over every recorded delivery time. Filter by date
+            range; the leaderboards weight slowest stops by mean time and
+            require at least two samples so single outliers can't take a slot.
+        </p>
+
+        <div class="tools-stats-filters">
+            <div class="admin-field" style="max-width: 160px;">
+                <label>From</label>
+                <input type="date" class="form-control form-control-sm"
+                       @bind="_statsFrom" disabled="@_statsLoading" />
+            </div>
+            <div class="admin-field" style="max-width: 160px;">
+                <label>To</label>
+                <input type="date" class="form-control form-control-sm"
+                       @bind="_statsTo" disabled="@_statsLoading" />
+            </div>
+            <div class="tools-stats-presets">
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => ApplyDatePreset(7)" disabled="@_statsLoading">7d</button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => ApplyDatePreset(30)" disabled="@_statsLoading">30d</button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => ApplyDatePreset(90)" disabled="@_statsLoading">90d</button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        @onclick="ApplyAllTimePreset" disabled="@_statsLoading">All</button>
+            </div>
+            <button class="btn btn-sm btn-primary"
+                    @onclick="LoadDeliveryStats" disabled="@_statsLoading">
+                Apply
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_statsError))
+        {
+            <div class="text-warning mt-2" style="font-size:0.8rem;">@_statsError</div>
+        }
+
+        @if (_stats is null)
+        {
+            <div class="tools-empty mt-3">No stats loaded yet.</div>
+        }
+        else if (_stats.SampleCount == 0)
+        {
+            <div class="tools-empty mt-3">
+                No delivery times recorded in the selected range.
+            </div>
+        }
+        else
+        {
+            <div class="tools-stats-range">
+                @_stats.SampleCount sample@(_stats.SampleCount == 1 ? "" : "s") •
+                @FormatRecordedRange(_stats.OldestRecordedAt, _stats.NewestRecordedAt) •
+                @_stats.GeofencedSampleCount geofenced / @_stats.LongRunningSampleCount long-running
+            </div>
+
+            <div class="tools-stats-grid">
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Mean</span>
+                    <span class="tools-stat-value">@FormatDuration(_stats.MeanSeconds)</span>
+                </div>
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Median</span>
+                    <span class="tools-stat-value">@FormatDuration(_stats.MedianSeconds)</span>
+                </div>
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Std. Dev.</span>
+                    <span class="tools-stat-value">@FormatDuration(_stats.StandardDeviationSeconds)</span>
+                </div>
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Fastest</span>
+                    <span class="tools-stat-value">@FormatDuration(_stats.MinimumSeconds)</span>
+                </div>
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Slowest</span>
+                    <span class="tools-stat-value">@FormatDuration(_stats.MaximumSeconds)</span>
+                </div>
+                <div class="tools-stat-tile">
+                    <span class="tools-stat-label">Total time</span>
+                    <span class="tools-stat-value">@FormatHoursMinutes(_stats.TotalSeconds)</span>
+                </div>
+            </div>
+
+            <div class="tools-subhead">Distribution</div>
+            <div class="tools-histogram">
+                @{
+                    var maxBucketCount = _stats.Distribution.Count == 0 ? 0 : _stats.Distribution.Max(bucket => bucket.Count);
+                }
+                @foreach (var bucket in _stats.Distribution)
+                {
+                    var widthPercent = maxBucketCount == 0 ? 0 : (bucket.Count * 100.0 / maxBucketCount);
+                    <div class="tools-histogram-row">
+                        <span class="tools-histogram-label">@bucket.Label</span>
+                        <div class="tools-histogram-track">
+                            <div class="tools-histogram-bar" style="width:@(widthPercent.ToString("0.##"))%"></div>
+                        </div>
+                        <span class="tools-histogram-count">
+                            @bucket.Count (@bucket.Percentage.ToString("0.#")%)
+                        </span>
+                    </div>
+                }
+            </div>
+
+            <div class="tools-leaderboards">
+                <div class="tools-leaderboard">
+                    <div class="tools-subhead">Slowest addresses</div>
+                    @if (_stats.SlowestAddresses.Count == 0)
+                    {
+                        <div class="tools-empty">Not enough repeat stops yet (need ≥ 2 samples).</div>
+                    }
+                    else
+                    {
+                        <table class="tools-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th class="num">N</th>
+                                    <th class="num">Mean</th>
+                                    <th class="num">Median</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var slowAddress in _stats.SlowestAddresses)
+                                {
+                                    <tr>
+                                        <td>
+                                            @slowAddress.Street, @slowAddress.City @slowAddress.State
+                                            @if (slowAddress.IsLongRunning)
+                                            {
+                                                <span class="tools-tag tools-tag--lr" title="Manual start/stop, not geofenced">LR</span>
+                                            }
+                                        </td>
+                                        <td class="num">@slowAddress.SampleCount</td>
+                                        <td class="num">@FormatDuration(slowAddress.MeanSeconds)</td>
+                                        <td class="num">@FormatDuration(slowAddress.MedianSeconds)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+
+                <div class="tools-leaderboard">
+                    <div class="tools-subhead">Most-frequent addresses</div>
+                    @if (_stats.MostFrequentAddresses.Count == 0)
+                    {
+                        <div class="tools-empty">No addresses to rank yet.</div>
+                    }
+                    else
+                    {
+                        <table class="tools-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Address</th>
+                                    <th class="num">N</th>
+                                    <th class="num">Mean</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var frequentAddress in _stats.MostFrequentAddresses)
+                                {
+                                    <tr>
+                                        <td>
+                                            @frequentAddress.Street, @frequentAddress.City @frequentAddress.State
+                                            @if (frequentAddress.IsLongRunning)
+                                            {
+                                                <span class="tools-tag tools-tag--lr" title="Manual start/stop, not geofenced">LR</span>
+                                            }
+                                        </td>
+                                        <td class="num">@frequentAddress.SampleCount</td>
+                                        <td class="num">@FormatDuration(frequentAddress.MeanSeconds)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        }
+    </div>
 </div>
 
 @code {
@@ -137,6 +331,20 @@
 
     private readonly List<string> _selectedFileNames = new();
     private readonly List<OcrDocumentDto> _scannedDocuments = new();
+
+    // Delivery-time analytics section state. Default window is "last 30 days"
+    // so the page lands with something interesting to look at without
+    // pulling the entire history on first load.
+    private DeliveryTimeStatsDto? _stats;
+    private bool _statsLoading;
+    private string? _statsError;
+    private DateTime? _statsFrom = DateTime.UtcNow.Date.AddDays(-30);
+    private DateTime? _statsTo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDeliveryStats();
+    }
 
     // Mirrors the shape returned by readAllDispatchFilesAsBase64. The JS
     // helper is fully generic (input id → base64 file list), not
@@ -300,5 +508,78 @@
     {
         _scannedDocuments.Clear();
         _scanStatus = null;
+    }
+
+    private async Task LoadDeliveryStats()
+    {
+        _statsLoading = true;
+        _statsError = null;
+        StateHasChanged();
+
+        try
+        {
+            var queryParameters = new List<string>();
+            if (_statsFrom.HasValue)
+                queryParameters.Add($"from={Uri.EscapeDataString(DateTime.SpecifyKind(_statsFrom.Value.Date, DateTimeKind.Utc).ToString("O"))}");
+            if (_statsTo.HasValue)
+                queryParameters.Add($"to={Uri.EscapeDataString(DateTime.SpecifyKind(_statsTo.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc).ToString("O"))}");
+
+            var queryString = queryParameters.Count == 0 ? string.Empty : "?" + string.Join("&", queryParameters);
+            _stats = await Http.GetFromJsonAsync<DeliveryTimeStatsDto>($"api/delivery-times/stats{queryString}");
+        }
+        catch (Exception ex)
+        {
+            _statsError = $"Failed to load stats: {ex.Message}";
+            _stats = null;
+        }
+        finally
+        {
+            _statsLoading = false;
+        }
+    }
+
+    private async Task ApplyDatePreset(int daysBack)
+    {
+        _statsFrom = DateTime.UtcNow.Date.AddDays(-daysBack);
+        _statsTo = null;
+        await LoadDeliveryStats();
+    }
+
+    private async Task ApplyAllTimePreset()
+    {
+        _statsFrom = null;
+        _statsTo = null;
+        await LoadDeliveryStats();
+    }
+
+    private static string FormatDuration(double totalSeconds)
+    {
+        if (totalSeconds < 0) totalSeconds = 0;
+        var span = TimeSpan.FromSeconds(totalSeconds);
+        // Anything under an hour reads as mm:ss; an hour or more gets h:mm:ss.
+        return span.TotalHours >= 1
+            ? $"{(int)span.TotalHours}:{span.Minutes:00}:{span.Seconds:00}"
+            : $"{span.Minutes}:{span.Seconds:00}";
+    }
+
+    private static string FormatHoursMinutes(double totalSeconds)
+    {
+        if (totalSeconds < 0) totalSeconds = 0;
+        var span = TimeSpan.FromSeconds(totalSeconds);
+        if (span.TotalHours >= 1)
+            return $"{(int)span.TotalHours}h {span.Minutes}m";
+        if (span.TotalMinutes >= 1)
+            return $"{span.Minutes}m {span.Seconds}s";
+        return $"{span.Seconds}s";
+    }
+
+    private static string FormatRecordedRange(DateTime? oldest, DateTime? newest)
+    {
+        if (!oldest.HasValue || !newest.HasValue) return "no records";
+        var oldestLocal = oldest.Value.ToLocalTime();
+        var newestLocal = newest.Value.ToLocalTime();
+        return oldestLocal.Date == newestLocal.Date
+            ? oldestLocal.ToString("yyyy-MM-dd")
+            : $"{oldestLocal:yyyy-MM-dd} → {newestLocal:yyyy-MM-dd}";
     }
 }

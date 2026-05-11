@@ -5,6 +5,45 @@
     padding-bottom: 2rem;
 }
 
+/* Drawn between the Document Scanner stack and the Analytics card so
+   the page reads as two distinct concerns under one Tools roof. The
+   label sits centered on the rule. */
+.tools-section-divider {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.75rem 0 0.25rem 0;
+}
+
+.tools-section-divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: #2a2a4a;
+}
+
+.tools-section-divider-label {
+    position: relative;
+    background: #0f0f1e;
+    color: #5eb3c4;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0 0.75rem;
+}
+
+/* Stats card variant — colored top edge marks it as a different
+   feature from the scanner cards above, without changing the shared
+   card chrome that those rely on. */
+.tools-card--stats {
+    border-top: 3px solid #5eb3c4;
+}
+
 .tools-title {
     color: whitesmoke;
     margin: 0;
@@ -143,4 +182,180 @@
     overflow: auto;
     margin: 0;
     white-space: pre-wrap;
+}
+
+/* ---- Delivery Time Statistics section ---- */
+
+.tools-stats-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.tools-stats-presets {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.tools-stats-range {
+    color: #8892b0;
+    font-size: 0.75rem;
+    margin: 0.75rem 0 0.5rem 0;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #2a2a4a;
+}
+
+/* Stat tiles — a compact responsive grid. Six cells looks balanced
+   on desktop (2 rows of 3) and collapses cleanly to 2 columns on
+   narrower screens. */
+.tools-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.tools-stat-tile {
+    display: flex;
+    flex-direction: column;
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+}
+
+.tools-stat-label {
+    color: #8892b0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.tools-stat-value {
+    color: whitesmoke;
+    font-size: 1.15rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.15rem;
+}
+
+.tools-subhead {
+    color: #cdd6f4;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0.75rem 0 0.4rem 0;
+}
+
+/* Horizontal-bar histogram — track + filled bar are stacked with
+   absolute width %, so a long row scales the same as a short one. */
+.tools-histogram {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: 0.5rem;
+}
+
+.tools-histogram-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 110px;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.tools-histogram-label {
+    color: #8892b0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.tools-histogram-track {
+    height: 0.85rem;
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.tools-histogram-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4a7d8a 0%, #5eb3c4 100%);
+    transition: width 0.3s ease;
+}
+
+.tools-histogram-count {
+    color: #cdd6f4;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+}
+
+/* Two leaderboards side by side on desktop, stacked on narrow viewports. */
+.tools-leaderboards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.tools-leaderboard {
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+}
+
+.tools-stats-table {
+    width: 100%;
+    color: whitesmoke;
+    font-size: 0.78rem;
+    border-collapse: collapse;
+}
+
+.tools-stats-table th {
+    color: #8892b0;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.65rem;
+    text-align: left;
+    padding: 0.3rem 0.4rem;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.tools-stats-table td {
+    padding: 0.3rem 0.4rem;
+    border-bottom: 1px solid #1c1c33;
+}
+
+.tools-stats-table tr:last-child td {
+    border-bottom: none;
+}
+
+.tools-stats-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* "LR" tag inline next to address rows that use the long-running
+   start/stop flow rather than the GPS geofence. */
+.tools-tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 0.05rem 0.35rem;
+    margin-left: 0.4rem;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.tools-tag--lr {
+    background: rgba(94, 179, 196, 0.15);
+    color: #5eb3c4;
+    border: 1px solid rgba(94, 179, 196, 0.4);
 }
