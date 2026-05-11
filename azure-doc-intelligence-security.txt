@@ -1,0 +1,76 @@
+Azure Document Intelligence — Data Security Summary
+====================================================
+Source: Microsoft Learn (Foundry Tools / AI Services), retrieved 2026-05-11
+
+IN TRANSIT
+----------
+- All Document Intelligence endpoints are HTTPS only.
+- Client must support TLS 1.3 to call the endpoints.
+- Every request is authenticated via the resource's API key (or AAD token).
+  The "Get Analyze Results" call must use the same key that submitted the
+  document, so other customers cannot retrieve your output.
+
+AT REST
+-------
+- Submitted documents and extracted results are stored temporarily in
+  Azure Storage in the SAME region as the Document Intelligence resource.
+  No cross-region movement.
+- Encryption: FIPS 140-2-compliant AES-256, enabled by default using
+  Microsoft-managed keys.
+- Customer-managed keys (CMK) via Azure Key Vault are supported. Using
+  CMK provides double encryption and lets you revoke access by revoking
+  the key.
+- The temporary storage backend is shared across customers in a region,
+  but data is logically isolated per Azure subscription + API credentials.
+
+RETENTION
+---------
+- Analyze responses are retained for 24 hours, then auto-purged.
+- You can purge sooner by calling the Delete Analyze Result API (v4.0).
+  This applies to all models, including prebuilt ones (prebuilt-read,
+  prebuilt-layout, etc.).
+- Input documents are not retained beyond what is needed to complete the
+  async analyze operation.
+
+TRAINING / MODEL USE
+--------------------
+- Microsoft does NOT use customer documents to train its prebuilt models.
+- For custom models: training data lives in YOUR Azure Blob Storage;
+  interim labeling artifacts and the trained model stay in the same
+  region under your subscription's isolation boundary. Custom-model data
+  is also not used to train Microsoft's shared models.
+
+COMPLIANCE POSTURE
+------------------
+- Microsoft is the data processor; the customer remains the data
+  controller under GDPR.
+- Relevant certifications: GDPR, HIPAA, SOC 1/2/3, ISO 27001 / 27018 /
+  27701. Confirm the current attestation list in the Microsoft Trust
+  Center before relying on any specific one for a regulated workload.
+- Regional deployment is the mechanism for enforcing data residency
+  (e.g., EEA, US).
+
+PRACTICAL NOTES FOR THIS PROJECT'S TOOLS PAGE
+---------------------------------------------
+The admin-only Tools page uses prebuilt models. Residual considerations:
+1. File bytes traverse the server -> Azure over TLS. Make sure no
+   outbound proxy is downgrading TLS.
+2. If a scanned document contains regulated data and the 24-hour
+   retention window is unacceptable, call Delete Analyze Result
+   immediately after reading the response.
+3. For stricter compliance, switch the Document Intelligence resource
+   to CMK in Azure Key Vault and choose a region matching the
+   residency requirement.
+
+SOURCES
+-------
+- Data, privacy, and security for Document Intelligence (Foundry Tools):
+  https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/document-intelligence/data-privacy-security
+- Data, privacy, and security for Document Intelligence (legal / Cognitive Services):
+  https://learn.microsoft.com/en-us/legal/cognitive-services/document-intelligence/data-privacy-security
+- Service encryption of data at rest - Document Intelligence:
+  https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/authentication/encrypt-data-at-rest?view=doc-intel-4.0.0
+- Transparency note for Document Intelligence:
+  https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/document-intelligence/transparency-note
+- Delete Analyze Result API (v4.0):
+  https://learn.microsoft.com/en-us/rest/api/aiservices/document-models/delete-analyze-result?view=rest-aiservices-v4.0
