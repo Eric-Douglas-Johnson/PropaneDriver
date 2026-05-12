@@ -14,8 +14,8 @@
         <h5>Document Scanner</h5>
         <p class="tools-hint">
             Pick one or more image files, then press <strong>Scan</strong> to run
-            them through Azure Document Intelligence. The raw OCR lines per page
-            are shown below.
+            them through Azure Document Intelligence. When the Invoice model is
+            selected, the extracted fields appear below.
         </p>
 
         <div class="admin-row">
@@ -146,51 +146,19 @@
         }
     </div>
 
-    @if (_scannedDocuments.Count > 0)
-    {
-        <div class="tools-card">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="m-0">Scanned Documents (@_scannedDocuments.Count)</h5>
-                <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                        @onclick="ClearScannedDocuments">
-                    Clear
-                </button>
-            </div>
-
-            @foreach (var document in _scannedDocuments)
-            {
-                <div class="tools-document">
-                    <div class="tools-document-header">
-                        <strong>@(string.IsNullOrEmpty(document.FileName) ? "(unnamed)" : document.FileName)</strong>
-                        <span class="tools-document-meta">@document.PageCount page@(document.PageCount == 1 ? "" : "s")</span>
-                    </div>
-
-                    @foreach (var documentPage in document.Pages)
-                    {
-                        <div class="tools-document-page">
-                            <div class="tools-page-label">Page @documentPage.PageNumber — @documentPage.Lines.Count line@(documentPage.Lines.Count == 1 ? "" : "s")</div>
-                            @if (documentPage.Lines.Count > 0)
-                            {
-                                <pre class="tools-ocr-block">@string.Join("\n", documentPage.Lines)</pre>
-                            }
-                            else
-                            {
-                                <div class="tools-empty">No text detected.</div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-        </div>
-    }
-
     @{
         var documentsWithInvoiceData = _scannedDocuments.Where(document => document.Invoice is not null).ToList();
     }
     @if (documentsWithInvoiceData.Count > 0)
     {
         <div class="tools-card">
-            <h5 class="m-0 mb-2">Invoice Fields (@documentsWithInvoiceData.Count)</h5>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="m-0">Invoice Fields (@documentsWithInvoiceData.Count)</h5>
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                        @onclick="ClearScannedDocuments">
+                    Clear
+                </button>
+            </div>
             <p class="tools-hint">
                 Structured key/value pairs extracted by the Azure
                 <code>prebuilt-invoice</code> model. Empty fields mean the model

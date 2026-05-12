@@ -160,30 +160,6 @@
     font-size: 0.75rem;
 }
 
-.tools-document-page + .tools-document-page {
-    margin-top: 0.5rem;
-}
-
-.tools-page-label {
-    color: #8892b0;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.25rem;
-}
-
-.tools-ocr-block {
-    background: #1c2333;
-    color: #cdd6f4;
-    padding: 0.5rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    max-height: 300px;
-    overflow: auto;
-    margin: 0;
-    white-space: pre-wrap;
-}
-
 /* ---- Invoice Fields section ----
    Two-column responsive grid of label/value rows. Each cell stands on its
    own line so long extracted addresses don't push the labels around. */
