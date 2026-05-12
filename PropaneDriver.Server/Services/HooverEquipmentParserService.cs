@@ -9,8 +9,9 @@ namespace PropaneDriver.Server.Services
     // accompanies a Hoover invoice. The relevant content lives in a window
     // bounded by two sentinel strings on the form: it begins after "START"
     // and ends before "HOOVER SUPERVISOR". Inside that window the OCR yields
-    // an even count of numbers pairing equipment id to fuel quantity, then
-    // a final trailing number for the total fuel pumped across the run.
+    // a leading default "0" that must be skipped, then an even count of
+    // numbers pairing equipment id to fuel quantity, then a final trailing
+    // number for the total fuel pumped across the run.
     public static class HooverEquipmentParserService
     {
         private static readonly Regex NumberTokenRegex = new(
@@ -57,6 +58,12 @@ namespace PropaneDriver.Server.Services
                     numericTokens.Add(numberMatch.Value);
             }
 
+            if (numericTokens.Count == 0) return scanResult;
+
+            // The first number after START is the form's default value (a
+            // baked-in "0" the operator never edits); drop it so the real
+            // id/fuel pairs line up at index 0.
+            numericTokens.RemoveAt(0);
             if (numericTokens.Count == 0) return scanResult;
 
             // Last token is the total fuel pumped. Pull it off first so the
