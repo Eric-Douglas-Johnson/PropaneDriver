@@ -8,7 +8,7 @@ namespace PropaneDriver.Client.Authentication
 {
     public class CustomAuthStateProvider : AuthenticationStateProvider
     {
-        private readonly string _userStorageKey = "user";
+        public const string UserStorageKey = "user";
         private readonly string _authType = "UserAuthentication";
         private readonly BrowserStorageService _browserStorageService;
         private readonly HttpClient _httpClient;
@@ -29,7 +29,7 @@ namespace PropaneDriver.Client.Authentication
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
-            var user = await _browserStorageService.GetFromStorage<UserDto?>(_userStorageKey);
+            var user = await _browserStorageService.GetFromStorage<UserDto?>(UserStorageKey);
 
             if (user is null)
             {
@@ -67,7 +67,7 @@ namespace PropaneDriver.Client.Authentication
                 // claims on a page refresh without an extra round-trip).
                 await _browserStorageService.SaveToStorageAsync(
                     BearerTokenHandler.TokenStorageKey, authResponseDto.Token);
-                await _browserStorageService.SaveToStorageAsync(_userStorageKey, authResponseDto.Driver);
+                await _browserStorageService.SaveToStorageAsync(UserStorageKey, authResponseDto.Driver);
 
                 CurrentUser = authResponseDto.Driver;
 
@@ -128,7 +128,7 @@ namespace PropaneDriver.Client.Authentication
 
         public async Task LogoutAsync()
         {
-            await _browserStorageService.RemoveFromStorage(_userStorageKey);
+            await _browserStorageService.RemoveFromStorage(UserStorageKey);
             await _browserStorageService.RemoveFromStorage(BearerTokenHandler.TokenStorageKey);
             NotifyAuthenticationStateChanged(Task.FromResult(EmptyAuthState));
             CurrentUser = new UserDto();
