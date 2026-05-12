@@ -13,54 +13,76 @@ namespace PropaneDriver.Server.Services
     {
         public static InvoiceData? FromAnalyzeResult(AnalyzeResult analyzeResult)
         {
+            var documentFields = TryGetFirstDocumentFields(analyzeResult);
+            if (documentFields is null) return null;
+
+            var invoiceData = new InvoiceData();
+            PopulateFromFields(invoiceData, documentFields);
+            return invoiceData;
+        }
+
+        // Used when the caller already has a (possibly derived) InvoiceData
+        // instance — e.g. a HooverInvoiceData carrying its EquipmentPieces —
+        // and just wants the standard invoice fields populated on top.
+        // Returns silently when Azure surfaced no document/fields so the
+        // caller's pre-populated subclass data isn't disturbed.
+        public static void PopulateFromAnalyzeResult(AnalyzeResult analyzeResult, InvoiceData destination)
+        {
+            var documentFields = TryGetFirstDocumentFields(analyzeResult);
+            if (documentFields is null) return;
+            PopulateFromFields(destination, documentFields);
+        }
+
+        private static IReadOnlyDictionary<string, DocumentField>? TryGetFirstDocumentFields(AnalyzeResult analyzeResult)
+        {
             var firstAnalyzedDocument = analyzeResult.Documents?.FirstOrDefault();
             var documentFields = firstAnalyzedDocument?.Fields;
-            if (documentFields is null || documentFields.Count == 0)
-                return null;
+            if (documentFields is null || documentFields.Count == 0) return null;
+            return documentFields;
+        }
 
-            return new InvoiceData
-            {
-                VendorName = ReadString(documentFields, "VendorName"),
-                VendorAddress = ReadAddress(documentFields, "VendorAddress"),
-                VendorAddressRecipient = ReadString(documentFields, "VendorAddressRecipient"),
+        private static void PopulateFromFields(InvoiceData invoiceData, IReadOnlyDictionary<string, DocumentField> documentFields)
+        {
+            invoiceData.VendorName = ReadString(documentFields, "VendorName");
+            invoiceData.VendorAddress = ReadAddress(documentFields, "VendorAddress");
+            invoiceData.VendorAddressRecipient = ReadString(documentFields, "VendorAddressRecipient");
 
-                CustomerName = ReadString(documentFields, "CustomerName"),
-                CustomerId = ReadString(documentFields, "CustomerId"),
-                CustomerAddress = ReadAddress(documentFields, "CustomerAddress"),
-                CustomerAddressRecipient = ReadString(documentFields, "CustomerAddressRecipient"),
+            invoiceData.CustomerName = ReadString(documentFields, "CustomerName");
+            invoiceData.CustomerId = ReadString(documentFields, "CustomerId");
+            invoiceData.CustomerAddress = ReadAddress(documentFields, "CustomerAddress");
+            invoiceData.CustomerAddressRecipient = ReadString(documentFields, "CustomerAddressRecipient");
 
-                BillingAddress = ReadAddress(documentFields, "BillingAddress"),
-                BillingAddressRecipient = ReadString(documentFields, "BillingAddressRecipient"),
-                ShippingAddress = ReadAddress(documentFields, "ShippingAddress"),
-                ShippingAddressRecipient = ReadString(documentFields, "ShippingAddressRecipient"),
-                ServiceAddress = ReadAddress(documentFields, "ServiceAddress"),
-                ServiceAddressRecipient = ReadString(documentFields, "ServiceAddressRecipient"),
-                RemittanceAddress = ReadAddress(documentFields, "RemittanceAddress"),
-                RemittanceAddressRecipient = ReadString(documentFields, "RemittanceAddressRecipient"),
+            invoiceData.BillingAddress = ReadAddress(documentFields, "BillingAddress");
+            invoiceData.BillingAddressRecipient = ReadString(documentFields, "BillingAddressRecipient");
+            invoiceData.ShippingAddress = ReadAddress(documentFields, "ShippingAddress");
+            invoiceData.ShippingAddressRecipient = ReadString(documentFields, "ShippingAddressRecipient");
+            invoiceData.ServiceAddress = ReadAddress(documentFields, "ServiceAddress");
+            invoiceData.ServiceAddressRecipient = ReadString(documentFields, "ServiceAddressRecipient");
+            invoiceData.RemittanceAddress = ReadAddress(documentFields, "RemittanceAddress");
+            invoiceData.RemittanceAddressRecipient = ReadString(documentFields, "RemittanceAddressRecipient");
 
-                InvoiceId = ReadString(documentFields, "InvoiceId"),
-                InvoiceDate = ReadDate(documentFields, "InvoiceDate"),
-                DueDate = ReadDate(documentFields, "DueDate"),
-                PurchaseOrder = ReadString(documentFields, "PurchaseOrder"),
-                ServiceStartDate = ReadDate(documentFields, "ServiceStartDate"),
-                ServiceEndDate = ReadDate(documentFields, "ServiceEndDate"),
-                PaymentTerm = ReadString(documentFields, "PaymentTerm"),
+            invoiceData.InvoiceId = ReadString(documentFields, "InvoiceId");
+            invoiceData.InvoiceDate = ReadDate(documentFields, "InvoiceDate");
+            invoiceData.DueDate = ReadDate(documentFields, "DueDate");
+            invoiceData.PurchaseOrder = ReadString(documentFields, "PurchaseOrder");
+            invoiceData.ServiceStartDate = ReadDate(documentFields, "ServiceStartDate");
+            invoiceData.ServiceEndDate = ReadDate(documentFields, "ServiceEndDate");
+            invoiceData.PaymentTerm = ReadString(documentFields, "PaymentTerm");
 
-                SubTotal = ReadCurrencyAmount(documentFields, "SubTotal"),
-                TotalTax = ReadCurrencyAmount(documentFields, "TotalTax"),
-                InvoiceTotal = ReadCurrencyAmount(documentFields, "InvoiceTotal"),
-                AmountDue = ReadCurrencyAmount(documentFields, "AmountDue"),
-                PreviousUnpaidBalance = ReadCurrencyAmount(documentFields, "PreviousUnpaidBalance"),
-                // Currency code lives inside the individual currency-valued
-                // fields. The header doesn't have a standalone "CurrencyCode"
-                // field, so we look at the totals in priority order and lift
-                // the first one we find.
-                CurrencyCode = ReadCurrencyCode(documentFields, "InvoiceTotal")
-                            ?? ReadCurrencyCode(documentFields, "AmountDue")
-                            ?? ReadCurrencyCode(documentFields, "SubTotal"),
+            invoiceData.SubTotal = ReadCurrencyAmount(documentFields, "SubTotal");
+            invoiceData.TotalTax = ReadCurrencyAmount(documentFields, "TotalTax");
+            invoiceData.InvoiceTotal = ReadCurrencyAmount(documentFields, "InvoiceTotal");
+            invoiceData.AmountDue = ReadCurrencyAmount(documentFields, "AmountDue");
+            invoiceData.PreviousUnpaidBalance = ReadCurrencyAmount(documentFields, "PreviousUnpaidBalance");
+            // Currency code lives inside the individual currency-valued
+            // fields. The header doesn't have a standalone "CurrencyCode"
+            // field, so we look at the totals in priority order and lift
+            // the first one we find.
+            invoiceData.CurrencyCode = ReadCurrencyCode(documentFields, "InvoiceTotal")
+                                    ?? ReadCurrencyCode(documentFields, "AmountDue")
+                                    ?? ReadCurrencyCode(documentFields, "SubTotal");
 
-                LineItems = ReadLineItems(documentFields)
-            };
+            invoiceData.LineItems = ReadLineItems(documentFields);
         }
 
         private static List<InvoiceLineItem> ReadLineItems(IReadOnlyDictionary<string, DocumentField> documentFields)

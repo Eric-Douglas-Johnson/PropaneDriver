@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PropaneDriver.Shared.Dtos
 {
     // Captures the named fields that the Azure Document Intelligence
@@ -5,6 +7,15 @@ namespace PropaneDriver.Shared.Dtos
     // Properties map 1:1 to fields in Azure's invoice schema; anything the
     // model couldn't extract stays null so callers can tell "missing" apart
     // from "explicitly empty."
+    //
+    // Polymorphism: container types (e.g. OcrDocumentDto) hold this via the
+    // base reference, but the server may return derived subclasses such as
+    // HooverInvoiceData. The "$invoiceKind" discriminator lets the wire
+    // payload preserve the concrete type so the client can deserialize back
+    // into the right shape and cast to access subclass-only fields.
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "$invoiceKind")]
+    [JsonDerivedType(typeof(InvoiceData), "generic")]
+    [JsonDerivedType(typeof(HooverInvoiceData), "hoover")]
     public class InvoiceData
     {
         public string? VendorName { get; set; }
