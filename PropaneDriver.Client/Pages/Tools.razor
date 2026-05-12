@@ -243,26 +243,36 @@
                         @RenderInvoiceField("Previous unpaid balance", FormatInvoiceAmount(invoiceData.PreviousUnpaidBalance, invoiceData.CurrencyCode))
                     </div>
 
-                    @if (invoiceData is HooverInvoiceData hooverInvoiceData && hooverInvoiceData.EquipmentPieces.Count > 0)
+                    @if (invoiceData is HooverInvoiceData hooverInvoiceData
+                         && (hooverInvoiceData.EquipmentPieces.Count > 0 || hooverInvoiceData.TotalFuelPumped.HasValue))
                     {
-                        <div class="tools-subhead">Equipment pieces (@hooverInvoiceData.EquipmentPieces.Count)</div>
-                        <table class="tools-stats-table">
-                            <thead>
-                                <tr>
-                                    <th class="num">ID</th>
-                                    <th class="num">Fuel quantity</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var equipmentPiece in hooverInvoiceData.EquipmentPieces)
-                                {
+                        <div class="tools-subhead">
+                            Equipment pieces (@hooverInvoiceData.EquipmentPieces.Count)
+                            @if (hooverInvoiceData.TotalFuelPumped.HasValue)
+                            {
+                                <span> — total fuel pumped: @hooverInvoiceData.TotalFuelPumped.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)</span>
+                            }
+                        </div>
+                        @if (hooverInvoiceData.EquipmentPieces.Count > 0)
+                        {
+                            <table class="tools-stats-table">
+                                <thead>
                                     <tr>
-                                        <td class="num">@equipmentPiece.Id</td>
-                                        <td class="num">@equipmentPiece.FuelQuantity.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)</td>
+                                        <th class="num">ID</th>
+                                        <th class="num">Fuel quantity</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @foreach (var equipmentPiece in hooverInvoiceData.EquipmentPieces)
+                                    {
+                                        <tr>
+                                            <td class="num">@equipmentPiece.Id</td>
+                                            <td class="num">@equipmentPiece.FuelQuantity.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
                     }
 
                     @if (invoiceData.LineItems.Count > 0)

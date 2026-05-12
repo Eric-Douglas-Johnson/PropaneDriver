@@ -179,13 +179,15 @@ namespace PropaneDriver.Server.Endpoints
                         AzureDocumentIntelligenceModel.Invoice,
                         cancelToken);
 
-                    // Build the combined HooverInvoiceData: equipment list
-                    // from the Read OCR, then have the invoice mapper layer
-                    // the standard fields on top of the same instance so
-                    // both halves end up on one object.
+                    // Build the combined HooverInvoiceData: equipment list +
+                    // total fuel pumped from the Read OCR, then have the
+                    // invoice mapper layer the standard fields on top of the
+                    // same instance so both halves end up on one object.
+                    var equipmentScanResult = HooverEquipmentParserService.Parse(equipmentOcrResult);
                     var hooverInvoiceData = new HooverInvoiceData
                     {
-                        EquipmentPieces = HooverEquipmentParserService.Parse(equipmentOcrResult)
+                        EquipmentPieces = equipmentScanResult.EquipmentPieces,
+                        TotalFuelPumped = equipmentScanResult.TotalFuelPumped
                     };
                     InvoiceDataMapperService.PopulateFromAnalyzeResult(invoiceOcrResult, hooverInvoiceData);
 

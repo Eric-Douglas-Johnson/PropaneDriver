@@ -7,6 +7,12 @@ namespace PropaneDriver.Shared.Dtos
     public class HooverInvoiceData : InvoiceData
     {
         public List<EquipmentPiece> EquipmentPieces { get; set; } = new();
+
+        // Total fuel pumped across the run. On a Hoover equipment sheet this
+        // is the trailing number that follows the per-piece id/quantity
+        // pairs (just before the HOOVER SUPERVISOR sign-off line), so it
+        // arrives from the same OCR pass that fills EquipmentPieces.
+        public decimal? TotalFuelPumped { get; set; }
     }
 
     public class EquipmentPiece
