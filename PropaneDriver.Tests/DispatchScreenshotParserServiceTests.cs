@@ -7,7 +7,7 @@ namespace PropaneDriver.Tests;
 // AnalyzeResult inputs via DocumentIntelligenceModelFactory so we never
 // hit the real Azure service — these tests prove the regex/coordinate
 // logic, not OCR quality.
-public class DispatchScreenshotParserTests
+public class DispatchScreenshotParserServiceTests
 {
     // Lines are positioned vertically by ascending Y so the parser's
     // polygon-average sort reads them top-to-bottom in the order passed.
@@ -58,28 +58,28 @@ public class DispatchScreenshotParserTests
     [Fact]
     public void FlattenLines_EmptyResult_ReturnsEmpty()
     {
-        var result = DispatchScreenshotParser.FlattenLines(BuildPageResult());
+        var result = DispatchScreenshotParserService.FlattenLines(BuildPageResult());
         Assert.Empty(result);
     }
 
     [Fact]
     public void FlattenLines_PreservesTopToBottomOrder()
     {
-        var result = DispatchScreenshotParser.FlattenLines(BuildPageResult("first", "second", "third"));
+        var result = DispatchScreenshotParserService.FlattenLines(BuildPageResult("first", "second", "third"));
         Assert.Equal(new[] { "first", "second", "third" }, result);
     }
 
     [Fact]
     public void Parse_NoMatchingLines_ReturnsEmpty()
     {
-        var result = DispatchScreenshotParser.Parse(BuildPageResult("hello", "world"));
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult("hello", "world"));
         Assert.Empty(result);
     }
 
     [Fact]
     public void Parse_CombinedAddressLine_ProducesOneDeliveryWithCustomerName()
     {
-        var result = DispatchScreenshotParser.Parse(BuildPageResult(
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult(
             "Jane Doe",
             "1234 Main St Springfield, IL 62704"));
 
@@ -96,7 +96,7 @@ public class DispatchScreenshotParserTests
     {
         // City "Saint Paul" has a space, which the combined-line regex
         // doesn't allow — forces the parser into its multi-line fallback.
-        var result = DispatchScreenshotParser.Parse(BuildPageResult(
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult(
             "Bob Smith",
             "456 Elm Avenue",
             "Saint Paul, MN 55101"));
@@ -114,7 +114,7 @@ public class DispatchScreenshotParserTests
     {
         // "150 gal." and "Propane" both match the JunkLineRegex — the
         // customer-name walk-upward should skip past both.
-        var result = DispatchScreenshotParser.Parse(BuildPageResult(
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult(
             "Mary Johnson",
             "150 gal.",
             "Propane",
@@ -129,7 +129,7 @@ public class DispatchScreenshotParserTests
     [Fact]
     public void Parse_MultipleDeliveries_ReturnsEachWithItsOwnCustomerName()
     {
-        var result = DispatchScreenshotParser.Parse(BuildPageResult(
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult(
             "Alice",
             "111 First St Eveleth, MN 55734",
             "Bob",
@@ -147,7 +147,7 @@ public class DispatchScreenshotParserTests
     [Fact]
     public void Parse_CombinedAddressWithoutZip_ReturnsEmptyZip()
     {
-        var result = DispatchScreenshotParser.Parse(BuildPageResult(
+        var result = DispatchScreenshotParserService.Parse(BuildPageResult(
             "Carol Lee",
             "777 Pine Rd Eveleth, MN"));
 

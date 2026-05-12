@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace PropaneDriver.Server.Services
 {
-    public static class DispatchScreenshotParser
+    public static class DispatchScreenshotParserService
     {
         // Combined-line address: "3452 Clyde Rd Eveleth, MN" or
         // "1234 Main St Saint Paul, MN 55101". Street starts with a house

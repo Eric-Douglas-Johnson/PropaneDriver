@@ -119,6 +119,105 @@
         </div>
     }
 
+    @{
+        var documentsWithInvoiceData = _scannedDocuments.Where(document => document.Invoice is not null).ToList();
+    }
+    @if (documentsWithInvoiceData.Count > 0)
+    {
+        <div class="tools-card">
+            <h5 class="m-0 mb-2">Invoice Fields (@documentsWithInvoiceData.Count)</h5>
+            <p class="tools-hint">
+                Structured key/value pairs extracted by the Azure
+                <code>prebuilt-invoice</code> model. Empty fields mean the model
+                didn't find a confident match for that key.
+            </p>
+
+            @foreach (var document in documentsWithInvoiceData)
+            {
+                var invoiceData = document.Invoice!;
+                <div class="tools-document">
+                    <div class="tools-document-header">
+                        <strong>@(string.IsNullOrEmpty(document.FileName) ? "(unnamed)" : document.FileName)</strong>
+                        @if (!string.IsNullOrWhiteSpace(invoiceData.CurrencyCode))
+                        {
+                            <span class="tools-document-meta">Currency: @invoiceData.CurrencyCode</span>
+                        }
+                    </div>
+
+                    <div class="tools-invoice-grid">
+                        @RenderInvoiceField("Vendor name", invoiceData.VendorName)
+                        @RenderInvoiceField("Vendor address", invoiceData.VendorAddress)
+                        @RenderInvoiceField("Vendor address recipient", invoiceData.VendorAddressRecipient)
+
+                        @RenderInvoiceField("Customer name", invoiceData.CustomerName)
+                        @RenderInvoiceField("Customer id", invoiceData.CustomerId)
+                        @RenderInvoiceField("Customer address", invoiceData.CustomerAddress)
+                        @RenderInvoiceField("Customer address recipient", invoiceData.CustomerAddressRecipient)
+
+                        @RenderInvoiceField("Billing address", invoiceData.BillingAddress)
+                        @RenderInvoiceField("Billing address recipient", invoiceData.BillingAddressRecipient)
+                        @RenderInvoiceField("Shipping address", invoiceData.ShippingAddress)
+                        @RenderInvoiceField("Shipping address recipient", invoiceData.ShippingAddressRecipient)
+                        @RenderInvoiceField("Service address", invoiceData.ServiceAddress)
+                        @RenderInvoiceField("Service address recipient", invoiceData.ServiceAddressRecipient)
+                        @RenderInvoiceField("Remittance address", invoiceData.RemittanceAddress)
+                        @RenderInvoiceField("Remittance address recipient", invoiceData.RemittanceAddressRecipient)
+
+                        @RenderInvoiceField("Invoice id", invoiceData.InvoiceId)
+                        @RenderInvoiceField("Invoice date", FormatInvoiceDate(invoiceData.InvoiceDate))
+                        @RenderInvoiceField("Due date", FormatInvoiceDate(invoiceData.DueDate))
+                        @RenderInvoiceField("Purchase order", invoiceData.PurchaseOrder)
+                        @RenderInvoiceField("Service start date", FormatInvoiceDate(invoiceData.ServiceStartDate))
+                        @RenderInvoiceField("Service end date", FormatInvoiceDate(invoiceData.ServiceEndDate))
+                        @RenderInvoiceField("Payment term", invoiceData.PaymentTerm)
+
+                        @RenderInvoiceField("Subtotal", FormatInvoiceAmount(invoiceData.SubTotal, invoiceData.CurrencyCode))
+                        @RenderInvoiceField("Total tax", FormatInvoiceAmount(invoiceData.TotalTax, invoiceData.CurrencyCode))
+                        @RenderInvoiceField("Invoice total", FormatInvoiceAmount(invoiceData.InvoiceTotal, invoiceData.CurrencyCode))
+                        @RenderInvoiceField("Amount due", FormatInvoiceAmount(invoiceData.AmountDue, invoiceData.CurrencyCode))
+                        @RenderInvoiceField("Previous unpaid balance", FormatInvoiceAmount(invoiceData.PreviousUnpaidBalance, invoiceData.CurrencyCode))
+                    </div>
+
+                    @if (invoiceData.LineItems.Count > 0)
+                    {
+                        <div class="tools-subhead">Line items (@invoiceData.LineItems.Count)</div>
+                        <table class="tools-stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Description</th>
+                                    <th>Product</th>
+                                    <th class="num">Qty</th>
+                                    <th>Unit</th>
+                                    <th class="num">Unit price</th>
+                                    <th class="num">Tax</th>
+                                    <th class="num">Tax rate</th>
+                                    <th class="num">Amount</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var lineItem in invoiceData.LineItems)
+                                {
+                                    <tr>
+                                        <td>@(lineItem.Description ?? "—")</td>
+                                        <td>@(lineItem.ProductCode ?? "—")</td>
+                                        <td class="num">@FormatInvoiceNumber(lineItem.Quantity)</td>
+                                        <td>@(lineItem.Unit ?? "—")</td>
+                                        <td class="num">@FormatInvoiceAmount(lineItem.UnitPrice, invoiceData.CurrencyCode)</td>
+                                        <td class="num">@FormatInvoiceAmount(lineItem.Tax, invoiceData.CurrencyCode)</td>
+                                        <td class="num">@FormatInvoiceNumber(lineItem.TaxRate)</td>
+                                        <td class="num">@FormatInvoiceAmount(lineItem.Amount, invoiceData.CurrencyCode)</td>
+                                        <td>@FormatInvoiceDate(lineItem.Date)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+        </div>
+    }
+
     <div class="tools-section-divider">
         <span class="tools-section-divider-label">Analytics</span>
     </div>
@@ -572,6 +671,41 @@
             return $"{span.Minutes}m {span.Seconds}s";
         return $"{span.Seconds}s";
     }
+
+    // Renders a single "label: value" row in the invoice grid. Centralized
+    // here so every property uses the same markup and missing values render
+    // identically (em dash, muted color).
+    private static RenderFragment RenderInvoiceField(string label, string? value) => builder =>
+    {
+        var hasValue = !string.IsNullOrWhiteSpace(value);
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "tools-invoice-field");
+
+        builder.OpenElement(2, "span");
+        builder.AddAttribute(3, "class", "tools-invoice-field-label");
+        builder.AddContent(4, label);
+        builder.CloseElement();
+
+        builder.OpenElement(5, "span");
+        builder.AddAttribute(6, "class", hasValue ? "tools-invoice-field-value" : "tools-invoice-field-value tools-invoice-field-value--missing");
+        builder.AddContent(7, hasValue ? value : "—");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private static string? FormatInvoiceDate(DateTime? date) =>
+        date.HasValue ? date.Value.ToString("yyyy-MM-dd") : null;
+
+    private static string? FormatInvoiceAmount(decimal? amount, string? currencyCode)
+    {
+        if (!amount.HasValue) return null;
+        var formatted = amount.Value.ToString("N2", System.Globalization.CultureInfo.InvariantCulture);
+        return string.IsNullOrWhiteSpace(currencyCode) ? formatted : $"{formatted} {currencyCode}";
+    }
+
+    private static string? FormatInvoiceNumber(decimal? number) =>
+        number.HasValue ? number.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : null;
 
     private static string FormatRecordedRange(DateTime? oldest, DateTime? newest)
     {

@@ -39,7 +39,7 @@ Client-side `GeoFenceService` watches the browser's geolocation stream and fires
 ### Dispatch screenshot import (OCR)
 ![Bulk dispatch screenshot import preview](docs/screenshots/dispatch-import.png)
 
-Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParser`) walks the OCR output to extract customer and address for each row. Multi-image upload is supported so a whole route can be ingested in one pass. Duplicate rows across uploaded images are detected and visually flagged in the preview so the driver does not save the same stop twice, and the parser exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
+Drivers receive their stops as screenshots from a third-party dispatch app. The import endpoint runs them through Azure Document Intelligence, then a hand-tuned parser (`DispatchScreenshotParserService`) walks the OCR output to extract customer and address for each row. Multi-image upload is supported so a whole route can be ingested in one pass. Duplicate rows across uploaded images are detected and visually flagged in the preview so the driver does not save the same stop twice, and the parser exposes its line-by-line view for diagnostics when an unfamiliar layout shows up.
 
 ### Self-service dispatch
 ![Driver-owned dispatch page for building a route](docs/screenshots/dispatch.png)

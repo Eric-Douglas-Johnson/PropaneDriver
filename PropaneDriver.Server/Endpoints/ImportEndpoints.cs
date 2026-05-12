@@ -31,7 +31,7 @@ namespace PropaneDriver.Server.Endpoints
                 {
                     await using var imgStream = file.OpenReadStream();
                     var ocrData = await docIntelService.RunDocAnalysis(imgStream, AzureDocumentIntelligenceModel.Read, cancelToken);
-                    var deliveries = DispatchScreenshotParser.Parse(ocrData);
+                    var deliveries = DispatchScreenshotParserService.Parse(ocrData);
 
                     return Results.Ok(new ParsedDispatchDto
                     {
@@ -42,7 +42,7 @@ namespace PropaneDriver.Server.Endpoints
                         // hand back the raw OCR lines so the user (or
                         // we) can see what to tune the regex against.
                         RawLines = deliveries.Count == 0
-                            ? DispatchScreenshotParser.FlattenLines(ocrData).ToList()
+                            ? DispatchScreenshotParserService.FlattenLines(ocrData).ToList()
                             : null
                     });
                 }
@@ -112,11 +112,20 @@ namespace PropaneDriver.Server.Endpoints
                         }
                     }
 
+                    // When the caller picked the Invoice model, also lift the
+                    // structured key/value fields out of Azure's AnalyzedDocument
+                    // so the client can render them next to the raw OCR. Other
+                    // models don't produce these fields, so we skip the call.
+                    InvoiceData? invoiceData = null;
+                    if (modelToUse == AzureDocumentIntelligenceModel.Invoice)
+                        invoiceData = InvoiceDataMapperService.FromAnalyzeResult(ocrResult);
+
                     return Results.Ok(new OcrDocumentDto
                     {
                         FileName = file.FileName ?? string.Empty,
                         PageCount = pages.Count,
-                        Pages = pages
+                        Pages = pages,
+                        Invoice = invoiceData
                     });
                 }
                 catch (Exception ex)
