@@ -293,7 +293,7 @@
             <button class="btn btn-sm btn-outline-secondary py-0 px-2"
                     @onclick="LoadDeliveryStats"
                     disabled="@_statsLoading">
-                @(_statsLoading ? "Loading…" : "Refresh")
+                @(_statsLoading ? "Loading…" : _stats is null ? "Load" : "Refresh")
             </button>
         </div>
         <p class="tools-hint">
@@ -526,11 +526,6 @@
     private string? _statsError;
     private DateTime? _statsFrom = DateTime.UtcNow.Date.AddDays(-30);
     private DateTime? _statsTo;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadDeliveryStats();
-    }
 
     // Mirrors the shape returned by readAllDispatchFilesAsBase64. The JS
     // helper is fully generic (input id → base64 file list), not
