@@ -80,11 +80,17 @@ namespace PropaneDriver.Server.Services
             var pairableTokenCount = numericTokens.Count - 1;
             for (var pairIndex = 0; pairIndex + 1 < pairableTokenCount; pairIndex += 2)
             {
-                if (!int.TryParse(
-                        numericTokens[pairIndex],
-                        NumberStyles.Integer,
+                var equipmentIdToken = numericTokens[pairIndex];
+
+                // Equipment IDs are pure-digit strings on the form; reject any
+                // token the number regex picked up as decimal (e.g. "12.5")
+                // since that's a misaligned pair, not an id. Storing the raw
+                // token preserves leading zeros that int parsing would strip.
+                if (!long.TryParse(
+                        equipmentIdToken,
+                        NumberStyles.None,
                         CultureInfo.InvariantCulture,
-                        out var equipmentId))
+                        out _))
                     continue;
 
                 if (!decimal.TryParse(
@@ -96,7 +102,7 @@ namespace PropaneDriver.Server.Services
 
                 scanResult.EquipmentPieces.Add(new EquipmentPiece
                 {
-                    Id = equipmentId,
+                    Id = equipmentIdToken,
                     FuelQuantity = fuelQuantity
                 });
             }

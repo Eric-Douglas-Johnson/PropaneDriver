@@ -17,7 +17,10 @@ namespace PropaneDriver.Shared.Dtos
 
     public class EquipmentPiece
     {
-        public int Id { get; set; }
+        // Stored as the raw digit string straight from OCR so leading zeros
+        // (e.g. "00123") survive round-tripping into Excel — parsing through
+        // int/long would silently strip them.
+        public string Id { get; set; } = string.Empty;
         public decimal FuelQuantity { get; set; }
     }
 }
