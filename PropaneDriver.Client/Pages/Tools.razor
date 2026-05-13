@@ -56,6 +56,13 @@
                            accept="image/*" class="form-control form-control-sm"
                            @onchange="OnHooverInvoiceImageSelected" />
                 </div>
+                <div class="admin-field">
+                    <label>Excel sheet (optional)</label>
+                    <input type="file" id="tools-hoover-excel-file" @key="_hooverExcelInputKey"
+                           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                           class="form-control form-control-sm"
+                           @onchange="OnHooverExcelSheetSelected" />
+                </div>
             }
             else
             {
@@ -70,11 +77,13 @@
 
         @if (IsHooverScanFlow)
         {
-            @if (!string.IsNullOrEmpty(_hooverEquipmentImageFileName) || !string.IsNullOrEmpty(_hooverInvoiceImageFileName))
+            @if (!string.IsNullOrEmpty(_hooverEquipmentImageFileName)
+                 || !string.IsNullOrEmpty(_hooverInvoiceImageFileName)
+                 || !string.IsNullOrEmpty(_hooverExcelSheetFileName))
             {
                 <div class="tools-selection">
                     <div class="tools-selection-header">
-                        Hoover scan — needs both images
+                        Hoover scan — needs both images (Excel is optional)
                     </div>
                     <ol class="tools-selection-list">
                         <li>
@@ -84,6 +93,10 @@
                         <li>
                             <strong>Invoice:</strong>
                             @(string.IsNullOrEmpty(_hooverInvoiceImageFileName) ? "(not selected)" : _hooverInvoiceImageFileName)
+                        </li>
+                        <li>
+                            <strong>Excel:</strong>
+                            @(string.IsNullOrEmpty(_hooverExcelSheetFileName) ? "(not selected — skip Excel export)" : _hooverExcelSheetFileName)
                         </li>
                     </ol>
                     <div class="d-flex gap-2">
@@ -510,6 +523,12 @@
     private int _hooverEquipmentInputKey;
     private int _hooverInvoiceInputKey;
 
+    // Optional Excel sheet picked alongside the two images. When present,
+    // the scanned HooverInvoiceData is appended to its first worksheet and
+    // the modified workbook is offered back to the user as a download.
+    private string? _hooverExcelSheetFileName;
+    private int _hooverExcelInputKey;
+
     private bool IsHooverScanFlow =>
         _selectedModel == AzureDocumentIntelligenceModel.Invoice
         && _selectedCompanyInvoiceType == CompanyInvoiceType.Hoover;
@@ -697,6 +716,12 @@
         _scanStatus = null;
     }
 
+    private async Task OnHooverExcelSheetSelected()
+    {
+        _hooverExcelSheetFileName = await ReadSingleFileName("tools-hoover-excel-file");
+        _scanStatus = null;
+    }
+
     private async Task<string?> ReadSingleFileName(string inputElementId)
     {
         try
@@ -716,8 +741,10 @@
     {
         _hooverEquipmentImageFileName = null;
         _hooverInvoiceImageFileName = null;
+        _hooverExcelSheetFileName = null;
         _hooverEquipmentInputKey++;
         _hooverInvoiceInputKey++;
+        _hooverExcelInputKey++;
         _scanStatus = null;
     }
 
@@ -774,9 +801,39 @@
             }
 
             var scannedDocument = await response.Content.ReadFromJsonAsync<OcrDocumentDto>();
-            if (scannedDocument is not null)
+            if (scannedDocument is null)
             {
-                _scannedDocuments.Add(scannedDocument);
+                _scanStatus = "Hoover scan returned no document.";
+                _scanStatusSuccess = false;
+                return;
+            }
+
+            _scannedDocuments.Add(scannedDocument);
+
+            // Excel export is opt-in: only fire when the user actually picked
+            // a workbook. The scanned HooverInvoiceData is serialized as its
+            // concrete subclass (not the InvoiceData base) so the server's
+            // deserializer doesn't need polymorphic discriminator handling.
+            if (!string.IsNullOrEmpty(_hooverExcelSheetFileName)
+                && scannedDocument.Invoice is HooverInvoiceData scannedHooverInvoiceData)
+            {
+                _scanProgress = "Appending scan to Excel sheet…";
+                StateHasChanged();
+
+                var exportFailureMessage = await ExportHooverScanToExcel(scannedHooverInvoiceData);
+                if (exportFailureMessage is null)
+                {
+                    _scanStatus = "Hoover invoice scanned and appended to Excel.";
+                    _scanStatusSuccess = true;
+                }
+                else
+                {
+                    _scanStatus = $"Scan succeeded but Excel export failed — {exportFailureMessage}";
+                    _scanStatusSuccess = false;
+                }
+            }
+            else
+            {
                 _scanStatus = "Hoover invoice scanned.";
                 _scanStatusSuccess = true;
             }
@@ -803,6 +860,55 @@
             string.IsNullOrEmpty(imageFile.ContentType) ? "application/octet-stream" : imageFile.ContentType);
         multipartContent.Add(byteArrayContent, fieldName,
             string.IsNullOrEmpty(imageFile.FileName) ? fieldName : imageFile.FileName);
+    }
+
+    // Sends the scanned HooverInvoiceData plus the user-picked Excel workbook
+    // to the server, which appends a row per equipment piece and streams the
+    // modified workbook back. We push that file straight to the browser as a
+    // download. Returns null on success or a short error string for the
+    // status line on failure.
+    private const string ExcelMimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    private async Task<string?> ExportHooverScanToExcel(HooverInvoiceData hooverInvoiceData)
+    {
+        var pickedExcelFiles = await JS.InvokeAsync<ToolsImageFile[]?>(
+            "readAllDispatchFilesAsBase64", "tools-hoover-excel-file");
+        if (pickedExcelFiles is null || pickedExcelFiles.Length == 0)
+            return "no Excel file selected when export started";
+
+        var excelFile = pickedExcelFiles[0];
+        const long maxExcelBytes = 25 * 1024 * 1024;
+        if (excelFile.Size > maxExcelBytes)
+            return "Excel file exceeds 25 MB";
+
+        var invoiceJson = System.Text.Json.JsonSerializer.Serialize(
+            hooverInvoiceData,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        using var exportMultipart = new MultipartFormDataContent();
+        var excelBytes = Convert.FromBase64String(excelFile.Base64);
+        var excelContent = new ByteArrayContent(excelBytes);
+        excelContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+            string.IsNullOrEmpty(excelFile.ContentType) ? ExcelMimeType : excelFile.ContentType);
+        exportMultipart.Add(excelContent, "excelSheet",
+            string.IsNullOrEmpty(excelFile.FileName) ? "workbook.xlsx" : excelFile.FileName);
+        exportMultipart.Add(new StringContent(invoiceJson), "invoiceJson");
+
+        var exportResponse = await Http.PostAsync("api/imports/tools-hoover-export-excel", exportMultipart);
+        if (!exportResponse.IsSuccessStatusCode)
+        {
+            var errorBody = await exportResponse.Content.ReadAsStringAsync();
+            return $"{(int)exportResponse.StatusCode} {exportResponse.StatusCode} — {errorBody}";
+        }
+
+        var modifiedExcelBytes = await exportResponse.Content.ReadAsByteArrayAsync();
+        var downloadFileName = string.IsNullOrEmpty(excelFile.FileName) ? "hoover-invoice.xlsx" : excelFile.FileName;
+        await JS.InvokeVoidAsync(
+            "downloadFileFromBase64",
+            downloadFileName,
+            ExcelMimeType,
+            Convert.ToBase64String(modifiedExcelBytes));
+        return null;
     }
 
     private void ClearScannedDocuments()

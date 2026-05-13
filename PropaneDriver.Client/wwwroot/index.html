@@ -326,6 +326,26 @@
             });
         };
 
+        // Triggers a browser download of the given bytes (base64-encoded).
+        // Used when the server returns a binary payload that we want the
+        // user to save locally, e.g. the modified Hoover Excel workbook.
+        window.downloadFileFromBase64 = function (fileName, contentType, base64) {
+            var binaryString = atob(base64);
+            var byteValues = new Uint8Array(binaryString.length);
+            for (var i = 0; i < binaryString.length; i++) {
+                byteValues[i] = binaryString.charCodeAt(i);
+            }
+            var blob = new Blob([byteValues], { type: contentType || 'application/octet-stream' });
+            var objectUrl = URL.createObjectURL(blob);
+            var anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = fileName || 'download';
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(objectUrl);
+        };
+
         // Names-only peek at the picker's current selection. Used by pages
         // that want to show the user what they picked before paying for the
         // full base64 read + upload.

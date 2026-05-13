@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Azure.AI.DocumentIntelligence;
 using PropaneDriver.Server.Services;
 using PropaneDriver.Shared.Dtos;
@@ -213,6 +214,68 @@ namespace PropaneDriver.Server.Endpoints
                         detail: ex.Message,
                         title: "OCR failed",
                         statusCode: 502);
+                }
+            }).DisableAntiforgery().RequireAuthorization("AdminOnly");
+
+            // Companion to the Hoover invoice scan: takes the scanned
+            // HooverInvoiceData (as JSON in a form field) and a user-supplied
+            // .xlsx workbook, appends the scan to the workbook's first sheet,
+            // and streams the modified file back as a download.
+            group.MapPost("tools-hoover-export-excel", async (
+                HttpRequest httpRequest,
+                ILogger<Program> logger,
+                CancellationToken cancelToken) =>
+            {
+                if (!httpRequest.HasFormContentType)
+                    return Results.BadRequest(new { Message = "Expected multipart form data." });
+
+                var formCollection = await httpRequest.ReadFormAsync(cancelToken);
+                var excelFile = formCollection.Files["excelSheet"];
+                var invoiceJson = formCollection["invoiceJson"].ToString();
+
+                if (excelFile is null || excelFile.Length == 0)
+                    return Results.BadRequest(new { Message = "No Excel file uploaded." });
+                const long maxExcelBytes = 25 * 1024 * 1024;
+                if (excelFile.Length > maxExcelBytes)
+                    return Results.BadRequest(new { Message = "Excel file exceeds 25 MB limit." });
+                if (string.IsNullOrWhiteSpace(invoiceJson))
+                    return Results.BadRequest(new { Message = "Missing invoice JSON." });
+
+                HooverInvoiceData? hooverInvoiceData;
+                try
+                {
+                    hooverInvoiceData = JsonSerializer.Deserialize<HooverInvoiceData>(
+                        invoiceJson,
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                }
+                catch (JsonException ex)
+                {
+                    return Results.BadRequest(new { Message = $"Invalid invoice JSON: {ex.Message}" });
+                }
+
+                if (hooverInvoiceData is null)
+                    return Results.BadRequest(new { Message = "Invoice JSON deserialized to null." });
+
+                try
+                {
+                    await using var workbookInputStream = excelFile.OpenReadStream();
+                    var modifiedWorkbookBytes = HooverInvoiceExcelExporterService.AppendScan(
+                        workbookInputStream,
+                        hooverInvoiceData,
+                        DateTime.UtcNow);
+
+                    return Results.File(
+                        modifiedWorkbookBytes,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        string.IsNullOrEmpty(excelFile.FileName) ? "hoover-invoice.xlsx" : excelFile.FileName);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Hoover invoice Excel export failed");
+                    return Results.Problem(
+                        detail: ex.Message,
+                        title: "Excel export failed",
+                        statusCode: 500);
                 }
             }).DisableAntiforgery().RequireAuthorization("AdminOnly");
 
