@@ -192,6 +192,18 @@
                         title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : (_selectedDelivery.Location.BackIn ? "Clear the back-in flag for this driveway" : "Mark this driveway as requiring the truck to back in"))">
                     @(_settingBackIn ? "Saving…" : (_selectedDelivery.Location.BackIn ? "− Back In" : "+ Back In"))
                 </button>
+                <button class="btn btn-lg btn-dark"
+                        @onclick="CancelActiveDelivery"
+                        disabled="@(_cancellingActiveDelivery
+                            || _activeDelivery is null
+                            || _selectedDelivery.Id != _activeDelivery.Id)"
+                        title="@(_activeDelivery is null
+                            ? "No active delivery to cancel"
+                            : _selectedDelivery.Id != _activeDelivery.Id
+                                ? "Only the active delivery can be cancelled"
+                                : "Mark the active delivery complete without recording delivery time data")">
+                    @(_cancellingActiveDelivery ? "Cancelling…" : "Cancel Delivery")
+                </button>
             </div>
             @if (!string.IsNullOrEmpty(_addressGpsStatus))
             {
@@ -377,6 +389,10 @@
     // Disables the "Force Next" button while the status update is in flight
     // so the driver can't double-tap and skip two deliveries by accident.
     private bool _forcingNext;
+
+    // Same idea for "Cancel Delivery" — guards against a double-tap firing
+    // two status updates while the first PUT is in flight.
+    private bool _cancellingActiveDelivery;
 
     // Same idea for the LongRunning manual Start/Stop buttons — protects
     // against a double-tap firing two starts or two stops in quick
@@ -606,6 +622,61 @@
             + (next is not null ? $" — now active: {next.Location.Street}" : " — no more pending deliveries");
         _saveSuccess = true;
         _forcingNext = false;
+        StateHasChanged();
+    }
+
+    // "Cancel Delivery" — abandon the active delivery without recording a
+    // delivery time. Marks status=Complete so the row drops out of pending
+    // and the active pointer advances, but no DeliveryTime row is written
+    // (a zero-length stop would skew the address-average stats and poison
+    // future route estimates). Use case: driver pulled up to the wrong
+    // stop, the route had a duplicate, the customer cancelled at the door,
+    // etc. Force Next is the sibling action that DOES record a time.
+    private async Task CancelActiveDelivery()
+    {
+        if (_activeDelivery is null || _cancellingActiveDelivery) return;
+        if (_selectedDelivery is null || _selectedDelivery.Id != _activeDelivery.Id) return;
+
+        var current = _activeDelivery;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Cancel delivery to {current.Location.FullAddress}?\n\n" +
+            "The delivery will be marked complete, but no delivery time will be saved.");
+        if (!confirmed) return;
+
+        _cancellingActiveDelivery = true;
+        _saveStatus = null;
+        StateHasChanged();
+
+        // Clear the geofence target BEFORE flipping status, so any in-flight
+        // GPS tick or running manual timer is torn down first. Otherwise a
+        // position update landing mid-cancel could trip StopTimerAndSaveAsync
+        // and persist the delivery time we explicitly didn't want recorded.
+        await SetActiveDeliveryAsync(null);
+
+        var ok = await DeliveryApi.UpdateStatusAsync(current.Id, 2);
+        if (!ok)
+        {
+            _saveStatus = $"✗ Failed to cancel {current.Location.Street} — see ErrorLog.";
+            _saveSuccess = false;
+            _cancellingActiveDelivery = false;
+            StateHasChanged();
+            return;
+        }
+
+        current.Status = 2;
+        _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
+
+        var next = FindNextDelivery();
+        await SetActiveDeliveryAsync(next);
+
+        _saveStatus = $"✓ Cancelled {current.Location.Street}"
+            + (next is not null
+                ? $" — now active: {next.Location.Street}"
+                : " — no more pending deliveries");
+        _saveSuccess = true;
+        _cancellingActiveDelivery = false;
         StateHasChanged();
     }
 
