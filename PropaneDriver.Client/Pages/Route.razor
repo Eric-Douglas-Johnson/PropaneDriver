@@ -13,6 +13,7 @@
 @inject AddressApiService AddressApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject SpeechService SpeechService
 @inject HttpClient Http
 @implements IAsyncDisposable
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
@@ -214,11 +215,16 @@
             @if (_addingAlertOpen)
             {
                 <div class="mt-2">
-                    <input type="text" class="form-control form-control-sm"
-                           placeholder="Alert message"
-                           value="@_alertDraft"
-                           @oninput="e => _alertDraft = e.Value?.ToString() ?? string.Empty"
-                           @onkeydown="OnAlertKeyDown" />
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="text" class="form-control form-control-sm"
+                               placeholder="Alert message"
+                               value="@_alertDraft"
+                               @oninput="e => _alertDraft = e.Value?.ToString() ?? string.Empty"
+                               @onkeydown="OnAlertKeyDown" />
+                        <button class="btn-mic @(_dictatingAlert ? "btn-mic-active" : "")"
+                                @onclick="DictateAlert" disabled="@_dictatingAlert"
+                                title="Dictate">&#x1F399;</button>
+                    </div>
                     <div class="d-flex gap-2 mt-1">
                         <button class="btn btn-sm btn-primary"
                                 @onclick="SaveAlert"
@@ -240,10 +246,15 @@
             @if (_editingTankLocation)
             {
                 <div class="mt-2">
-                    <input type="text" class="form-control form-control-sm"
-                           placeholder="e.g. behind garage, left of AC"
-                           value="@_tankLocationDraft"
-                           @oninput="e => _tankLocationDraft = e.Value?.ToString() ?? string.Empty" />
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="text" class="form-control form-control-sm"
+                               placeholder="e.g. behind garage, left of AC"
+                               value="@_tankLocationDraft"
+                               @oninput="e => _tankLocationDraft = e.Value?.ToString() ?? string.Empty" />
+                        <button class="btn-mic @(_dictatingTankLocation ? "btn-mic-active" : "")"
+                                @onclick="DictateTankLocation" disabled="@_dictatingTankLocation"
+                                title="Dictate">&#x1F399;</button>
+                    </div>
                     <div class="d-flex gap-2 mt-1">
                         <button class="btn btn-sm btn-primary"
                                 @onclick="SaveTankLocationNote"
@@ -378,6 +389,7 @@
     private bool _savingAlert;
     private string? _alertSaveStatus;
     private bool _alertSaveSuccess;
+    private bool _dictatingAlert;
 
     // Inline "Set Tank Location" editor state for the selected delivery.
     private bool _editingTankLocation;
@@ -385,6 +397,7 @@
     private bool _savingTankLocation;
     private string? _tankLocationStatus;
     private bool _tankLocationSuccess;
+    private bool _dictatingTankLocation;
 
     // Disables the "Force Next" button while the status update is in flight
     // so the driver can't double-tap and skip two deliveries by accident.
@@ -1013,6 +1026,32 @@
         }
 
         _savingTankLocation = false;
+    }
+
+    private async Task DictateAlert()
+    {
+        _dictatingAlert = true;
+        StateHasChanged();
+
+        var text = await SpeechService.DictateAsync();
+        if (!string.IsNullOrEmpty(text))
+            _alertDraft = text;
+
+        _dictatingAlert = false;
+        StateHasChanged();
+    }
+
+    private async Task DictateTankLocation()
+    {
+        _dictatingTankLocation = true;
+        StateHasChanged();
+
+        var text = await SpeechService.DictateAsync();
+        if (!string.IsNullOrEmpty(text))
+            _tankLocationDraft = text;
+
+        _dictatingTankLocation = false;
+        StateHasChanged();
     }
 
     private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
