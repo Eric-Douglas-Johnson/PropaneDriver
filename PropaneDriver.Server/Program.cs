@@ -121,6 +121,7 @@ app.MapGeocodingEndpoints();
 app.MapConfigEndpoints();
 app.MapClientLogEndpoints();
 app.MapImportEndpoints();
+app.MapFuelLogEndpoints();
 
 app.MapFallbackToFile("index.html");
 

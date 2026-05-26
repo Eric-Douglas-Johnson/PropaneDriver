@@ -17,6 +17,7 @@ namespace PropaneDriver.Server.Data
         public DbSet<RouteDbRecord> Routes => Set<RouteDbRecord>();
         public DbSet<DeliveryDbRecord> Deliveries => Set<DeliveryDbRecord>();
         public DbSet<AlertDbRecord> Alerts => Set<AlertDbRecord>();
+        public DbSet<FuelLogEntryDbRecord> FuelLogEntries => Set<FuelLogEntryDbRecord>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -92,6 +93,15 @@ namespace PropaneDriver.Server.Data
                       .WithMany(d => d.Alerts)
                       .HasForeignKey(e => e.DeliveryId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<FuelLogEntryDbRecord>(entity =>
+            {
+                entity.ToTable("FuelLogEntries");
+                entity.HasIndex(e => e.DriverId);
+                entity.HasIndex(e => new { e.DriverId, e.SortOrder });
+                entity.Property(e => e.MeterValue).HasPrecision(18, 2);
+                entity.Property(e => e.GallonsPumped).HasPrecision(18, 2);
             });
         }
     }
