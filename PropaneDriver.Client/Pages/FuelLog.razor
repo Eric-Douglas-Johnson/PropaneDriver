@@ -2,6 +2,7 @@
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Shared.Dtos
 @inject FuelLogApiService FuelLogApi
+@inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Fuel Log</PageTitle>
@@ -78,6 +79,9 @@
                 <button class="btn btn-sm btn-primary" @onclick="SaveAsync" disabled="@_saving">
                     @(_saving ? "Saving…" : "Save fuel log")
                 </button>
+                <button class="btn btn-sm btn-outline-warning" @onclick="StartNewLogAsync" disabled="@_saving">
+                    Start new log
+                </button>
                 @if (!string.IsNullOrEmpty(_statusMessage))
                 {
                     <span class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
@@ -113,6 +117,11 @@
     private string? _statusMessage;
     private bool _statusSuccess;
 
+    // Snapshot of the rows as they last matched what's persisted (taken after
+    // load and after a successful save). The grid is "dirty" when the current
+    // rows differ from it — that's what triggers the save prompt on New Log.
+    private string _savedSignature = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         var entries = await FuelLogApi.GetFuelLogAsync();
@@ -127,9 +136,18 @@
         }
 
         EnsureStartRow();
+        _savedSignature = CurrentSignature();
 
         _loading = false;
     }
+
+    // Order-sensitive fingerprint of the rows' editable content. Gallons is
+    // derived, so only the equipment number and meter value matter for whether
+    // the driver has unsaved changes.
+    private string CurrentSignature() =>
+        string.Join("\n", _rows.Select(row => $"{row.EquipmentNumber}|{row.MeterValue}"));
+
+    private bool IsDirty => CurrentSignature() != _savedSignature;
 
     // Row 0 is always the "Start" baseline: a read-only label plus the meter
     // reading the driver began at (0 when starting fresh). It anchors the
@@ -212,5 +230,36 @@
         _saving = false;
         _statusSuccess = saved;
         _statusMessage = saved ? "Saved." : "Save failed — try again.";
+        if (saved) _savedSignature = CurrentSignature();
+    }
+
+    // Clear the grid back to a fresh log (Start baseline + one empty entry).
+    // If there are unsaved changes, give the driver the chance to save them
+    // first so a stray click can't wipe out un-persisted work. This resets the
+    // working area only; the previously saved log stays on the server until a
+    // new one is saved over it.
+    private async Task StartNewLogAsync()
+    {
+        if (IsDirty)
+        {
+            var saveFirst = await JS.InvokeAsync<bool>(
+                "confirm",
+                "This fuel log has unsaved changes.\n\n" +
+                "OK — save them first, then start a new log.\n" +
+                "Cancel — discard them and start a new log.");
+
+            if (saveFirst)
+            {
+                await SaveAsync();
+                // If the save didn't go through, keep the rows so nothing is lost.
+                if (!_statusSuccess) return;
+            }
+        }
+
+        _rows.Clear();
+        EnsureStartRow();
+        _savedSignature = CurrentSignature();
+        _statusSuccess = true;
+        _statusMessage = "Started a new fuel log.";
     }
 }
