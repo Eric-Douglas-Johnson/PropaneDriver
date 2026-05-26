@@ -11,11 +11,12 @@
 
     <div class="fuel-log-card">
         <p class="fuel-log-hint">
-            Add a row for each piece of equipment you fuel. Enter the equipment
-            number and the fuel-pump meter reading; <strong>gallons pumped</strong>
-            fills in automatically as this row's meter value minus the previous
-            row's (new − old). The first row has no previous reading, so its
-            gallons stay blank.
+            The first row is your <strong>Start</strong> baseline — just the
+            fuel-pump meter reading you began at (0 if you're starting fresh).
+            Add a row for each piece of equipment you fuel after that;
+            <strong>gallons pumped</strong> fills in automatically as that row's
+            meter value minus the row above it (new − old). So the first entry's
+            gallons equal its meter reading when the Start meter is 0.
         </p>
 
         @if (_loading)
@@ -37,21 +38,37 @@
                 {
                     var index = rowIndex; // capture for the remove handler
                     var row = _rows[index];
+                    var isStartRow = index == 0;
                     var gallons = GallonsForRow(index);
-                    <div class="fuel-log-row" @key="row.Key">
-                        <span class="fuel-log-rownum">@(index + 1)</span>
-                        <input class="form-control form-control-sm"
-                               placeholder="e.g. 104"
-                               @bind="row.EquipmentNumber" />
+                    <div class="fuel-log-row @(isStartRow ? "fuel-log-row--start" : "")" @key="row.Key">
+                        <span class="fuel-log-rownum">@(isStartRow ? "" : index.ToString())</span>
+                        @if (isStartRow)
+                        {
+                            <input class="form-control form-control-sm fuel-log-startlabel"
+                                   type="text" value="Start" readonly tabindex="-1" />
+                        }
+                        else
+                        {
+                            <input class="form-control form-control-sm"
+                                   placeholder="e.g. 104"
+                                   @bind="row.EquipmentNumber" />
+                        }
                         <input class="form-control form-control-sm" type="number" step="any"
                                inputmode="decimal" placeholder="0"
                                @bind="row.MeterValue" />
                         <input class="form-control form-control-sm fuel-log-gallons"
                                type="text" readonly tabindex="-1"
                                value="@(gallons.HasValue ? gallons.Value.ToString("0.##") : "—")" />
-                        <button class="btn btn-sm btn-outline-danger fuel-log-remove"
-                                @onclick="() => RemoveRow(index)"
-                                title="Remove row">×</button>
+                        @if (isStartRow)
+                        {
+                            <span></span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-danger fuel-log-remove"
+                                    @onclick="() => RemoveRow(index)"
+                                    title="Remove row">×</button>
+                        }
                     </div>
                 }
             </div>
@@ -109,10 +126,24 @@
             });
         }
 
-        // Always leave the driver with at least one empty row to type into.
-        if (_rows.Count == 0) _rows.Add(new FuelLogRow());
+        EnsureStartRow();
 
         _loading = false;
+    }
+
+    // Row 0 is always the "Start" baseline: a read-only label plus the meter
+    // reading the driver began at (0 when starting fresh). It anchors the
+    // gallons calc so the first real entry's gallons = its meter − the start
+    // meter. We also keep at least one entry row beneath it to type into.
+    private void EnsureStartRow()
+    {
+        if (_rows.Count == 0)
+            _rows.Add(new FuelLogRow { EquipmentNumber = "Start", MeterValue = 0 });
+        else
+            _rows[0].EquipmentNumber = "Start";
+
+        if (_rows.Count < 2)
+            _rows.Add(new FuelLogRow());
     }
 
     // Gallons for a row = this row's meter − the previous row's meter, when
@@ -150,10 +181,11 @@
 
     private void RemoveRow(int index)
     {
-        if (index < 0 || index >= _rows.Count) return;
+        // Index 0 is the Start baseline and can't be removed.
+        if (index <= 0 || index >= _rows.Count) return;
 
         _rows.RemoveAt(index);
-        if (_rows.Count == 0) _rows.Add(new FuelLogRow());
+        if (_rows.Count < 2) _rows.Add(new FuelLogRow());
         _statusMessage = null;
     }
 
