@@ -336,6 +336,21 @@ namespace PropaneDriver.Server.Data
                         ALTER TABLE [Alerts]
                             ADD [Seen] bit NOT NULL CONSTRAINT [DF_Alerts_Seen] DEFAULT 0;
                     END
+
+                    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'FuelLogEntries')
+                    BEGIN
+                        CREATE TABLE [FuelLogEntries] (
+                            [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                            [DriverId] uniqueidentifier NOT NULL,
+                            [EquipmentNumber] nvarchar(100) NOT NULL,
+                            [MeterValue] decimal(18,2) NOT NULL CONSTRAINT [DF_FuelLogEntries_MeterValue] DEFAULT 0,
+                            [GallonsPumped] decimal(18,2) NOT NULL CONSTRAINT [DF_FuelLogEntries_GallonsPumped] DEFAULT 0,
+                            [SortOrder] int NOT NULL CONSTRAINT [DF_FuelLogEntries_SortOrder] DEFAULT 0,
+                            [RecordedAt] datetime2 NOT NULL
+                        );
+                        CREATE INDEX [IX_FuelLogEntries_DriverId] ON [FuelLogEntries] ([DriverId]);
+                        CREATE INDEX [IX_FuelLogEntries_DriverId_SortOrder] ON [FuelLogEntries] ([DriverId], [SortOrder]);
+                    END
                 ");
             }
             catch (Exception ex)

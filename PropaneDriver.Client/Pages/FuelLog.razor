@@ -1,0 +1,184 @@
+@page "/fuel-log"
+@using PropaneDriver.Client.Services
+@using PropaneDriver.Shared.Dtos
+@inject FuelLogApiService FuelLogApi
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
+
+<PageTitle>Fuel Log</PageTitle>
+
+<div class="fuel-log-page">
+    <h4 class="fuel-log-title">Fuel Log</h4>
+
+    <div class="fuel-log-card">
+        <p class="fuel-log-hint">
+            Add a row for each piece of equipment you fuel. Enter the equipment
+            number and the fuel-pump meter reading; <strong>gallons pumped</strong>
+            fills in automatically as this row's meter value minus the previous
+            row's (new − old). The first row has no previous reading, so its
+            gallons stay blank.
+        </p>
+
+        @if (_loading)
+        {
+            <div class="fuel-log-status">Loading…</div>
+        }
+        else
+        {
+            <div class="fuel-log-table">
+                <div class="fuel-log-row fuel-log-row--head">
+                    <span>#</span>
+                    <span>Equipment #</span>
+                    <span>Meter value</span>
+                    <span>Gallons pumped</span>
+                    <span></span>
+                </div>
+
+                @for (var rowIndex = 0; rowIndex < _rows.Count; rowIndex++)
+                {
+                    var index = rowIndex; // capture for the remove handler
+                    var row = _rows[index];
+                    var gallons = GallonsForRow(index);
+                    <div class="fuel-log-row" @key="row.Key">
+                        <span class="fuel-log-rownum">@(index + 1)</span>
+                        <input class="form-control form-control-sm"
+                               placeholder="e.g. 104"
+                               @bind="row.EquipmentNumber" />
+                        <input class="form-control form-control-sm" type="number" step="any"
+                               inputmode="decimal" placeholder="0"
+                               @bind="row.MeterValue" />
+                        <input class="form-control form-control-sm fuel-log-gallons"
+                               type="text" readonly tabindex="-1"
+                               value="@(gallons.HasValue ? gallons.Value.ToString("0.##") : "—")" />
+                        <button class="btn btn-sm btn-outline-danger fuel-log-remove"
+                                @onclick="() => RemoveRow(index)"
+                                title="Remove row">×</button>
+                    </div>
+                }
+            </div>
+
+            <div class="fuel-log-actions">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="AddRow">+ Add row</button>
+                <button class="btn btn-sm btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                    @(_saving ? "Saving…" : "Save fuel log")
+                </button>
+                @if (!string.IsNullOrEmpty(_statusMessage))
+                {
+                    <span class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
+                        @_statusMessage
+                    </span>
+                }
+            </div>
+
+            <div class="fuel-log-total">
+                Total gallons pumped: <strong>@TotalGallons().ToString("0.##")</strong>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    // Editable view of a single log row. GallonsPumped isn't stored here —
+    // it's always derived from this row's and the previous row's meter values
+    // via GallonsForRow, which is what makes the column auto-fill.
+    private sealed class FuelLogRow
+    {
+        // Stable identity so Blazor keeps each row's inputs bound to the right
+        // row when one is removed from the middle of the list.
+        public Guid Key { get; } = Guid.NewGuid();
+        public string Id { get; set; } = string.Empty;
+        public string EquipmentNumber { get; set; } = string.Empty;
+        public decimal? MeterValue { get; set; }
+    }
+
+    private readonly List<FuelLogRow> _rows = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string? _statusMessage;
+    private bool _statusSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var entries = await FuelLogApi.GetFuelLogAsync();
+        foreach (var entry in entries.OrderBy(entry => entry.SortOrder))
+        {
+            _rows.Add(new FuelLogRow
+            {
+                Id = entry.Id,
+                EquipmentNumber = entry.EquipmentNumber,
+                MeterValue = entry.MeterValue
+            });
+        }
+
+        // Always leave the driver with at least one empty row to type into.
+        if (_rows.Count == 0) _rows.Add(new FuelLogRow());
+
+        _loading = false;
+    }
+
+    // Gallons for a row = this row's meter − the previous row's meter, when
+    // both readings are present. The first row (or any row missing a value)
+    // has nothing to subtract from, so it returns null and renders an em dash.
+    private decimal? GallonsForRow(int index)
+    {
+        if (index <= 0) return null;
+
+        var currentMeter = _rows[index].MeterValue;
+        var previousMeter = _rows[index - 1].MeterValue;
+        if (currentMeter is null || previousMeter is null) return null;
+
+        return currentMeter.Value - previousMeter.Value;
+    }
+
+    // Sum of the positive per-row gallons. Negative values (a meter reading
+    // lower than the one above it — usually a typo) are left out of the total.
+    private decimal TotalGallons()
+    {
+        decimal total = 0;
+        for (var index = 0; index < _rows.Count; index++)
+        {
+            var gallons = GallonsForRow(index);
+            if (gallons.HasValue && gallons.Value > 0) total += gallons.Value;
+        }
+        return total;
+    }
+
+    private void AddRow()
+    {
+        _rows.Add(new FuelLogRow());
+        _statusMessage = null;
+    }
+
+    private void RemoveRow(int index)
+    {
+        if (index < 0 || index >= _rows.Count) return;
+
+        _rows.RemoveAt(index);
+        if (_rows.Count == 0) _rows.Add(new FuelLogRow());
+        _statusMessage = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _statusMessage = null;
+        StateHasChanged();
+
+        var saveDto = new SaveFuelLogDto
+        {
+            Entries = _rows.Select((row, index) => new FuelLogEntryDto
+            {
+                Id = row.Id,
+                EquipmentNumber = row.EquipmentNumber?.Trim() ?? string.Empty,
+                MeterValue = row.MeterValue ?? 0,
+                GallonsPumped = GallonsForRow(index) ?? 0,
+                SortOrder = index
+            }).ToList()
+        };
+
+        var saved = await FuelLogApi.SaveFuelLogAsync(saveDto);
+
+        _saving = false;
+        _statusSuccess = saved;
+        _statusMessage = saved ? "Saved." : "Save failed — try again.";
+    }
+}

@@ -34,6 +34,7 @@ builder.Services.AddScoped<DeliveryTimeApiService>();
 builder.Services.AddScoped<RouteApiService>();
 builder.Services.AddScoped<DeliveryApiService>();
 builder.Services.AddScoped<AddressApiService>();
+builder.Services.AddScoped<FuelLogApiService>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<GeoFenceService>();
