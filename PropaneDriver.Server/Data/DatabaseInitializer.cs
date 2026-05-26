@@ -336,7 +336,24 @@ namespace PropaneDriver.Server.Data
                         ALTER TABLE [Alerts]
                             ADD [Seen] bit NOT NULL CONSTRAINT [DF_Alerts_Seen] DEFAULT 0;
                     END
+                ");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Startup table creation failed; will retry on first request.");
+            }
 
+            // Run independent of the big batch above: that batch is a single
+            // ExecuteSqlRaw under one try/catch, so if any earlier migration
+            // statement throws at startup, every statement after it is skipped.
+            // Newer tables appended to the end would silently never be created
+            // while the older tables (created on prior runs) keep working. A
+            // separate call with its own guard makes this table self-heal
+            // regardless of the legacy batch's fate.
+            try
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+                db.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'FuelLogEntries')
                     BEGIN
                         CREATE TABLE [FuelLogEntries] (
@@ -355,7 +372,7 @@ namespace PropaneDriver.Server.Data
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Startup table creation failed; will retry on first request.");
+                logger.LogError(ex, "FuelLogEntries table creation failed; will retry on next startup.");
             }
         }
     }

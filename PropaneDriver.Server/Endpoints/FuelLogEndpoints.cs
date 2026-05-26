@@ -18,27 +18,36 @@ namespace PropaneDriver.Server.Endpoints
             // ordered by SortOrder.
             group.MapGet("", async (
                 ClaimsPrincipal user,
-                PropaneDriverDbContext db) =>
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
             {
                 var driverId = user.GetDriverId();
                 if (driverId is null) return Results.Forbid();
 
-                var entries = await db.FuelLogEntries
-                    .AsNoTracking()
-                    .Where(entry => entry.DriverId == driverId.Value)
-                    .OrderBy(entry => entry.SortOrder)
-                    .Select(entry => new FuelLogEntryDto
-                    {
-                        Id = entry.Id.ToString(),
-                        EquipmentNumber = entry.EquipmentNumber,
-                        MeterValue = entry.MeterValue,
-                        GallonsPumped = entry.GallonsPumped,
-                        SortOrder = entry.SortOrder,
-                        RecordedAt = entry.RecordedAt
-                    })
-                    .ToListAsync();
+                try
+                {
+                    var entries = await db.FuelLogEntries
+                        .AsNoTracking()
+                        .Where(entry => entry.DriverId == driverId.Value)
+                        .OrderBy(entry => entry.SortOrder)
+                        .Select(entry => new FuelLogEntryDto
+                        {
+                            Id = entry.Id.ToString(),
+                            EquipmentNumber = entry.EquipmentNumber,
+                            MeterValue = entry.MeterValue,
+                            GallonsPumped = entry.GallonsPumped,
+                            SortOrder = entry.SortOrder,
+                            RecordedAt = entry.RecordedAt
+                        })
+                        .ToListAsync();
 
-                return Results.Ok(entries);
+                    return Results.Ok(entries);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to load fuel log for driver {DriverId}", driverId);
+                    return Results.Problem(detail: ex.Message, title: "Failed to load fuel log", statusCode: 500);
+                }
             }).RequireAuthorization("AuthenticatedDriver");
 
             // Replace the signed-in driver's entire fuel log with the posted
