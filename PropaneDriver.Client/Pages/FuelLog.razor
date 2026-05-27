@@ -205,9 +205,25 @@
         _statusMessage = null;
         StateHasChanged();
 
-        var spoken = await SpeechService.DictateAsync();
+        var (spoken, error) = await SpeechService.DictateDetailedAsync();
 
         _listening = false;
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            _statusSuccess = false;
+            _statusMessage = error switch
+            {
+                "no-speech" => "Didn't hear anything — tap Log Next and speak the meter reading.",
+                "not-allowed" or "service-not-allowed" =>
+                    "Microphone access is blocked. Allow it in your browser settings.",
+                _ when error.Contains("not supported") =>
+                    "Voice input isn't supported in this browser. On iPhone, use Safari, " +
+                    "or tap the meter box and use the keyboard's microphone key.",
+                _ => $"Voice input failed: {error}"
+            };
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(spoken))
         {
