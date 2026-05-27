@@ -20,15 +20,16 @@
         else
         {
             <button class="btn fuel-log-lognext" @onclick="LogNextAsync" disabled="@_listening">
-                @(_listening ? "Listening…" : "🎤 Log Next")
+                <span class="fuel-log-lognext-icon">🎤</span>
+                <span class="fuel-log-lognext-label">@(_listening ? "Listening…" : "Log Next")</span>
             </button>
 
             <div class="fuel-log-table">
                 <div class="fuel-log-row fuel-log-row--head">
                     <span>#</span>
-                    <span>Equipment #</span>
-                    <span>Meter value</span>
-                    <span>Gallons pumped</span>
+                    <span>Equip #</span>
+                    <span>Meter</span>
+                    <span>Gallons</span>
                     <span></span>
                 </div>
 
@@ -48,7 +49,7 @@
                         else
                         {
                             <input class="form-control form-control-sm"
-                                   placeholder="e.g. 104"
+                                   placeholder="104"
                                    @bind="row.EquipmentNumber" />
                         }
                         <input class="form-control form-control-sm" type="number" step="any"

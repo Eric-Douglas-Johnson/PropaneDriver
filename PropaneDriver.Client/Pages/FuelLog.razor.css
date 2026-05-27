@@ -24,17 +24,28 @@
 }
 
 /* Big, thumb-friendly voice-capture button above the grid. Fills the card
-   width so it's easy to hit one-handed in the cab. */
+   width so it's easy to hit one-handed in the cab. Flex layout keeps the mic
+   icon and the "Log Next" label centered side by side; the !important on the
+   color/background overrides Bootstrap's bare .btn defaults. */
 .fuel-log-lognext {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     width: 100%;
     margin-bottom: 1rem;
-    padding: 0.9rem 1rem;
+    padding: 0.85rem 1rem;
     font-size: 1.15rem;
     font-weight: 600;
-    color: whitesmoke;
-    background-color: #3b82f6;
+    color: whitesmoke !important;
+    background-color: #3b82f6 !important;
     border: 1px solid #5eb3c4;
     border-radius: 8px;
+}
+
+.fuel-log-lognext-icon {
+    font-size: 1.35rem;
+    line-height: 1;
 }
 
 .fuel-log-lognext:hover:not(:disabled) {
@@ -60,11 +71,13 @@
 
 /* Row number | equipment | meter | gallons | remove. Equipment gets the
    widest share; the two numeric fields are equal; the remove button is a
-   fixed gutter. */
+   fixed gutter. minmax(0, …) (paired with min-width:0 on the inputs below)
+   lets the fields shrink below their content width so the whole row fits a
+   narrow phone screen instead of overflowing sideways. */
 .fuel-log-row {
     display: grid;
-    grid-template-columns: 2rem minmax(120px, 1.2fr) minmax(110px, 1fr) minmax(110px, 1fr) 2.25rem;
-    gap: 0.5rem;
+    grid-template-columns: 1.5rem minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) 1.75rem;
+    gap: 0.35rem;
     align-items: center;
 }
 
@@ -89,6 +102,16 @@
     background-color: #0f0f1e;
     color: whitesmoke;
     border: 1px solid #2a2a4a;
+    /* Allow the input to shrink inside its grid track on narrow screens; the
+       browser default min-width:auto would otherwise force the row to overflow. */
+    min-width: 0;
+    /* Taller, slightly larger-type fields — easier to read and tap on a phone
+       than Bootstrap's form-control-sm defaults. */
+    font-size: 1rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
 }
 
 /* Start baseline row: a read-only "Start" label in place of an equipment
@@ -113,7 +136,7 @@
 }
 
 .fuel-log-remove {
-    padding: 0 0.4rem;
+    padding: 0 0.2rem;
     line-height: 1.4;
 }
 
