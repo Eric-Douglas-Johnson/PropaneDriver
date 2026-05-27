@@ -40,4 +40,8 @@ builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<GeoFenceService>();
 builder.Services.AddScoped<SpeechService>();
 
+// Point the static client-side error logger at the app's own origin so its
+// relative "api/client-logs" posts resolve instead of throwing.
+ErrorLogService.Initialize(builder.HostEnvironment.BaseAddress);
+
 await builder.Build().RunAsync();

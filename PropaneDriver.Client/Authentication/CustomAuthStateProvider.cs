@@ -30,8 +30,16 @@ namespace PropaneDriver.Client.Authentication
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             var user = await _browserStorageService.GetFromStorage<UserDto?>(UserStorageKey);
+            var bearerToken = await _browserStorageService.GetFromStorage<string>(
+                BearerTokenHandler.TokenStorageKey);
 
-            if (user is null)
+            // Treat the session as authenticated only when BOTH the cached
+            // profile and the JWT are present. If they've drifted apart — e.g.
+            // the token expired or was cleared but the profile lingered — fall
+            // back to anonymous so the route guard sends the driver to login,
+            // instead of rendering data pages whose every request silently
+            // 401s. (That desync is what forced a manual log out / log back in.)
+            if (user is null || string.IsNullOrWhiteSpace(bearerToken))
             {
                 return EmptyAuthState;
             }
