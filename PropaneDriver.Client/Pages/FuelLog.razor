@@ -2,6 +2,7 @@
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Shared.Dtos
 @inject FuelLogApiService FuelLogApi
+@inject SpeechService SpeechService
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
@@ -18,6 +19,10 @@
         }
         else
         {
+            <button class="btn fuel-log-lognext" @onclick="LogNextAsync" disabled="@_listening">
+                @(_listening ? "Listening…" : "🎤 Log Next")
+            </button>
+
             <div class="fuel-log-table">
                 <div class="fuel-log-row fuel-log-row--head">
                     <span>#</span>
@@ -106,6 +111,7 @@
     private readonly List<FuelLogRow> _rows = new();
     private bool _loading = true;
     private bool _saving;
+    private bool _listening;
     private string? _statusMessage;
     private bool _statusSuccess;
 
@@ -187,6 +193,66 @@
     {
         _rows.Add(new FuelLogRow());
         _statusMessage = null;
+    }
+
+    // Voice-capture the next meter reading and drop it into the next empty
+    // meter box. "Next open" = the first row (top-down) whose meter is still
+    // blank; if every row is filled we append a fresh one so the spoken value
+    // isn't lost. The driver still types the equipment number themselves.
+    private async Task LogNextAsync()
+    {
+        _listening = true;
+        _statusMessage = null;
+        StateHasChanged();
+
+        var spoken = await SpeechService.DictateAsync();
+
+        _listening = false;
+
+        if (string.IsNullOrWhiteSpace(spoken))
+        {
+            _statusSuccess = false;
+            _statusMessage = "Didn't catch a meter reading — tap Log Next to try again.";
+            return;
+        }
+
+        var meterValue = ParseMeterValue(spoken);
+        if (meterValue is null)
+        {
+            _statusSuccess = false;
+            _statusMessage = $"Couldn't read a number from \"{spoken}\".";
+            return;
+        }
+
+        var targetRow = _rows.FirstOrDefault(row => row.MeterValue is null);
+        if (targetRow is null)
+        {
+            targetRow = new FuelLogRow();
+            _rows.Add(targetRow);
+        }
+
+        targetRow.MeterValue = meterValue;
+        _statusSuccess = true;
+        _statusMessage = $"Logged meter {meterValue.Value.ToString("0.##")}.";
+    }
+
+    // Pull the first numeric run out of the spoken text. Speech usually comes
+    // back as plain digits ("104") but can carry grouping commas ("1,040") or
+    // trailing words ("104 gallons"), so strip commas and match the first
+    // number rather than parsing the whole string.
+    private static decimal? ParseMeterValue(string spoken)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            spoken.Replace(",", string.Empty), @"-?\d+(\.\d+)?");
+        if (!match.Success) return null;
+
+        return decimal.TryParse(
+            match.Value,
+            System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : null;
     }
 
     private void RemoveRow(int index)
