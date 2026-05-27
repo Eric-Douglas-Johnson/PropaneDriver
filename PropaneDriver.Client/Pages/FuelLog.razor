@@ -249,8 +249,26 @@
         }
 
         targetRow.MeterValue = meterValue;
-        _statusSuccess = true;
-        _statusMessage = $"Logged meter {meterValue.Value.ToString("0.##")}.";
+
+        // Once this entry's gallons can be computed (its meter and the row
+        // above it are both present), persist the whole log automatically so
+        // each voice capture is saved without the driver tapping Save.
+        var gallons = GallonsForRow(_rows.IndexOf(targetRow));
+        if (gallons.HasValue)
+        {
+            await SaveAsync();
+            if (_statusSuccess)
+                _statusMessage =
+                    $"Logged meter {meterValue.Value.ToString("0.##")} " +
+                    $"({gallons.Value.ToString("0.##")} gal) and saved.";
+        }
+        else
+        {
+            // No previous meter yet, so gallons isn't defined — just hold the
+            // value in the grid and let the driver keep going.
+            _statusSuccess = true;
+            _statusMessage = $"Logged meter {meterValue.Value.ToString("0.##")}.";
+        }
     }
 
     // Pull the first numeric run out of the spoken text. Speech usually comes
@@ -308,11 +326,11 @@
         if (saved) _savedSignature = CurrentSignature();
     }
 
-    // Clear the grid back to a fresh log (Start baseline + one empty entry).
-    // If there are unsaved changes, give the driver the chance to save them
-    // first so a stray click can't wipe out un-persisted work. This resets the
-    // working area only; the previously saved log stays on the server until a
-    // new one is saved over it.
+    // Clear the grid back to a fresh log (Start baseline + one empty entry)
+    // and persist that blank log immediately so it's the canonical state on the
+    // server, not just in the browser. If there are unsaved changes, give the
+    // driver the chance to save them first so a stray click can't wipe out
+    // un-persisted work.
     private async Task StartNewLogAsync()
     {
         if (IsDirty)
@@ -333,8 +351,12 @@
 
         _rows.Clear();
         EnsureStartRow();
-        _savedSignature = CurrentSignature();
-        _statusSuccess = true;
-        _statusMessage = "Started a new fuel log.";
+
+        // Save the fresh blank log so it persists across reloads/devices. On
+        // failure SaveAsync leaves its own "Save failed" message, so only
+        // override the message when the save actually succeeded.
+        await SaveAsync();
+        if (_statusSuccess)
+            _statusMessage = "Started a new fuel log.";
     }
 }
