@@ -50,7 +50,8 @@
                         {
                             <input class="form-control form-control-sm"
                                    placeholder="104"
-                                   @bind="row.EquipmentNumber" />
+                                   @bind="row.EquipmentNumber"
+                                   @onfocus="() => ListenForEquipmentNumberAsync(index)" />
                         }
                         <input class="form-control form-control-sm" type="number" step="any"
                                inputmode="decimal" placeholder="0"
@@ -269,6 +270,76 @@
             _statusSuccess = true;
             _statusMessage = $"Logged meter {meterValue.Value.ToString("0.##")}.";
         }
+    }
+
+    // Focusing into an empty Equip # box arms the recognizer and drops the
+    // spoken digits into that row's field, so the driver doesn't have to type
+    // the unit number with one hand on the pump. We only listen when the field
+    // is blank — once a value's there (typed or dictated), re-focusing to edit
+    // it shouldn't start a fresh capture. The _listening guard also keeps a
+    // simultaneous Log Next capture from being clobbered.
+    private async Task ListenForEquipmentNumberAsync(int rowIndex)
+    {
+        if (_listening) return;
+        if (rowIndex <= 0 || rowIndex >= _rows.Count) return;
+
+        var targetRow = _rows[rowIndex];
+        if (!string.IsNullOrWhiteSpace(targetRow.EquipmentNumber)) return;
+
+        _listening = true;
+        _statusMessage = null;
+        StateHasChanged();
+
+        var (spoken, error) = await SpeechService.DictateDetailedAsync();
+
+        _listening = false;
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            _statusSuccess = false;
+            _statusMessage = error switch
+            {
+                "no-speech" => "Didn't hear anything — tap the Equip # box and speak the number.",
+                "not-allowed" or "service-not-allowed" =>
+                    "Microphone access is blocked. Allow it in your browser settings.",
+                _ when error.Contains("not supported") =>
+                    "Voice input isn't supported in this browser. On iPhone, use Safari, " +
+                    "or type the equipment number on the keyboard.",
+                _ => $"Voice input failed: {error}"
+            };
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(spoken))
+        {
+            _statusSuccess = false;
+            _statusMessage = "Didn't catch an equipment number — tap the field to try again.";
+            return;
+        }
+
+        var equipmentNumber = ParseEquipmentNumber(spoken);
+        if (string.IsNullOrEmpty(equipmentNumber))
+        {
+            _statusSuccess = false;
+            _statusMessage = $"Couldn't read an equipment number from \"{spoken}\".";
+            return;
+        }
+
+        targetRow.EquipmentNumber = equipmentNumber;
+        _statusSuccess = true;
+        _statusMessage = $"Logged equipment #{equipmentNumber}.";
+    }
+
+    // Equipment numbers look like "104" per the placeholder, so pull the first
+    // digit run out of the spoken text — speech usually returns plain digits
+    // but can carry grouping commas ("1,040") or trailing words. If no digits
+    // come through at all, fall back to the trimmed text so the driver can fix
+    // up an unusual unit label by hand rather than losing their dictation.
+    private static string ParseEquipmentNumber(string spoken)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            spoken.Replace(",", string.Empty), @"\d+");
+        return match.Success ? match.Value : spoken.Trim();
     }
 
     // Pull the first numeric run out of the spoken text. Speech usually comes
