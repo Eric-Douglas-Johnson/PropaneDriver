@@ -168,11 +168,22 @@
         var entries = await FuelLogApi.GetFuelLogAsync();
         foreach (var entry in entries.OrderBy(entry => entry.SortOrder))
         {
+            // The meter column is stored NOT NULL, so a row saved with no
+            // reading yet (e.g. an equipment number entered before its meter)
+            // comes back as 0. Treat a non-start row's 0 as the blank it really
+            // was: Log Next fills the first row whose meter is null, and a stray
+            // 0 would hide that row and send the next reading to the wrong line.
+            // A pump meter is cumulative and only climbs, so 0 on a later row is
+            // never a real reading. Row 0 is the Start baseline, whose 0 is a
+            // genuine starting meter, so it's left as-is.
+            var isStartRow = _rows.Count == 0;
             _rows.Add(new FuelLogRow
             {
                 Id = entry.Id,
                 EquipmentNumber = entry.EquipmentNumber,
-                MeterValue = entry.MeterValue
+                MeterValue = (!isStartRow && entry.MeterValue == 0)
+                    ? (decimal?)null
+                    : entry.MeterValue
             });
         }
 
