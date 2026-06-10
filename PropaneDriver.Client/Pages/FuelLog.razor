@@ -1,14 +1,23 @@
 @page "/fuel-log"
 @using PropaneDriver.Client.Services
+@using PropaneDriver.Client.Authentication
 @using PropaneDriver.Shared.Dtos
+@using Microsoft.AspNetCore.Components.Authorization
 @inject FuelLogApiService FuelLogApi
 @inject SpeechService SpeechService
+@inject BrowserStorageService BrowserStorage
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "driver")]
 
 <PageTitle>Fuel Log</PageTitle>
 
 <div class="fuel-log-page">
+    @* Warn before navigating away (in-app or closing the tab) with edits that
+       haven't reached the server, so a stray tap can't lose entered readings. *@
+    <NavigationLock ConfirmExternalNavigation="IsDirty"
+                    OnBeforeInternalNavigation="HandleInternalNavigationAsync" />
+
     <h4 class="fuel-log-title">Fuel Log</h4>
 
     <div class="fuel-log-card">
@@ -19,7 +28,7 @@
         }
         else
         {
-            <button class="btn fuel-log-lognext" @onclick="LogNextAsync" disabled="@_listening">
+            <button class="btn fuel-log-lognext" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
                 <span class="fuel-log-lognext-icon">🎤</span>
                 <span class="fuel-log-lognext-label">@(_listening ? "Listening…" : "Log Next")</span>
             </button>
@@ -51,11 +60,12 @@
                             <input class="form-control form-control-sm"
                                    placeholder="104"
                                    @bind="row.EquipmentNumber"
+                                   @bind:after="AutoSaveAfterEditAsync"
                                    @onfocus="() => ListenForEquipmentNumberAsync(index)" />
                         }
                         <input class="form-control form-control-sm" type="number" step="any"
                                inputmode="decimal" placeholder="0"
-                               @bind="row.MeterValue" />
+                               @bind="row.MeterValue" @bind:after="AutoSaveAfterEditAsync" />
                         <input class="form-control form-control-sm fuel-log-gallons"
                                type="text" readonly tabindex="-1"
                                value="@(gallons.HasValue ? gallons.Value.ToString("0.##") : "—")" />
@@ -110,12 +120,36 @@
         public decimal? MeterValue { get; set; }
     }
 
+    // On-device recovery draft. Mirrors the editable grid (nullable meter so a
+    // blank row round-trips faithfully) plus whether these rows still need to
+    // reach the server. Persisted to localStorage so entered readings survive a
+    // reload or a failed save.
+    private sealed class FuelLogDraft
+    {
+        public List<FuelLogDraftRow> Rows { get; set; } = new();
+        public bool PendingSave { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    private sealed class FuelLogDraftRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string EquipmentNumber { get; set; } = string.Empty;
+        public decimal? MeterValue { get; set; }
+        public int SortOrder { get; set; }
+    }
+
     private readonly List<FuelLogRow> _rows = new();
     private bool _loading = true;
     private bool _saving;
     private bool _listening;
     private string? _statusMessage;
     private bool _statusSuccess;
+
+    // localStorage key for this driver's on-device recovery draft, set once we
+    // know who's signed in. Left empty (which disables the local mirror) if the
+    // driver id isn't available, so two accounts never share one draft.
+    private string _draftStorageKey = string.Empty;
 
     // Snapshot of the rows as they last matched what's persisted (taken after
     // load and after a successful save). The grid is "dirty" when the current
@@ -124,6 +158,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var driverId = authState.User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _draftStorageKey = string.IsNullOrWhiteSpace(driverId)
+            ? string.Empty
+            : $"fuel-log-draft:{driverId}";
+
         var entries = await FuelLogApi.GetFuelLogAsync();
         foreach (var entry in entries.OrderBy(entry => entry.SortOrder))
         {
@@ -137,6 +178,10 @@
 
         EnsureStartRow();
         _savedSignature = CurrentSignature();
+
+        // Recover any entries this device saved locally but never got onto the
+        // server (a failed save, or the tab closed mid-save).
+        await TryRestoreLocalDraftAsync();
 
         _loading = false;
     }
@@ -251,24 +296,20 @@
 
         targetRow.MeterValue = meterValue;
 
-        // Once this entry's gallons can be computed (its meter and the row
-        // above it are both present), persist the whole log automatically so
-        // each voice capture is saved without the driver tapping Save.
-        var gallons = GallonsForRow(_rows.IndexOf(targetRow));
-        if (gallons.HasValue)
+        // Persist immediately so a captured reading can't be lost. We save even
+        // when this row's gallons can't be computed yet (a missing previous
+        // meter just leaves the gallons column blank) — the meter value itself
+        // still has to reach the server, and the earlier behavior of holding it
+        // only in the grid meant an unsaved reading could vanish on reload.
+        await SaveAsync();
+
+        if (_statusSuccess)
         {
-            await SaveAsync();
-            if (_statusSuccess)
-                _statusMessage =
-                    $"Logged meter {meterValue.Value.ToString("0.##")} " +
-                    $"({gallons.Value.ToString("0.##")} gal) and saved.";
-        }
-        else
-        {
-            // No previous meter yet, so gallons isn't defined — just hold the
-            // value in the grid and let the driver keep going.
-            _statusSuccess = true;
-            _statusMessage = $"Logged meter {meterValue.Value.ToString("0.##")}.";
+            var gallons = GallonsForRow(_rows.IndexOf(targetRow));
+            _statusMessage = gallons.HasValue
+                ? $"Logged meter {meterValue.Value.ToString("0.##")} " +
+                  $"({gallons.Value.ToString("0.##")} gal) and saved."
+                : $"Logged meter {meterValue.Value.ToString("0.##")} and saved.";
         }
     }
 
@@ -280,7 +321,7 @@
     // simultaneous Log Next capture from being clobbered.
     private async Task ListenForEquipmentNumberAsync(int rowIndex)
     {
-        if (_listening) return;
+        if (_listening || _saving) return;
         if (rowIndex <= 0 || rowIndex >= _rows.Count) return;
 
         var targetRow = _rows[rowIndex];
@@ -326,8 +367,11 @@
         }
 
         targetRow.EquipmentNumber = equipmentNumber;
-        _statusSuccess = true;
-        _statusMessage = $"Logged equipment #{equipmentNumber}.";
+
+        // Persist the captured unit number right away, the same as a typed edit.
+        await SaveAsync();
+        if (_statusSuccess)
+            _statusMessage = $"Logged equipment #{equipmentNumber} and saved.";
     }
 
     // Equipment numbers look like "104" per the placeholder, so pull the first
@@ -377,6 +421,11 @@
         _statusMessage = null;
         StateHasChanged();
 
+        // Capture exactly what we're about to send, before any await — both the
+        // dto and its signature reflect the same instant. If a field is edited
+        // while the request is in flight, that edit won't be falsely counted as
+        // saved when the response comes back.
+        var signatureBeingSaved = CurrentSignature();
         var saveDto = new SaveFuelLogDto
         {
             Entries = _rows.Select((row, index) => new FuelLogEntryDto
@@ -389,12 +438,136 @@
             }).ToList()
         };
 
+        // Snapshot to this device before the network round-trip, so a crash or
+        // a closed tab mid-save can't lose the entries.
+        await PersistLocalDraftAsync(pendingSave: true);
+
         var saved = await FuelLogApi.SaveFuelLogAsync(saveDto);
 
         _saving = false;
         _statusSuccess = saved;
         _statusMessage = saved ? "Saved." : "Save failed — try again.";
-        if (saved) _savedSignature = CurrentSignature();
+        if (saved) _savedSignature = signatureBeingSaved;
+
+        // Record the result on-device. pendingSave reflects whether the current
+        // grid still differs from what's now saved, so a row edited while the
+        // save was in flight stays marked unsaved (and recoverable) instead of
+        // being dropped.
+        await PersistLocalDraftAsync(pendingSave: IsDirty);
+    }
+
+    // Persist after a manual edit to a meter or equipment field. @bind:after
+    // only fires when an input's value actually changed (it rides the commit/
+    // change event), so tabbing through a field without editing won't trigger a
+    // save. We mirror to local storage first — instant and unable to fail the
+    // real save — then push to the server when there's something new to send.
+    private async Task AutoSaveAfterEditAsync()
+    {
+        await PersistLocalDraftAsync(pendingSave: true);
+
+        if (_saving || _listening) return;
+        if (!IsDirty) return;
+
+        await SaveAsync();
+    }
+
+    // Mirror the current grid to this device's local storage so entries survive
+    // a reload or a save that errors out. pendingSave records whether these
+    // rows still need to reach the server: true after an edit or a failed save,
+    // false once the server has them. Best-effort — a storage hiccup must never
+    // block or fail the real save.
+    private async Task PersistLocalDraftAsync(bool pendingSave)
+    {
+        if (string.IsNullOrEmpty(_draftStorageKey)) return;
+
+        try
+        {
+            var draft = new FuelLogDraft
+            {
+                PendingSave = pendingSave,
+                UpdatedAt = DateTime.UtcNow,
+                Rows = _rows.Select((row, index) => new FuelLogDraftRow
+                {
+                    Id = row.Id,
+                    EquipmentNumber = row.EquipmentNumber,
+                    MeterValue = row.MeterValue,
+                    SortOrder = index
+                }).ToList()
+            };
+            await BrowserStorage.SaveToStorageAsync(_draftStorageKey, draft);
+        }
+        catch
+        {
+            // The local mirror is a backstop, not the source of truth.
+        }
+    }
+
+    // On load, recover entries a previous session left on this device but never
+    // got onto the server. A draft already marked saved is just a stale mirror
+    // of server state, so it's dropped.
+    private async Task TryRestoreLocalDraftAsync()
+    {
+        if (string.IsNullOrEmpty(_draftStorageKey)) return;
+
+        FuelLogDraft? draft;
+        try
+        {
+            draft = await BrowserStorage.GetFromStorage<FuelLogDraft>(_draftStorageKey);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (draft is null) return;
+
+        if (!draft.PendingSave || draft.Rows.Count == 0)
+        {
+            await BrowserStorage.RemoveFromStorage(_draftStorageKey);
+            return;
+        }
+
+        _rows.Clear();
+        foreach (var row in draft.Rows.OrderBy(draftRow => draftRow.SortOrder))
+        {
+            _rows.Add(new FuelLogRow
+            {
+                Id = row.Id,
+                EquipmentNumber = row.EquipmentNumber,
+                MeterValue = row.MeterValue
+            });
+        }
+        EnsureStartRow();
+
+        // If the recovered rows already match what's saved, there was nothing to
+        // recover — clear the stale draft and stay quiet. (_savedSignature still
+        // reflects the server data loaded above, so this compares draft vs server.)
+        if (CurrentSignature() == _savedSignature)
+        {
+            await BrowserStorage.RemoveFromStorage(_draftStorageKey);
+            return;
+        }
+
+        _statusSuccess = false;
+        _statusMessage =
+            "Recovered unsaved entries from this device — tap Save fuel log to store them.";
+    }
+
+    // Warn before leaving the page in-app with edits that haven't reached the
+    // server. The entries are also mirrored on this device, so leaving won't
+    // lose them — but this gives the driver the chance to Save first. Closing
+    // the tab / refreshing is covered by NavigationLock.ConfirmExternalNavigation.
+    private async Task HandleInternalNavigationAsync(LocationChangingContext context)
+    {
+        if (!IsDirty) return;
+
+        var leave = await JS.InvokeAsync<bool>(
+            "confirm",
+            "This fuel log has unsaved changes.\n\n" +
+            "OK — leave this page (your entries are kept on this device).\n" +
+            "Cancel — stay here so you can Save fuel log.");
+
+        if (!leave) context.PreventNavigation();
     }
 
     // Clear the grid back to a fresh log (Start baseline + one empty entry)
