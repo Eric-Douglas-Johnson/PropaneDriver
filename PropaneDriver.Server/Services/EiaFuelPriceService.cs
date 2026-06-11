@@ -30,12 +30,14 @@ namespace PropaneDriver.Server.Services
 
         // Series id, API route the series lives under, and the label shown
         // on the home page. All three are national ("NUS") dollars-per-gallon
-        // weekly averages.
+        // weekly averages: residential delivered prices for propane and
+        // heating oil, on-highway retail for diesel. Labels are kept short
+        // so the home-page price tiles never wrap.
         private static readonly (string SeriesId, string ApiRoute, string FuelName)[] TrackedFuelSeries =
         {
-            ("W_EPLLPA_PRS_NUS_DPG", "petroleum/pri/wfr", "Residential Propane"),
-            ("W_EPD2F_PRS_NUS_DPG", "petroleum/pri/wfr", "Residential Heating Oil"),
-            ("EMD_EPD2D_PTE_NUS_DPG", "petroleum/pri/gnd", "On-Highway Diesel"),
+            ("W_EPLLPA_PRS_NUS_DPG", "petroleum/pri/wfr", "Propane"),
+            ("W_EPD2F_PRS_NUS_DPG", "petroleum/pri/wfr", "Heating Oil"),
+            ("EMD_EPD2D_PTE_NUS_DPG", "petroleum/pri/gnd", "Diesel"),
         };
 
         private readonly IHttpClientFactory _httpClientFactory;

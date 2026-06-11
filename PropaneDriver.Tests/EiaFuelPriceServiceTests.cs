@@ -119,15 +119,15 @@ public class EiaFuelPriceServiceTests
 
         Assert.Equal(3, snapshot.Prices.Count);
 
-        var propane = snapshot.Prices.Single(p => p.FuelName == "Residential Propane");
+        var propane = snapshot.Prices.Single(p => p.FuelName == "Propane");
         Assert.Equal(2.456m, propane.PricePerGallon);
         Assert.Equal(0.030m, propane.ChangeFromPriorWeek);
         Assert.Equal(new DateOnly(2026, 3, 16), propane.PriceDate);
 
-        var heatingOil = snapshot.Prices.Single(p => p.FuelName == "Residential Heating Oil");
+        var heatingOil = snapshot.Prices.Single(p => p.FuelName == "Heating Oil");
         Assert.Equal(-0.050m, heatingOil.ChangeFromPriorWeek);
 
-        var diesel = snapshot.Prices.Single(p => p.FuelName == "On-Highway Diesel");
+        var diesel = snapshot.Prices.Single(p => p.FuelName == "Diesel");
         Assert.Equal(3.721m, diesel.PricePerGallon);
         Assert.Equal(0m, diesel.ChangeFromPriorWeek);
         Assert.Equal(new DateOnly(2026, 6, 8), diesel.PriceDate);
@@ -154,7 +154,7 @@ public class EiaFuelPriceServiceTests
         var snapshot = await service.GetSnapshotAsync();
 
         Assert.Equal(2, snapshot.Prices.Count);
-        Assert.DoesNotContain(snapshot.Prices, p => p.FuelName == "Residential Propane");
+        Assert.DoesNotContain(snapshot.Prices, p => p.FuelName == "Propane");
     }
 
     [Fact]

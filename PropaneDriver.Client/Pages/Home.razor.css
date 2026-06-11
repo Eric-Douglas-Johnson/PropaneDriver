@@ -6,7 +6,12 @@
 
 .home-hero {
     text-align: center;
-    margin-bottom: 2rem;
+    background: linear-gradient(160deg, #232b52 0%, #1a1a2e 55%, #141426 100%);
+    border: 1px solid #2a2a4a;
+    border-radius: 14px;
+    padding: 2.75rem 2rem 2.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.07), 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .home-hero h1 {
@@ -55,16 +60,12 @@
     color: #8892b0;
 }
 
+/* auto-fit lets tiles drop to two columns (then one) instead of
+   squeezing, so labels and prices never wrap mid-tile. */
 .home-price-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 1rem;
-}
-
-@media (max-width: 640px) {
-    .home-price-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .home-price-tile {
@@ -83,6 +84,7 @@
     color: #8892b0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 .home-price-value {
