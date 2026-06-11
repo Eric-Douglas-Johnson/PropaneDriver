@@ -312,6 +312,19 @@ namespace PropaneDriver.Server.Endpoints
                             {
                                 address.TankLocation = tankLocation;
                             }
+
+                            // Carry the LongRunning checkbox onto an existing
+                            // address so a repeat customer flagged at create
+                            // time actually gets the manual start/stop timer.
+                            // Only flip it ON here: the create form's checkbox
+                            // isn't pre-filled from the stored value, so an
+                            // unchecked box on a fresh submit must not silently
+                            // clear a flag managed authoritatively via the Admin
+                            // per-row toggle.
+                            if (d.LongRunning)
+                            {
+                                address.LongRunning = true;
+                            }
                         }
 
                         addressCache[key] = address;
@@ -435,6 +448,13 @@ namespace PropaneDriver.Server.Endpoints
                         if (tankLocation is not null)
                         {
                             address.TankLocation = tankLocation;
+                        }
+
+                        // Flip LongRunning ON when requested (see the bulk
+                        // create path above for why we never clear it here).
+                        if (dto.LongRunning)
+                        {
+                            address.LongRunning = true;
                         }
                     }
                     await db.SaveChangesAsync();
