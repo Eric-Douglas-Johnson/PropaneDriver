@@ -44,6 +44,7 @@ builder.Services.AddSingleton(serviceProvider =>
 });
 builder.Services.AddSingleton<DocumentIntelligenceService>();
 builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddSingleton<EiaFuelPriceService>();
 builder.Services.AddHttpClient();
 
 // JWT bearer auth. The signing key, issuer, and audience all come from the
@@ -122,6 +123,7 @@ app.MapConfigEndpoints();
 app.MapClientLogEndpoints();
 app.MapImportEndpoints();
 app.MapFuelLogEndpoints();
+app.MapFuelPriceEndpoints();
 
 app.MapFallbackToFile("index.html");
 

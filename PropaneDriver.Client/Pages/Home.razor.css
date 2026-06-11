@@ -24,19 +24,160 @@
     margin: 0;
 }
 
-.home-truck-card {
+.home-info-card {
     background-color: #1a1a2e;
     border: 1px solid #2a2a4a;
     border-radius: 14px;
-    padding: 2rem 1.5rem 1.25rem;
+    padding: 1.5rem 1.75rem;
     margin-bottom: 1.5rem;
-    box-shadow: 0 0 40px rgba(59, 130, 246, 0.07), 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-.home-truck-card svg {
-    width: 100%;
-    height: auto;
-    display: block;
+.home-info-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    margin-bottom: 1.1rem;
+}
+
+.home-info-header h2 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #e6edf3;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin: 0;
+}
+
+.home-info-source {
+    font-size: 0.75rem;
+    color: #8892b0;
+}
+
+.home-price-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 640px) {
+    .home-price-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.home-price-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    background-color: #141426;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+}
+
+.home-price-fuel {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8892b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.home-price-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: #e6edf3;
+    line-height: 1.1;
+}
+
+.home-price-unit {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #8892b0;
+}
+
+.home-price-change {
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.home-price-up {
+    color: #e0905a;
+}
+
+.home-price-down {
+    color: #5ec47f;
+}
+
+.home-price-flat {
+    color: #8892b0;
+}
+
+.home-price-date {
+    font-size: 0.72rem;
+    color: #6b7490;
+}
+
+.home-season {
+    font-size: 0.98rem;
+    line-height: 1.65;
+    color: #c9d1d9;
+}
+
+.home-season p {
+    margin: 0 0 0.6rem;
+}
+
+.home-season p:last-child {
+    margin-bottom: 0;
+}
+
+.home-season-status {
+    font-weight: 600;
+    color: #e6edf3;
+}
+
+.home-season-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 0.55rem;
+    vertical-align: baseline;
+}
+
+.home-season-off {
+    background-color: #5ec47f;
+}
+
+.home-season-early {
+    background-color: #e8c35a;
+}
+
+.home-season-peak {
+    background-color: #e0905a;
+}
+
+.home-season-late {
+    background-color: #6aaee8;
+}
+
+.home-season-detail {
+    color: #c9d1d9;
+}
+
+.home-season-tip {
+    font-size: 0.9rem;
+    color: #8892b0;
+    border-top: 1px solid #2a2a4a;
+    padding-top: 0.8rem;
+    margin-top: 0.9rem;
+}
+
+.home-season-tip strong {
+    color: #c9d1d9;
 }
 
 .home-card {
