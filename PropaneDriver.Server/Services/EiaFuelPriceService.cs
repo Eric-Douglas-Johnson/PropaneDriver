@@ -92,8 +92,12 @@ namespace PropaneDriver.Server.Services
 
         private async Task<FuelPriceSnapshotDto> FetchSnapshotFromEiaAsync()
         {
-            var apiKey = _configuration["Eia:ApiKey"]
-                ?? Environment.GetEnvironmentVariable("EIA_API_KEY");
+            // appsettings.json ships an empty "Eia:ApiKey" placeholder, so a
+            // plain ?? would stop there and never reach the environment
+            // variable — fall through on blank, not just null.
+            var apiKey = _configuration["Eia:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+                apiKey = Environment.GetEnvironmentVariable("EIA_API_KEY");
 
             var snapshot = new FuelPriceSnapshotDto();
 

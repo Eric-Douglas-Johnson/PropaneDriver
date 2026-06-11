@@ -62,6 +62,35 @@ public class EiaFuelPriceServiceTests
     }
 
     [Fact]
+    public async Task Snapshot_UsesEnvironmentVariable_WhenConfigPlaceholderIsEmpty()
+    {
+        // appsettings.json ships "Eia:ApiKey": "" — production sets the key
+        // via the EIA_API_KEY app setting, and the empty placeholder must
+        // not shadow it. (Regression test: the placeholder originally won.)
+        var originalEnv = Environment.GetEnvironmentVariable(EnvVarName);
+        try
+        {
+            Environment.SetEnvironmentVariable(EnvVarName, "env-key");
+            var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    EiaJson("2026-06-08", "3.5", "2026-06-01", "3.4"),
+                    Encoding.UTF8, "application/json")
+            });
+            var service = CreateService(handler, configuredApiKey: "");
+
+            var snapshot = await service.GetSnapshotAsync();
+
+            Assert.Equal(3, snapshot.Prices.Count);
+            Assert.Equal(3, handler.RequestCount);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(EnvVarName, originalEnv);
+        }
+    }
+
+    [Fact]
     public async Task Snapshot_ParsesAllThreeSeries_WithWeeklyChange()
     {
         var handler = new StubHttpMessageHandler(request =>
