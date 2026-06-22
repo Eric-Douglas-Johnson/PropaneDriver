@@ -151,11 +151,14 @@
 /* Big, thumb-friendly action buttons under the grid. Each grows to share the
    row evenly and wraps to its own full-width line on a narrow phone, so they're
    easy to hit one-handed in the cab. */
+/* Match the Log Next button's height: same vertical padding, font-size and
+   1px border so all the fuel-log buttons line up at the same size. */
 .fuel-log-action {
     flex: 1 1 12rem;
-    padding: 1.3rem 1.35rem;
-    font-size: 1.45rem;
+    padding: 0.85rem 1.35rem;
+    font-size: 1.15rem;
     font-weight: 600;
+    border-width: 1px;
     border-radius: 8px;
 }
 
