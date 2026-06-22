@@ -91,13 +91,14 @@
                 <button class="btn btn-outline-warning fuel-log-action" @onclick="StartNewLogAsync" disabled="@_saving">
                     Start new log
                 </button>
-                @if (!string.IsNullOrEmpty(_statusMessage))
-                {
-                    <span class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
-                        @_statusMessage
-                    </span>
-                }
             </div>
+
+            @if (!string.IsNullOrEmpty(_statusMessage))
+            {
+                <div class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
+                    @_statusMessage
+                </div>
+            }
 
             <div class="fuel-log-total">
                 Total gallons pumped: <strong>@TotalGallons().ToString("0.##")</strong>
