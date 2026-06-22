@@ -152,9 +152,9 @@
    row evenly and wraps to its own full-width line on a narrow phone, so they're
    easy to hit one-handed in the cab. */
 .fuel-log-action {
-    flex: 1 1 9rem;
-    padding: 0.85rem 1rem;
-    font-size: 1.1rem;
+    flex: 1 1 10rem;
+    padding: 1.05rem 1.15rem;
+    font-size: 1.25rem;
     font-weight: 600;
     border-radius: 8px;
 }
