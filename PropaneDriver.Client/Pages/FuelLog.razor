@@ -60,12 +60,12 @@
                             <input class="form-control form-control-sm"
                                    placeholder="104"
                                    @bind="row.EquipmentNumber"
-                                   @bind:after="AutoSaveAfterEditAsync"
+                                   @bind:after="MirrorDraftAfterEditAsync"
                                    @onfocus="() => ListenForEquipmentNumberAsync(index)" />
                         }
                         <input class="form-control form-control-sm" type="number" step="any"
                                inputmode="decimal" placeholder="0"
-                               @bind="row.MeterValue" @bind:after="AutoSaveAfterEditAsync" />
+                               @bind="row.MeterValue" @bind:after="MirrorDraftAfterEditAsync" />
                         <input class="form-control form-control-sm fuel-log-gallons"
                                type="text" readonly tabindex="-1"
                                value="@(gallons.HasValue ? gallons.Value.ToString("0.##") : "—")" />
@@ -84,11 +84,11 @@
             </div>
 
             <div class="fuel-log-actions">
-                <button class="btn btn-sm btn-outline-secondary" @onclick="AddRow">+ Add row</button>
-                <button class="btn btn-sm btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                <button class="btn btn-outline-secondary fuel-log-action" @onclick="AddRow">+ Add row</button>
+                <button class="btn btn-primary fuel-log-action" @onclick="SaveAsync" disabled="@_saving">
                     @(_saving ? "Saving…" : "Save fuel log")
                 </button>
-                <button class="btn btn-sm btn-outline-warning" @onclick="StartNewLogAsync" disabled="@_saving">
+                <button class="btn btn-outline-warning fuel-log-action" @onclick="StartNewLogAsync" disabled="@_saving">
                     Start new log
                 </button>
                 @if (!string.IsNullOrEmpty(_statusMessage))
@@ -307,21 +307,16 @@
 
         targetRow.MeterValue = meterValue;
 
-        // Persist immediately so a captured reading can't be lost. We save even
-        // when this row's gallons can't be computed yet (a missing previous
-        // meter just leaves the gallons column blank) — the meter value itself
-        // still has to reach the server, and the earlier behavior of holding it
-        // only in the grid meant an unsaved reading could vanish on reload.
-        await SaveAsync();
+        // Mirror the captured reading to this device so a reload can recover it,
+        // but leave the actual save to the driver's Save fuel log tap.
+        await PersistLocalDraftAsync(pendingSave: true);
 
-        if (_statusSuccess)
-        {
-            var gallons = GallonsForRow(_rows.IndexOf(targetRow));
-            _statusMessage = gallons.HasValue
-                ? $"Logged meter {meterValue.Value.ToString("0.##")} " +
-                  $"({gallons.Value.ToString("0.##")} gal) and saved."
-                : $"Logged meter {meterValue.Value.ToString("0.##")} and saved.";
-        }
+        _statusSuccess = true;
+        var gallons = GallonsForRow(_rows.IndexOf(targetRow));
+        _statusMessage = gallons.HasValue
+            ? $"Logged meter {meterValue.Value.ToString("0.##")} " +
+              $"({gallons.Value.ToString("0.##")} gal)."
+            : $"Logged meter {meterValue.Value.ToString("0.##")}.";
     }
 
     // Focusing into an empty Equip # box arms the recognizer and drops the
@@ -379,10 +374,11 @@
 
         targetRow.EquipmentNumber = equipmentNumber;
 
-        // Persist the captured unit number right away, the same as a typed edit.
-        await SaveAsync();
-        if (_statusSuccess)
-            _statusMessage = $"Logged equipment #{equipmentNumber} and saved.";
+        // Mirror the captured unit number to this device, the same as a typed
+        // edit. The driver saves explicitly with Save fuel log.
+        await PersistLocalDraftAsync(pendingSave: true);
+        _statusSuccess = true;
+        _statusMessage = $"Logged equipment #{equipmentNumber}.";
     }
 
     // Equipment numbers look like "104" per the placeholder, so pull the first
@@ -467,19 +463,15 @@
         await PersistLocalDraftAsync(pendingSave: IsDirty);
     }
 
-    // Persist after a manual edit to a meter or equipment field. @bind:after
-    // only fires when an input's value actually changed (it rides the commit/
-    // change event), so tabbing through a field without editing won't trigger a
-    // save. We mirror to local storage first — instant and unable to fail the
-    // real save — then push to the server when there's something new to send.
-    private async Task AutoSaveAfterEditAsync()
+    // Mirror an edited meter or equipment field to this device's local storage.
+    // @bind:after only fires when an input's value actually changed (it rides
+    // the commit/change event), so tabbing through a field without editing won't
+    // trigger this. Nothing reaches the server here — the driver saves
+    // explicitly with the Save fuel log button — but the local mirror means a
+    // reload before that save can still recover the entered readings.
+    private async Task MirrorDraftAfterEditAsync()
     {
         await PersistLocalDraftAsync(pendingSave: true);
-
-        if (_saving || _listening) return;
-        if (!IsDirty) return;
-
-        await SaveAsync();
     }
 
     // Mirror the current grid to this device's local storage so entries survive
