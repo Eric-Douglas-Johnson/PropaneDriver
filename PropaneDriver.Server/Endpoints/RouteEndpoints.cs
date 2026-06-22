@@ -123,6 +123,25 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(new { Deleted = true, RouteId = id });
             }).RequireAuthorization("AuthenticatedDriver");
 
+            // Admin: delete every route (and their deliveries) for a driver in
+            // one shot, mirroring the bulk fuel-log delete on the Admin page.
+            // Returns 404 when the driver has no routes so the client can report
+            // there was nothing to delete rather than a phantom success.
+            group.MapDelete("driver/{driverId:guid}", async (
+                Guid driverId,
+                PropaneDriverDbContext db) =>
+            {
+                var routes = await db.Routes
+                    .Where(r => r.DriverId == driverId)
+                    .ToListAsync();
+
+                if (routes.Count == 0) return Results.NotFound();
+
+                db.Routes.RemoveRange(routes); // cascade deletes deliveries
+                await db.SaveChangesAsync();
+                return Results.Ok(new { Deleted = routes.Count });
+            }).RequireAuthorization("AdminOnly");
+
             // Get today's route (with deliveries + alerts) for a driver.
             // "Today" is computed in Central time because that's the driver's
             // local timezone and it's also what the Admin page uses when

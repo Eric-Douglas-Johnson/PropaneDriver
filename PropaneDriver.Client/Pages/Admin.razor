@@ -201,10 +201,19 @@
         <div class="admin-card">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <h5 class="m-0">Routes for Driver (@_driverRoutes.Count)</h5>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverRoutes"
-                        disabled="@_loadingDriverRoutes">
-                    @(_loadingDriverRoutes ? "Loading…" : "Refresh")
-                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverRoutes"
+                            disabled="@_loadingDriverRoutes">
+                        @(_loadingDriverRoutes ? "Loading…" : "Refresh")
+                    </button>
+                    @if (_driverRoutes.Count > 0)
+                    {
+                        <button class="btn btn-sm btn-outline-danger" @onclick="DeleteAllDriverRoutes"
+                                disabled="@_deletingAllRoutes">
+                            @(_deletingAllRoutes ? "Deleting…" : "Delete All Routes")
+                        </button>
+                    }
+                </div>
             </div>
 
             @if (_driverRoutes.Count == 0 && !_loadingDriverRoutes)
@@ -534,6 +543,7 @@
     private string? _driverRoutesStatus;
     private bool _driverRoutesStatusSuccess;
     private string? _deletingRouteId;
+    private bool _deletingAllRoutes;
 
     // Selected driver's fuel log, loaded for admin review and deletion.
     private List<FuelLogEntryDto> _driverFuelLog = new();
@@ -675,6 +685,40 @@
         }
 
         _deletingRouteId = null;
+    }
+
+    private async Task DeleteAllDriverRoutes()
+    {
+        if (string.IsNullOrEmpty(_selectedDriverId) || _driverRoutes.Count == 0) return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Delete all {_driverRoutes.Count} routes for this driver?\n\n" +
+            "This removes every route and its deliveries and can't be undone.");
+        if (!confirmed) return;
+
+        _deletingAllRoutes = true;
+        _driverRoutesStatus = null;
+        StateHasChanged();
+
+        var success = await RouteApi.DeleteAllRoutesForDriverAsync(_selectedDriverId);
+
+        if (success)
+        {
+            // A loaded route belongs to this driver, so it's now gone too.
+            _loadedRoute = null;
+            _routeStatus = null;
+            _driverRoutesStatus = "All routes deleted.";
+            _driverRoutesStatusSuccess = true;
+            await LoadDriverRoutes();
+        }
+        else
+        {
+            _driverRoutesStatus = "Failed to delete routes — check error logs.";
+            _driverRoutesStatusSuccess = false;
+        }
+
+        _deletingAllRoutes = false;
     }
 
     private async Task LoadDriverFuelLog()

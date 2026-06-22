@@ -96,6 +96,35 @@ namespace PropaneDriver.Client.Services
             }
         }
 
+        // Admin: delete every route for a driver. True only when the server
+        // confirms (2xx); a 404 means there were no routes to delete and is
+        // reported as failure so the caller doesn't claim a phantom success.
+        public async Task<bool> DeleteAllRoutesForDriverAsync(string driverId)
+        {
+            if (string.IsNullOrWhiteSpace(driverId)) return false;
+
+            try
+            {
+                var response = await _http.DeleteAsync($"api/routes/driver/{driverId}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogService.LogErrorAsync(
+                        "RouteApiService.DeleteAllRoutesForDriverAsync",
+                        $"DELETE api/routes/driver/{driverId} returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "RouteApiService.DeleteAllRoutesForDriverAsync",
+                    $"Exception deleting all routes for {driverId}: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<bool> CreateRouteAsync(CreateRouteDto dto)
         {
             try
