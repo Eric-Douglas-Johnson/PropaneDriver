@@ -101,6 +101,68 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
+            // Admin: return a specific driver's fuel log, ordered the same way
+            // as the driver's own GET above. The Admin page loads this to review
+            // a driver's entries before deciding whether to clear them.
+            group.MapGet("{driverId:guid}", async (
+                Guid driverId,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                try
+                {
+                    var entries = await db.FuelLogEntries
+                        .AsNoTracking()
+                        .Where(entry => entry.DriverId == driverId)
+                        .OrderBy(entry => entry.SortOrder)
+                        .Select(entry => new FuelLogEntryDto
+                        {
+                            Id = entry.Id.ToString(),
+                            EquipmentNumber = entry.EquipmentNumber,
+                            MeterValue = entry.MeterValue,
+                            GallonsPumped = entry.GallonsPumped,
+                            SortOrder = entry.SortOrder,
+                            RecordedAt = entry.RecordedAt
+                        })
+                        .ToListAsync();
+
+                    return Results.Ok(entries);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to load fuel log for driver {DriverId}", driverId);
+                    return Results.Problem(detail: ex.Message, title: "Failed to load fuel log", statusCode: 500);
+                }
+            }).RequireAuthorization("AdminOnly");
+
+            // Admin: delete a driver's entire fuel log in one shot. Returns 404
+            // when the driver has no entries so the client can report that there
+            // was nothing to delete rather than a phantom success.
+            group.MapDelete("{driverId:guid}", async (
+                Guid driverId,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                try
+                {
+                    var existingEntries = await db.FuelLogEntries
+                        .Where(entry => entry.DriverId == driverId)
+                        .ToListAsync();
+
+                    if (existingEntries.Count == 0) return Results.NotFound();
+
+                    db.FuelLogEntries.RemoveRange(existingEntries);
+                    await db.SaveChangesAsync();
+
+                    return Results.Ok(new { Deleted = existingEntries.Count });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to delete fuel log for driver {DriverId}", driverId);
+                    return Results.Problem(detail: ex.Message, title: "Failed to delete fuel log", statusCode: 500);
+                }
+            }).RequireAuthorization("AdminOnly");
+
             return app;
         }
     }

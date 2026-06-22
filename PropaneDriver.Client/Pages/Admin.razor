@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject SpeechService SpeechService
 @inject AddressApiService AddressApi
+@inject FuelLogApiService FuelLogApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 
@@ -259,6 +260,70 @@
         </div>
     }
 
+    <!-- Fuel log for selected driver -->
+    @if (!string.IsNullOrEmpty(_selectedDriverId))
+    {
+        <div class="admin-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="m-0">Fuel Log for Driver (@_driverFuelLog.Count entries)</h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverFuelLog"
+                            disabled="@_loadingFuelLog">
+                        @(_loadingFuelLog ? "Loading…" : "Refresh")
+                    </button>
+                    @if (_driverFuelLog.Count > 0)
+                    {
+                        <button class="btn btn-sm btn-outline-danger" @onclick="DeleteDriverFuelLog"
+                                disabled="@_deletingFuelLog">
+                            @(_deletingFuelLog ? "Deleting…" : "Delete Fuel Log")
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (_driverFuelLog.Count == 0 && !_loadingFuelLog)
+            {
+                <div style="font-size:0.85rem; color:#8892b0;">No fuel log entries for this driver.</div>
+            }
+            else if (_driverFuelLog.Count > 0)
+            {
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Equip #</th>
+                            <th>Meter</th>
+                            <th>Gallons</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < _driverFuelLog.Count; i++)
+                        {
+                            var entry = _driverFuelLog[i];
+                            <tr>
+                                <td>@(i == 0 ? "" : i.ToString())</td>
+                                <td>@entry.EquipmentNumber</td>
+                                <td>@entry.MeterValue.ToString("0.##")</td>
+                                <td>@(entry.GallonsPumped > 0 ? entry.GallonsPumped.ToString("0.##") : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="mt-2" style="font-size:0.85rem; color:#cdd6f4;">
+                    Total gallons pumped: <strong>@FuelLogTotalGallons().ToString("0.##")</strong>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_fuelLogStatus))
+            {
+                <div class="@(_fuelLogStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                    @_fuelLogStatus
+                </div>
+            }
+        </div>
+    }
+
     <!-- Create New Route -->
     <div class="admin-card">
 
@@ -470,6 +535,13 @@
     private bool _driverRoutesStatusSuccess;
     private string? _deletingRouteId;
 
+    // Selected driver's fuel log, loaded for admin review and deletion.
+    private List<FuelLogEntryDto> _driverFuelLog = new();
+    private bool _loadingFuelLog;
+    private bool _deletingFuelLog;
+    private string? _fuelLogStatus;
+    private bool _fuelLogStatusSuccess;
+
     // New delivery form fields
     private string _newStreet = string.Empty;
     private string _newCity = string.Empty;
@@ -533,10 +605,13 @@
         _routeStatus = null;
         _driverRoutes.Clear();
         _driverRoutesStatus = null;
+        _driverFuelLog.Clear();
+        _fuelLogStatus = null;
 
         if (!string.IsNullOrEmpty(_selectedDriverId))
         {
             await LoadDriverRoutes();
+            await LoadDriverFuelLog();
         }
     }
 
@@ -600,6 +675,70 @@
         }
 
         _deletingRouteId = null;
+    }
+
+    private async Task LoadDriverFuelLog()
+    {
+        if (string.IsNullOrEmpty(_selectedDriverId)) return;
+
+        _loadingFuelLog = true;
+        _fuelLogStatus = null;
+        StateHasChanged();
+
+        try
+        {
+            _driverFuelLog = await FuelLogApi.GetFuelLogForDriverAsync(_selectedDriverId);
+        }
+        catch (Exception ex)
+        {
+            _fuelLogStatus = $"Error loading fuel log: {ex.Message}";
+            _fuelLogStatusSuccess = false;
+        }
+        finally
+        {
+            _loadingFuelLog = false;
+        }
+    }
+
+    // Sum of the positive per-row gallons, mirroring the driver's Fuel Log
+    // total: the Start row and any negative (mis-typed) gallons are left out.
+    private decimal FuelLogTotalGallons()
+    {
+        decimal total = 0;
+        foreach (var entry in _driverFuelLog)
+            if (entry.GallonsPumped > 0) total += entry.GallonsPumped;
+        return total;
+    }
+
+    private async Task DeleteDriverFuelLog()
+    {
+        if (string.IsNullOrEmpty(_selectedDriverId) || _driverFuelLog.Count == 0) return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            "Delete this driver's entire fuel log?\n\n" +
+            "This removes every entry and can't be undone.");
+        if (!confirmed) return;
+
+        _deletingFuelLog = true;
+        _fuelLogStatus = null;
+        StateHasChanged();
+
+        var success = await FuelLogApi.DeleteFuelLogForDriverAsync(_selectedDriverId);
+
+        if (success)
+        {
+            _driverFuelLog.Clear();
+            _fuelLogStatus = "Fuel log deleted.";
+            _fuelLogStatusSuccess = true;
+        }
+        else
+        {
+            _fuelLogStatus = "Failed to delete fuel log — check error logs.";
+            _fuelLogStatusSuccess = false;
+        }
+
+        _deletingFuelLog = false;
     }
 
     private async Task LoadRoute()
