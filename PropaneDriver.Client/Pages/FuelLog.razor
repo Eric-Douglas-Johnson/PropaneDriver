@@ -48,8 +48,10 @@
                     var row = _rows[index];
                     var isStartRow = index == 0;
                     var gallons = GallonsForRow(index);
+
                     <div class="fuel-log-row @(isStartRow ? "fuel-log-row--start" : "")" @key="row.Key">
                         <span class="fuel-log-rownum">@(isStartRow ? "" : index.ToString())</span>
+
                         @if (isStartRow)
                         {
                             <input class="form-control form-control-sm fuel-log-startlabel"
@@ -63,12 +65,14 @@
                                    @bind:after="MirrorDraftAfterEditAsync"
                                    @onfocus="() => ListenForEquipmentNumberAsync(index)" />
                         }
+
                         <input class="form-control form-control-sm" type="number" step="any"
                                inputmode="decimal" placeholder="0"
                                @bind="row.MeterValue" @bind:after="MirrorDraftAfterEditAsync" />
                         <input class="form-control form-control-sm fuel-log-gallons"
                                type="text" readonly tabindex="-1"
                                value="@(gallons.HasValue ? gallons.Value.ToString("0.##") : "—")" />
+
                         @if (isStartRow)
                         {
                             <span></span>
@@ -162,9 +166,8 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var driverId = authState.User.FindFirst(
             System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        _draftStorageKey = string.IsNullOrWhiteSpace(driverId)
-            ? string.Empty
-            : $"fuel-log-draft:{driverId}";
+
+        _draftStorageKey = string.IsNullOrWhiteSpace(driverId) ? string.Empty : $"fuel-log-draft:{driverId}";
 
         var entries = await FuelLogApi.GetFuelLogAsync();
         foreach (var entry in entries.OrderBy(entry => entry.SortOrder))
