@@ -110,8 +110,17 @@ namespace PropaneDriver.Server.Data
                         WHERE Name = N'AvgDeliveryTimeSeconds' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
                     BEGIN
                         EXEC('UPDATE [Addresses] SET [AvgDeliveryTimeMinutes] = [AvgDeliveryTimeSeconds] / 60.0 WHERE [AvgDeliveryTimeSeconds] > 0');
-                        IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_Addresses_AvgDeliveryTimeSeconds')
-                            ALTER TABLE [Addresses] DROP CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds];
+                        -- Drop the column's default constraint by its ACTUAL name.
+                        -- Legacy rows carry an auto-generated name (e.g.
+                        -- DF__Addresses__AvgDe__02084FDA), not the tidy DF_Addresses_*
+                        -- form, so a hardcoded name misses it and DROP COLUMN then
+                        -- throws (aborting the rest of this migration batch).
+                        DECLARE @avgSecDefault sysname = (
+                            SELECT dc.name FROM sys.default_constraints dc
+                            JOIN sys.columns col ON col.object_id = dc.parent_object_id AND col.column_id = dc.parent_column_id
+                            WHERE dc.parent_object_id = Object_ID(N'[dbo].[Addresses]') AND col.name = N'AvgDeliveryTimeSeconds');
+                        IF @avgSecDefault IS NOT NULL
+                            EXEC('ALTER TABLE [Addresses] DROP CONSTRAINT [' + @avgSecDefault + ']');
                         ALTER TABLE [Addresses] DROP COLUMN [AvgDeliveryTimeSeconds];
                     END
 
@@ -251,8 +260,14 @@ namespace PropaneDriver.Server.Data
                         EXEC('UPDATE d SET d.[LongRunning] = a.[LongRunning]
                               FROM [Deliveries] d
                               INNER JOIN [Addresses] a ON d.[AddressId] = a.[Id]');
-                        IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_Addresses_LongRunning')
-                            ALTER TABLE [Addresses] DROP CONSTRAINT [DF_Addresses_LongRunning];
+                        -- Same as above: resolve the default constraint's real name
+                        -- before dropping the column.
+                        DECLARE @addrLrDefault sysname = (
+                            SELECT dc.name FROM sys.default_constraints dc
+                            JOIN sys.columns col ON col.object_id = dc.parent_object_id AND col.column_id = dc.parent_column_id
+                            WHERE dc.parent_object_id = Object_ID(N'[dbo].[Addresses]') AND col.name = N'LongRunning');
+                        IF @addrLrDefault IS NOT NULL
+                            EXEC('ALTER TABLE [Addresses] DROP CONSTRAINT [' + @addrLrDefault + ']');
                         ALTER TABLE [Addresses] DROP COLUMN [LongRunning];
                     END
 
