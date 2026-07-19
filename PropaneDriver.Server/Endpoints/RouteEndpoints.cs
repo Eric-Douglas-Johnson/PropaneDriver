@@ -228,7 +228,11 @@ namespace PropaneDriver.Server.Endpoints
                         }
                         else
                         {
-                            if (d.Latitude != 0 || d.Longitude != 0)
+                            // Don't clobber a manually-set pin (UpdateCoordinatesAsync).
+                            // Only seed coordinates from the create-form geocode when
+                            // the address has none stored yet.
+                            var hasCoords = (address.Latitude ?? 0) != 0 || (address.Longitude ?? 0) != 0;
+                            if (!hasCoords && (d.Latitude != 0 || d.Longitude != 0))
                             {
                                 address.Latitude = d.Latitude;
                                 address.Longitude = d.Longitude;
