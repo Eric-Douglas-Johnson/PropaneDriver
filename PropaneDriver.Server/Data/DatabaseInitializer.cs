@@ -65,10 +65,9 @@ namespace PropaneDriver.Server.Data
                             [ZipCode] nvarchar(20) NOT NULL,
                             [Latitude] float NOT NULL CONSTRAINT [DF_Addresses_Latitude] DEFAULT 0,
                             [Longitude] float NOT NULL CONSTRAINT [DF_Addresses_Longitude] DEFAULT 0,
-                            [AvgDeliveryTimeSeconds] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds] DEFAULT 0,
+                            [AvgDeliveryTimeMinutes] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeMinutes] DEFAULT 0,
                             [TankLocation] nvarchar(500) NULL,
                             [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0,
-                            [LongRunning] bit NOT NULL CONSTRAINT [DF_Addresses_LongRunning] DEFAULT 0,
                             CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street], [City], [State], [ZipCode]),
                             CONSTRAINT [CK_Addresses_Street] CHECK (LEN(TRIM([Street])) > 0),
                             CONSTRAINT [CK_Addresses_City] CHECK (LEN(TRIM([City])) > 0),
@@ -96,13 +95,24 @@ namespace PropaneDriver.Server.Data
                         ALTER TABLE [Addresses] ADD [BackIn] bit NOT NULL CONSTRAINT [DF_Addresses_BackIn] DEFAULT 0;
                     END
 
-                    -- Self-migrate: add LongRunning flag. Same NOT NULL + DEFAULT 0
-                    -- pattern so existing addresses keep using the geofence flow.
+                    -- Self-migrate: AvgDeliveryTime is now stored in minutes on the
+                    -- Address (was seconds). Add the minutes column, convert existing
+                    -- values, then drop the seconds column. The UPDATE is EXEC-wrapped
+                    -- so the batch still compiles after the seconds column is gone.
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.columns
-                        WHERE Name = N'LongRunning' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                        WHERE Name = N'AvgDeliveryTimeMinutes' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
                     BEGIN
-                        ALTER TABLE [Addresses] ADD [LongRunning] bit NOT NULL CONSTRAINT [DF_Addresses_LongRunning] DEFAULT 0;
+                        ALTER TABLE [Addresses] ADD [AvgDeliveryTimeMinutes] float NOT NULL CONSTRAINT [DF_Addresses_AvgDeliveryTimeMinutes] DEFAULT 0;
+                    END
+                    IF EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'AvgDeliveryTimeSeconds' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                    BEGIN
+                        EXEC('UPDATE [Addresses] SET [AvgDeliveryTimeMinutes] = [AvgDeliveryTimeSeconds] / 60.0 WHERE [AvgDeliveryTimeSeconds] > 0');
+                        IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_Addresses_AvgDeliveryTimeSeconds')
+                            ALTER TABLE [Addresses] DROP CONSTRAINT [DF_Addresses_AvgDeliveryTimeSeconds];
+                        ALTER TABLE [Addresses] DROP COLUMN [AvgDeliveryTimeSeconds];
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Deliveries')
@@ -113,8 +123,8 @@ namespace PropaneDriver.Server.Data
                             [AddressId] uniqueidentifier NOT NULL,
                             [CustomerName] nvarchar(200) NOT NULL,
                             [Status] int NOT NULL,
-                            [AvgDeliveryTimeMinutes] float NOT NULL,
                             [SortOrder] int NOT NULL,
+                            [LongRunning] bit NOT NULL CONSTRAINT [DF_Deliveries_LongRunning] DEFAULT 0,
                             [CreatedAt] datetime2 NOT NULL,
                             CONSTRAINT [FK_Deliveries_Routes_RouteId] FOREIGN KEY ([RouteId])
                                 REFERENCES [Routes] ([Id]) ON DELETE CASCADE,
@@ -142,7 +152,7 @@ namespace PropaneDriver.Server.Data
                         -- which silently blocks every other migration step below from running.
 
                         -- Insert only addresses not already in the table (idempotent).
-                        EXEC('INSERT INTO [Addresses] ([Id], [Street], [City], [State], [ZipCode], [Latitude], [Longitude], [AvgDeliveryTimeSeconds])
+                        EXEC('INSERT INTO [Addresses] ([Id], [Street], [City], [State], [ZipCode], [Latitude], [Longitude], [AvgDeliveryTimeMinutes])
                               SELECT NEWID(), d.[Street], d.[City], d.[State], d.[ZipCode],
                                      AVG(d.[Latitude]), AVG(d.[Longitude]), 0
                               FROM [Deliveries] d
@@ -218,6 +228,40 @@ namespace PropaneDriver.Server.Data
                             ALTER TABLE [Deliveries] DROP COLUMN [Latitude];
                         IF EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'Longitude' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
                             ALTER TABLE [Deliveries] DROP COLUMN [Longitude];
+                    END
+
+                    -- Self-migrate: LongRunning moved from Address to Delivery, and the
+                    -- old per-delivery AvgDeliveryTimeMinutes column is retired (avg time
+                    -- is address-only now). Order matters: add + backfill Deliveries
+                    -- .LongRunning from the address BEFORE dropping Addresses.LongRunning.
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'LongRunning' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                    BEGIN
+                        ALTER TABLE [Deliveries] ADD [LongRunning] bit NOT NULL CONSTRAINT [DF_Deliveries_LongRunning] DEFAULT 0;
+                    END
+
+                    IF EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'LongRunning' AND Object_ID = Object_ID(N'[dbo].[Addresses]'))
+                    BEGIN
+                        -- Backfill each delivery from its address's current flag, then
+                        -- drop the address column. EXEC-wrapped so the batch still
+                        -- compiles on re-runs after Addresses.LongRunning is gone.
+                        EXEC('UPDATE d SET d.[LongRunning] = a.[LongRunning]
+                              FROM [Deliveries] d
+                              INNER JOIN [Addresses] a ON d.[AddressId] = a.[Id]');
+                        IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_Addresses_LongRunning')
+                            ALTER TABLE [Addresses] DROP CONSTRAINT [DF_Addresses_LongRunning];
+                        ALTER TABLE [Addresses] DROP COLUMN [LongRunning];
+                    END
+
+                    -- Retire the old per-delivery average column (now address-only).
+                    IF EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE Name = N'AvgDeliveryTimeMinutes' AND Object_ID = Object_ID(N'[dbo].[Deliveries]'))
+                    BEGIN
+                        ALTER TABLE [Deliveries] DROP COLUMN [AvgDeliveryTimeMinutes];
                     END
 
                     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DeliveryTimes')

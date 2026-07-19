@@ -1,3 +1,4 @@
+
 using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Server.Data
@@ -19,15 +20,13 @@ namespace PropaneDriver.Server.Data
 
         public int Status { get; set; }
 
-        public double AvgDeliveryTimeMinutes { get; set; }
-
         public int SortOrder { get; set; }
 
-        public DateTime CreatedAt { get; set; }
+        // This stop skips the GPS-geofence delivery-time logic. The driver
+        // taps Start/Stop buttons in the UI and the elapsed time is saved
+        // when they stop. Per-delivery (not shared across an address).
+        public bool LongRunning { get; set; }
 
-        // Navigation
-        public RouteDbRecord? Route { get; set; }
-        public AddressDbRecord? Address { get; set; }
-        public List<AlertDbRecord> Alerts { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
     }
 }

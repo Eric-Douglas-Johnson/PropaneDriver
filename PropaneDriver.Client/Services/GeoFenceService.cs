@@ -118,7 +118,7 @@ namespace PropaneDriver.Client.Services
                 // Restore on the right channel: LongRunning addresses use
                 // the manual flow (GPS doesn't auto-stop), all others use
                 // the geofence-inside flag.
-                if (delivery.Location.LongRunning)
+                if (delivery.LongRunning)
                 {
                     _manualTimerRunning = true;
                     StartManualTickTimer();
@@ -141,7 +141,7 @@ namespace PropaneDriver.Client.Services
         public async Task StartManualTimerAsync()
         {
             if (_activeDelivery is null) return;
-            if (!_activeDelivery.Location.LongRunning) return;
+            if (!_activeDelivery.LongRunning) return;
             if (_manualTimerRunning) return;
 
             _enteredFenceAtUtc = DateTime.UtcNow;
@@ -210,7 +210,7 @@ namespace PropaneDriver.Client.Services
                 // Same story for missing coordinates: not an error per fix, only
                 // worth noting once per delivery. Let the Admin page surface
                 // missing-GPS as a data-quality issue instead.
-                if (!_activeDelivery.Location.HasCoordinates)
+                if (!_activeDelivery.Address.HasCoordinates)
                 {
                     return;
                 }
@@ -218,13 +218,13 @@ namespace PropaneDriver.Client.Services
                 // LongRunning addresses opt out of GPS-driven start/stop —
                 // the driver controls the timer with explicit buttons via
                 // StartManualTimerAsync / StopManualTimerAsync.
-                if (_activeDelivery.Location.LongRunning)
+                if (_activeDelivery.LongRunning)
                 {
                     return;
                 }
 
-                var distance = HaversineDistance(latitude, longitude, _activeDelivery.Location.Latitude,
-                    _activeDelivery.Location.Longitude);
+                var distance = HaversineDistance(latitude, longitude, _activeDelivery.Address.Latitude,
+                    _activeDelivery.Address.Longitude);
 
                 var insideGeoFence = distance <= FenceRadiusMeters;
 
@@ -259,7 +259,7 @@ namespace PropaneDriver.Client.Services
                 OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
                 {
                     DeliveryId = _activeDelivery.Id,
-                    Address = _activeDelivery.Location.FullAddress,
+                    Address = _activeDelivery.Address.FullAddress,
                     Latitude = latitude,
                     Longitude = longitude,
                     IsInsideFence = _lastCheckWasInsideGeoFence,
@@ -290,7 +290,7 @@ namespace PropaneDriver.Client.Services
             }
             else
             {
-                if (_activeDelivery.Location.Id == Guid.Empty)
+                if (_activeDelivery.Address.Id == Guid.Empty)
                 {
                     await ErrorLogService.LogErrorAsync(
                         "GeoFenceService", $"Delivery '{_activeDelivery.Id}' has no AddressId — cannot save time");
@@ -302,7 +302,7 @@ namespace PropaneDriver.Client.Services
                 var dto = new DeliveryTimeDto
                 {
                     DeliveryId = _activeDelivery.Id,
-                    AddressId = _activeDelivery.Location.Id,
+                    AddressId = _activeDelivery.Address.Id,
                     TimeIntervalSeconds = elapsedSeconds
                 };
 

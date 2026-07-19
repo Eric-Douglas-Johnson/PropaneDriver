@@ -16,8 +16,5 @@ namespace PropaneDriver.Server.Data
         public double TimeIntervalSeconds { get; set; }
 
         public DateTime RecordedAt { get; set; }
-
-        // Navigation
-        public AddressDbRecord? Address { get; set; }
     }
 }

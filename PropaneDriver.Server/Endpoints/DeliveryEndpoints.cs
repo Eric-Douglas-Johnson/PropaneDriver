@@ -19,14 +19,16 @@ namespace PropaneDriver.Server.Endpoints
                 ClaimsPrincipal user,
                 PropaneDriverDbContext db) =>
             {
-                var deliveryWithRoute = await db.Deliveries
+                // Owning driver comes from the delivery's route; join by id.
+                // Nullable so a missing delivery (null) is distinct from a real id.
+                var routeDriverId = await db.Deliveries
                     .Where(d => d.Id == id)
-                    .Select(d => new { Exists = true, RouteDriverId = d.Route!.DriverId })
+                    .Join(db.Routes, d => d.RouteId, r => r.Id, (d, r) => (Guid?)r.DriverId)
                     .FirstOrDefaultAsync();
 
-                if (deliveryWithRoute is null) return Results.NotFound();
+                if (routeDriverId is null) return Results.NotFound();
 
-                if (!user.CanAccessDriverData(deliveryWithRoute.RouteDriverId))
+                if (!user.CanAccessDriverData(routeDriverId.Value))
                     return Results.Forbid();
 
                 var alerts = await db.Alerts
@@ -58,14 +60,14 @@ namespace PropaneDriver.Server.Endpoints
                 if (string.IsNullOrWhiteSpace(dto.Message))
                     return Results.BadRequest(new { Message = "Alert message is required." });
 
-                var deliveryWithRoute = await db.Deliveries
+                var routeDriverId = await db.Deliveries
                     .Where(d => d.Id == id)
-                    .Select(d => new { Exists = true, RouteDriverId = d.Route!.DriverId })
+                    .Join(db.Routes, d => d.RouteId, r => r.Id, (d, r) => (Guid?)r.DriverId)
                     .FirstOrDefaultAsync();
 
-                if (deliveryWithRoute is null) return Results.NotFound();
+                if (routeDriverId is null) return Results.NotFound();
 
-                if (!user.CanAccessDriverData(deliveryWithRoute.RouteDriverId))
+                if (!user.CanAccessDriverData(routeDriverId.Value))
                     return Results.Forbid();
 
                 var alert = new AlertDbRecord
@@ -100,12 +102,18 @@ namespace PropaneDriver.Server.Endpoints
             {
                 try
                 {
+                    // Fetch the delivery tracked (it's mutated below), then look
+                    // up its owning driver via the route in a separate query.
                     var delivery = await db.Deliveries
-                        .Include(d => d.Route)
                         .FirstOrDefaultAsync(d => d.Id == id);
                     if (delivery is null) return Results.NotFound();
 
-                    if (!user.CanAccessDriverData(delivery.Route!.DriverId))
+                    var routeDriverId = await db.Routes
+                        .Where(r => r.Id == delivery.RouteId)
+                        .Select(r => r.DriverId)
+                        .FirstOrDefaultAsync();
+
+                    if (!user.CanAccessDriverData(routeDriverId))
                         return Results.Forbid();
 
                     delivery.Status = dto.Status;
@@ -118,6 +126,44 @@ namespace PropaneDriver.Server.Endpoints
                     return Results.Problem(detail: ex.Message, title: "Failed to update delivery status", statusCode: 500);
                 }
             }).RequireAuthorization("AuthenticatedDriver");
+
+            // Toggle the LongRunning flag on a single delivery. When true, the
+            // driver client uses manual Start/Stop buttons instead of the
+            // GPS-geofence auto-timer for this stop. Admin-only (per-row toggle
+            // on the Admin page); ownership is still validated through the route.
+            group.MapPut("{id:guid}/long-running", async (
+                Guid id,
+                DeliveryLongRunningUpdateDto dto,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db,
+                ILogger<Program> logger) =>
+            {
+                try
+                {
+                    var delivery = await db.Deliveries
+                        .FirstOrDefaultAsync(d => d.Id == id);
+                    if (delivery is null) return Results.NotFound();
+
+                    var routeDriverId = await db.Routes
+                        .Where(r => r.Id == delivery.RouteId)
+                        .Select(r => r.DriverId)
+                        .FirstOrDefaultAsync();
+
+                    if (!user.CanAccessDriverData(routeDriverId))
+                        return Results.Forbid();
+
+                    delivery.LongRunning = dto.LongRunning;
+                    await db.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Updated LongRunning for Delivery {Id} to {LongRunning}", id, dto.LongRunning);
+                    return Results.Ok(new { delivery.Id, delivery.LongRunning });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to update long-running for delivery {Id}", id);
+                    return Results.Problem(detail: ex.Message, title: "Failed to update delivery long-running", statusCode: 500);
+                }
+            }).RequireAuthorization("AdminOnly");
 
             return app;
         }

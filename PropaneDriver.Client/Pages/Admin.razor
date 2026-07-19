@@ -7,6 +7,7 @@
 @inject HttpClient Http
 @inject SpeechService SpeechService
 @inject AddressApiService AddressApi
+@inject DeliveryApiService DeliveryApi
 @inject FuelLogApiService FuelLogApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
@@ -88,14 +89,13 @@
                         {
                             idx++;
                             var captured = del;
-                            var addressId = del.Location.Id;
                             <tr>
                                 <td>@idx</td>
-                                <td>@del.Location.FullAddress</td>
+                                <td>@del.Address.FullAddress</td>
                                 <td>
-                                    @if (del.Location.HasCoordinates)
+                                    @if (del.Address.HasCoordinates)
                                     {
-                                        <span>@del.Location.Latitude.ToString("F4"), @del.Location.Longitude.ToString("F4")</span>
+                                        <span>@del.Address.Latitude.ToString("F4"), @del.Address.Longitude.ToString("F4")</span>
                                     }
                                     else
                                     {
@@ -105,8 +105,8 @@
                                 <td>@StatusText(del.Status)</td>
                                 <td>
                                     <input type="checkbox"
-                                           checked="@del.Location.LongRunning"
-                                           disabled="@(_togglingLongRunningId == addressId)"
+                                           checked="@del.LongRunning"
+                                           disabled="@(_togglingLongRunningId == del.Id)"
                                            @onchange="e => ToggleLongRunning(captured, (bool)(e.Value ?? false))" />
                                 </td>
                                 <td>
@@ -125,7 +125,7 @@
             {
                 <div class="alerts-panel mt-3 p-3" style="background:#12142a; border:1px solid #2a2a4a; border-radius:6px;">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="m-0">Alerts for @_alertDelivery.Location.FullAddress</h6>
+                        <h6 class="m-0">Alerts for @_alertDelivery.Address.FullAddress</h6>
                         <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="CloseAlerts">Close</button>
                     </div>
 
@@ -504,7 +504,7 @@
                         <tr>
                             <td>@(i + 1)</td>
                             <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
-                            <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
+                            <td>@delivery.Latitude?.ToString("F4"), @delivery.Longitude?.ToString("F4")</td>
                             <td>@(delivery.LongRunning ? "Yes" : "No")</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RemovePending(capturedIndex)">X</button>
@@ -564,10 +564,10 @@
     private string? _geocodeStatus;
     private string _lastGeocodedAddress = string.Empty;
 
-    // Tracks the AddressId of the row whose LongRunning checkbox is mid-PUT
+    // Tracks the delivery Id of the row whose LongRunning checkbox is mid-PUT
     // so we can disable the input while the request is in flight and avoid
-    // a double-toggle race. Empty Guid = no row currently toggling.
-    private Guid _togglingLongRunningId = Guid.Empty;
+    // a double-toggle race. Null = no row currently toggling.
+    private string? _togglingLongRunningId;
 
     // Single source of truth for the help-tooltip copy used by both the
     // Add-Delivery checkbox and the existing-route table column.
@@ -987,35 +987,34 @@
         _appendingToRoute = false;
     }
 
-    // Toggle LongRunning on an existing address by hitting the PUT endpoint.
+    // Toggle LongRunning on a single delivery by hitting the PUT endpoint.
     // Updates the in-memory delivery's flag on success so the table reflects
     // the change without a full route reload. On failure, surfaces a status
-    // line and reverts the bound checkbox by leaving Location.LongRunning
+    // line and reverts the bound checkbox by leaving delivery.LongRunning
     // unchanged (Blazor re-renders from that source of truth).
     private async Task ToggleLongRunning(IDelivery delivery, bool newValue)
     {
-        var addressId = delivery.Location.Id;
-        if (addressId == Guid.Empty) return;
-        if (_togglingLongRunningId != Guid.Empty) return;
+        if (string.IsNullOrWhiteSpace(delivery.Id)) return;
+        if (_togglingLongRunningId is not null) return;
 
-        _togglingLongRunningId = addressId;
+        _togglingLongRunningId = delivery.Id;
         StateHasChanged();
 
-        var ok = await AddressApi.UpdateLongRunningAsync(addressId, newValue);
+        var ok = await DeliveryApi.UpdateLongRunningAsync(delivery.Id, newValue);
 
         if (ok)
         {
-            delivery.Location.LongRunning = newValue;
-            _routeStatus = $"Updated Long Running for {delivery.Location.Street} → {(newValue ? "On" : "Off")}.";
+            delivery.LongRunning = newValue;
+            _routeStatus = $"Updated Long Running for {delivery.Address.Street} → {(newValue ? "On" : "Off")}.";
             _routeStatusSuccess = true;
         }
         else
         {
-            _routeStatus = $"Failed to update Long Running for {delivery.Location.Street} — see ErrorLog.";
+            _routeStatus = $"Failed to update Long Running for {delivery.Address.Street} — see ErrorLog.";
             _routeStatusSuccess = false;
         }
 
-        _togglingLongRunningId = Guid.Empty;
+        _togglingLongRunningId = null;
         StateHasChanged();
     }
 
@@ -1200,7 +1199,7 @@
         {
             foreach (var d in _loadedRoute.Deliveries)
             {
-                if (NormalizeAddressKey(d.Location.Street, d.Location.City, d.Location.State, d.Location.ZipCode) == key)
+                if (NormalizeAddressKey(d.Address.Street, d.Address.City, d.Address.State, d.Address.ZipCode) == key)
                     return true;
             }
         }

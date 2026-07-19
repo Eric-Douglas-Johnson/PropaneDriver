@@ -89,11 +89,11 @@
                             var captured = del;
                             <tr>
                                 <td>@idx</td>
-                                <td>@del.Location.FullAddress</td>
+                                    <td>@del.Address.FullAddress</td>
                                 <td>
-                                    @if (del.Location.HasCoordinates)
+                                        @if (del.Address.HasCoordinates)
                                     {
-                                        <span>@del.Location.Latitude.ToString("F4"), @del.Location.Longitude.ToString("F4")</span>
+                                            <span>@del.Address.Latitude.ToString("F4"), @del.Address.Longitude.ToString("F4")</span>
                                     }
                                     else
                                     {
@@ -106,7 +106,7 @@
                                        across all drivers using this address, so toggling it
                                        lives on the Admin page. Drivers set it at delivery
                                        creation time via the form below. *@
-                                    @(del.Location.LongRunning ? "Yes" : "No")
+                                    @(del.LongRunning ? "Yes" : "No")
                                 </td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-warning py-0 px-2"
@@ -124,7 +124,7 @@
             {
                 <div class="alerts-panel mt-3 p-3" style="background:#12142a; border:1px solid #2a2a4a; border-radius:6px;">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="m-0">Alerts for @_alertDelivery.Location.FullAddress</h6>
+                            <h6 class="m-0">Alerts for @_alertDelivery.Address.FullAddress</h6>
                         <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="CloseAlerts">Close</button>
                     </div>
 
@@ -467,7 +467,7 @@
                         <tr>
                             <td>@(i + 1)</td>
                             <td>@delivery.Street, @delivery.City, @delivery.State @delivery.ZipCode</td>
-                            <td>@delivery.Latitude.ToString("F4"), @delivery.Longitude.ToString("F4")</td>
+                            <td>@delivery.Latitude?.ToString("F4"), @delivery.Longitude?.ToString("F4")</td>
                             <td>@(delivery.LongRunning ? "Yes" : "No")</td>
                             <td>
                                 <button class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="() => RemovePending(capturedIndex)">X</button>
@@ -995,7 +995,7 @@
         {
             foreach (var d in _loadedRoute.Deliveries)
             {
-                if (NormalizeAddressKey(d.Location.Street, d.Location.City, d.Location.State, d.Location.ZipCode) == key)
+                if (NormalizeAddressKey(d.Address.Street, d.Address.City, d.Address.State, d.Address.ZipCode) == key)
                     return true;
             }
         }

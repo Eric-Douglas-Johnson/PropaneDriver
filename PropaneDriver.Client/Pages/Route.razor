@@ -56,7 +56,7 @@
             // AlertDto directly — this lets us track per-alert Seen state
             // and mark it seen on click.
             var allAlerts = _deliveries
-                .SelectMany(d => d.Alerts.Select(a => (Stop: d.Location.Street, Alert: a, IsActive: _activeDelivery?.Id == d.Id)))
+                .SelectMany(d => d.Alerts.Select(a => (Stop: d.Address.Street, Alert: a, IsActive: _activeDelivery?.Id == d.Id)))
                 .ToList();
         }
         @if (allAlerts.Count == 0)
@@ -109,7 +109,7 @@
                 // name, the Complete tag, and the duration on a single line.
                 <div class="delivery-item delivery-item-minimized @statusClass @(isSelected ? "selected" : "")"
                      @onclick="() => SelectDelivery(delivery)">
-                    <span class="delivery-item-name">@delivery.Location.Street</span>
+                    <span class="delivery-item-name">@delivery.Address.Street</span>
                     <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                     <span class="delivery-time">@FormatCompletedDuration(delivery)</span>
                 </div>
@@ -123,15 +123,15 @@
                         {
                             var inside = _geoFenceStatus?.IsInsideFence == true;
                             <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
-                            @if (delivery.Location.LongRunning && GeoFenceService.IsManualTimerRunning)
+                            @if (delivery.LongRunning && GeoFenceService.IsManualTimerRunning)
                             {
                                 <span class="delivery-status-badge manual-timer-badge">@FormatTimer(_timerSeconds)</span>
                             }
                         }
                         <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
                     </div>
-                    <div class="delivery-item-name">@delivery.Location.Street</div>
-                    <div class="delivery-item-address">@delivery.Location.FullAddress</div>
+                    <div class="delivery-item-name">@delivery.Address.Street</div>
+                    <div class="delivery-item-address">@delivery.Address.FullAddress</div>
                 </div>
             }
         }
@@ -149,23 +149,23 @@
         {
             <h5>Delivery Details</h5>
             <div class="detail-card">
-                @if (_selectedDelivery.Location.BackIn)
+                @if (_selectedDelivery.Address.BackIn)
                 {
                     <div class="detail-row detail-back-in">
                         <label>Back In</label>
                         <img src="icons/back-in.svg" alt="Back In" class="back-in-icon-img" />
                     </div>
                 }
-                @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
+                @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Address.TankLocation))
                 {
                     <div class="detail-row">
                         <label>Tank Location</label>
-                        <span>@_selectedDelivery.Location.TankLocation</span>
+                        <span>@_selectedDelivery.Address.TankLocation</span>
                     </div>
                 }
                 <div class="detail-row">
                     <label>Avg Delivery Time</label>
-                    <span>@((_selectedDelivery.Location.AvgDeliveryTimeSeconds / 60.0).ToString("F1")) min</span>
+                    <span>@(_selectedDelivery.Address.AvgDeliveryTimeMinutes.ToString("F1")) min</span>
                 </div>
             </div>
             <div class="detail-actions">
@@ -183,15 +183,15 @@
                 </button>
                 <button class="btn btn-lg btn-secondary"
                         @onclick="BeginEditTankLocation"
-                        disabled="@(_editingTankLocation || _selectedDelivery.Location.Id == Guid.Empty)"
-                        title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
-                    @(string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation) ? "Set Tank Location" : "Edit Tank Location")
+                        disabled="@(_editingTankLocation || _selectedDelivery.Address.Id == Guid.Empty)"
+                        title="@(_selectedDelivery.Address.Id == Guid.Empty ? "No address record linked" : "Add or change the tank-location note")">
+                    @(string.IsNullOrWhiteSpace(_selectedDelivery.Address.TankLocation) ? "Set Tank Location" : "Edit Tank Location")
                 </button>
                 <button class="btn btn-lg btn-danger"
                         @onclick="ToggleBackIn"
-                        disabled="@(_settingBackIn || _selectedDelivery.Location.Id == Guid.Empty)"
-                        title="@(_selectedDelivery.Location.Id == Guid.Empty ? "No address record linked" : (_selectedDelivery.Location.BackIn ? "Clear the back-in flag for this driveway" : "Mark this driveway as requiring the truck to back in"))">
-                    @(_settingBackIn ? "Saving…" : (_selectedDelivery.Location.BackIn ? "− Back In" : "+ Back In"))
+                        disabled="@(_settingBackIn || _selectedDelivery.Address.Id == Guid.Empty)"
+                        title="@(_selectedDelivery.Address.Id == Guid.Empty ? "No address record linked" : (_selectedDelivery.Address.BackIn ? "Clear the back-in flag for this driveway" : "Mark this driveway as requiring the truck to back in"))">
+                    @(_settingBackIn ? "Saving…" : (_selectedDelivery.Address.BackIn ? "− Back In" : "+ Back In"))
                 </button>
                 <button class="btn btn-lg btn-dark"
                         @onclick="CancelActiveDelivery"
@@ -261,7 +261,7 @@
                                 disabled="@(_savingTankLocation || string.IsNullOrWhiteSpace(_tankLocationDraft))">
                             @(_savingTankLocation ? "Saving…" : "Save")
                         </button>
-                        @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Location.TankLocation))
+                        @if (!string.IsNullOrWhiteSpace(_selectedDelivery.Address.TankLocation))
                         {
                             <button class="btn btn-sm btn-outline-danger"
                                     @onclick="ClearTankLocationNote"
@@ -279,7 +279,7 @@
                     @_tankLocationStatus
                 </div>
             }
-            @if (_selectedDelivery.Location.LongRunning && _activeDelivery?.Id == _selectedDelivery.Id)
+            @if (_selectedDelivery.LongRunning && _activeDelivery?.Id == _selectedDelivery.Id)
             {
                 <div class="manual-timer-panel">
                     <div class="manual-timer-display">@FormatTimer(_timerSeconds)</div>
@@ -323,16 +323,16 @@
             <div><strong>Longitude:</strong> @_gpsCheckResult.Longitude.ToString("F6")</div>
             <div><strong>Accuracy:</strong> @_gpsCheckResult.Accuracy.ToString("F1") m</div>
 
-            @if (_activeDelivery?.Location.HasCoordinates == true)
+            @if (_activeDelivery?.Address.HasCoordinates == true)
             {
                 var distance = GeoFenceService.HaversineDistance(
                     _gpsCheckResult.Latitude, _gpsCheckResult.Longitude,
-                    _activeDelivery.Location.Latitude, _activeDelivery.Location.Longitude);
+                    _activeDelivery.Address.Latitude, _activeDelivery.Address.Longitude);
 
                 var distanceFt = distance * 3.28084;
                 var insideFence = distance <= GeoFenceService.FenceRadiusMeters;
 
-                <div><strong>Distance to @_activeDelivery.Location.Street:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
+                <div><strong>Distance to @_activeDelivery.Address.Street:</strong> @distance.ToString("F1") m (@distanceFt.ToString("F0") ft)</div>
                 <div>
                     <strong>Geofence (@GeoFenceService.FenceRadiusFeet.ToString("F0") ft):</strong>
                     @if (insideFence)
@@ -552,10 +552,10 @@
             .FirstOrDefault();
 
         var promptText =
-            $"Force-advance past {current.Location.FullAddress}?\n\n" +
-            $"Current active: {current.Location.FullAddress}\n" +
+            $"Force-advance past {current.Address.FullAddress}?\n\n" +
+            $"Current active: {current.Address.FullAddress}\n" +
             (nextCandidate is not null
-                ? $"Will advance to: {nextCandidate.Location.FullAddress}\n\n"
+                ? $"Will advance to: {nextCandidate.Address.FullAddress}\n\n"
                 : "No more pending deliveries after this — active marker will be cleared.\n\n") +
             "Enter the delivery time in MINUTES (e.g. 12 or 7.5).\n" +
             "Cancel or leave blank to abort.";
@@ -575,7 +575,7 @@
             return;
         }
 
-        if (current.Location.Id == Guid.Empty)
+        if (current.Address.Id == Guid.Empty)
         {
             _saveStatus = $"✗ This stop has no linked address — cannot record a delivery time.";
             _saveSuccess = false;
@@ -594,7 +594,7 @@
         var dto = new DeliveryTimeDto
         {
             DeliveryId = current.Id,
-            AddressId = current.Location.Id,
+            AddressId = current.Address.Id,
             TimeIntervalSeconds = minutes * 60.0
         };
 
@@ -615,7 +615,7 @@
             // Time row saved but status update failed — surface the mismatch
             // so the driver knows the stop isn't fully reconciled. The server
             // logs the HTTP failure via ErrorLogService already.
-            _saveStatus = $"✗ Saved time but failed to mark {current.Location.Street} complete — see ErrorLog.";
+            _saveStatus = $"✗ Saved time but failed to mark {current.Address.Street} complete — see ErrorLog.";
             _saveSuccess = false;
             _forcingNext = false;
             StateHasChanged();
@@ -631,8 +631,8 @@
         var next = FindNextDelivery();
         await SetActiveDeliveryAsync(next); // null clears the active marker when route is done
 
-        _saveStatus = $"✓ Saved {minutes:F1} min for {current.Location.Street}"
-            + (next is not null ? $" — now active: {next.Location.Street}" : " — no more pending deliveries");
+        _saveStatus = $"✓ Saved {minutes:F1} min for {current.Address.Street}"
+            + (next is not null ? $" — now active: {next.Address.Street}" : " — no more pending deliveries");
         _saveSuccess = true;
         _forcingNext = false;
         StateHasChanged();
@@ -654,7 +654,7 @@
 
         var confirmed = await JS.InvokeAsync<bool>(
             "confirm",
-            $"Cancel delivery to {current.Location.FullAddress}?\n\n" +
+            $"Cancel delivery to {current.Address.FullAddress}?\n\n" +
             "The delivery will be marked complete, but no delivery time will be saved.");
         if (!confirmed) return;
 
@@ -671,7 +671,7 @@
         var ok = await DeliveryApi.UpdateStatusAsync(current.Id, 2);
         if (!ok)
         {
-            _saveStatus = $"✗ Failed to cancel {current.Location.Street} — see ErrorLog.";
+            _saveStatus = $"✗ Failed to cancel {current.Address.Street} — see ErrorLog.";
             _saveSuccess = false;
             _cancellingActiveDelivery = false;
             StateHasChanged();
@@ -684,9 +684,9 @@
         var next = FindNextDelivery();
         await SetActiveDeliveryAsync(next);
 
-        _saveStatus = $"✓ Cancelled {current.Location.Street}"
+        _saveStatus = $"✓ Cancelled {current.Address.Street}"
             + (next is not null
-                ? $" — now active: {next.Location.Street}"
+                ? $" — now active: {next.Address.Street}"
                 : " — no more pending deliveries");
         _saveSuccess = true;
         _cancellingActiveDelivery = false;
@@ -734,7 +734,7 @@
 
     private void OpenGoogleMapsDirections(IDelivery delivery)
     {
-        var address = delivery.Location.FullAddress;
+        var address = delivery.Address.FullAddress;
         if (string.IsNullOrWhiteSpace(address)) return;
         var dest = Uri.EscapeDataString(address);
 
@@ -742,28 +742,24 @@
         // page can show the note below the address without an extra
         // server round-trip, and knows which address to PUT against
         // when the driver taps "Add tank location".
-        var qs = $"destination={dest}&addressId={delivery.Location.Id}&deliveryId={delivery.Id}";
-        if (!string.IsNullOrWhiteSpace(delivery.Location.TankLocation))
+        var qs = $"destination={dest}&addressId={delivery.Address.Id}&deliveryId={delivery.Id}";
+        if (!string.IsNullOrWhiteSpace(delivery.Address.TankLocation))
         {
-            qs += $"&tankLocation={Uri.EscapeDataString(delivery.Location.TankLocation)}";
+            qs += $"&tankLocation={Uri.EscapeDataString(delivery.Address.TankLocation)}";
         }
-        if (delivery.Location.BackIn)
+        if (delivery.Address.BackIn)
         {
             qs += "&backIn=true";
         }
         Nav.NavigateTo($"/navigation?{qs}");
     }
 
-    // "Set GPS from Truck" — overwrite the stored coordinates on the
-    // selected delivery's Address row with the truck's current GPS fix.
-    // Useful when the geocoded pin is off (long rural driveways, the
-    // tank is behind the house, etc.). We prompt first so one fat-
-    // finger doesn't silently replace a good location with a bad one.
     private async Task SetAddressGpsFromTruck()
     {
         if (_selectedDelivery is null) return;
 
-        var addressId = _selectedDelivery.Location.Id;
+        var addressId = _selectedDelivery.Address.Id;
+
         if (addressId == Guid.Empty)
         {
             _addressGpsStatus = "This delivery has no linked address record.";
@@ -785,9 +781,9 @@
         // what's about to change. If the address has no saved coords yet
         // (HasCoordinates false), there's no meaningful delta — just show
         // the new pin.
-        var oldLat = _selectedDelivery.Location.Latitude;
-        var oldLon = _selectedDelivery.Location.Longitude;
-        var hadCoords = _selectedDelivery.Location.HasCoordinates;
+        var oldLat = _selectedDelivery.Address.Latitude;
+        var oldLon = _selectedDelivery.Address.Longitude;
+        var hadCoords = _selectedDelivery.Address.HasCoordinates;
 
         // Distance in feet between old and new pin, so the prompt/status
         // lines are actionable ("you're moving the pin 320 ft") rather
@@ -799,11 +795,11 @@
         // Native browser confirm. Good enough for a driver-on-a-phone UX
         // and avoids pulling in a modal library just for this one prompt.
         var prompt = hadCoords
-            ? $"Overwrite stored GPS for {_selectedDelivery.Location.FullAddress}?\n\n" +
+            ? $"Overwrite stored GPS for {_selectedDelivery.Address.FullAddress}?\n\n" +
               $"Current: ({oldLat:F6}, {oldLon:F6})\n" +
               $"New:     ({lat:F6}, {lon:F6})\n" +
               $"Change:  ~{moveFeet:F0} ft"
-            : $"Set GPS for {_selectedDelivery.Location.FullAddress} to ({lat:F6}, {lon:F6})?\n\n" +
+            : $"Set GPS for {_selectedDelivery.Address.FullAddress} to ({lat:F6}, {lon:F6})?\n\n" +
               "(No coordinates currently stored.)";
 
         var confirmed = await JS.InvokeAsync<bool>("confirm", prompt);
@@ -819,8 +815,8 @@
         {
             // Update the in-memory delivery so the detail view reflects
             // the new coordinates immediately, without needing a reload.
-            _selectedDelivery.Location.Latitude = lat;
-            _selectedDelivery.Location.Longitude = lon;
+            _selectedDelivery.Address.Latitude = lat;
+            _selectedDelivery.Address.Longitude = lon;
             _addressGpsStatus = hadCoords
                 ? $"✓ Saved — pin moved ~{moveFeet:F0} ft to ({lat:F6}, {lon:F6})"
                 : $"✓ Saved ({lat:F6}, {lon:F6})";
@@ -857,10 +853,10 @@
     private async Task ToggleBackIn()
     {
         if (_selectedDelivery is null || _settingBackIn) return;
-        var addressId = _selectedDelivery.Location.Id;
+        var addressId = _selectedDelivery.Address.Id;
         if (addressId == Guid.Empty) return;
 
-        var newValue = !_selectedDelivery.Location.BackIn;
+        var newValue = !_selectedDelivery.Address.BackIn;
 
         _settingBackIn = true;
         StateHasChanged();
@@ -868,7 +864,7 @@
         var ok = await AddressApi.UpdateBackInAsync(addressId, newValue);
         if (ok)
         {
-            _selectedDelivery.Location.BackIn = newValue;
+            _selectedDelivery.Address.BackIn = newValue;
         }
 
         _settingBackIn = false;
@@ -946,7 +942,7 @@
     private void BeginEditTankLocation()
     {
         if (_selectedDelivery is null) return;
-        _tankLocationDraft = _selectedDelivery.Location.TankLocation ?? string.Empty;
+        _tankLocationDraft = _selectedDelivery.Address.TankLocation ?? string.Empty;
         _tankLocationStatus = null;
         _editingTankLocation = true;
     }
@@ -963,7 +959,7 @@
             || string.IsNullOrWhiteSpace(_tankLocationDraft)
             || _savingTankLocation) return;
 
-        var addressId = _selectedDelivery.Location.Id;
+        var addressId = _selectedDelivery.Address.Id;
         if (addressId == Guid.Empty)
         {
             _tankLocationStatus = "✗ This delivery has no linked address record.";
@@ -980,7 +976,7 @@
 
         if (ok)
         {
-            _selectedDelivery.Location.TankLocation = trimmed;
+            _selectedDelivery.Address.TankLocation = trimmed;
             _tankLocationStatus = "✓ Tank location saved";
             _tankLocationSuccess = true;
             _editingTankLocation = false;
@@ -998,7 +994,7 @@
     private async Task ClearTankLocationNote()
     {
         if (_selectedDelivery is null || _savingTankLocation) return;
-        var addressId = _selectedDelivery.Location.Id;
+        var addressId = _selectedDelivery.Address.Id;
         if (addressId == Guid.Empty) return;
 
         var confirmed = await JS.InvokeAsync<bool>(
@@ -1013,7 +1009,7 @@
 
         if (ok)
         {
-            _selectedDelivery.Location.TankLocation = null;
+            _selectedDelivery.Address.TankLocation = null;
             _tankLocationStatus = "✓ Tank location cleared";
             _tankLocationSuccess = true;
             _editingTankLocation = false;

@@ -133,7 +133,6 @@
     private string _fullDestination = string.Empty;
     private string? _status;
     private bool _mapInitialized;
-    private bool _routing;
 
     // Tank-location state. _addressId = Guid.Empty means "this
     // destination wasn't launched from a delivery row" (e.g. ad-hoc
@@ -380,10 +379,6 @@
     {
         if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
-        // Don't show a transient "routing…" message — the button's disabled
-        // state is enough visual feedback, and the real status (distance + ETA,
-        // or an error) lands as soon as Google responds.
-        _routing = true;
         StateHasChanged();
 
         // Origin = current GPS position.
@@ -393,7 +388,6 @@
         if (originLat == 0 && originLon == 0)
         {
             _status = "Waiting for GPS fix to draw route…";
-            _routing = false;
             return;
         }
 
@@ -413,8 +407,6 @@
         {
             _status = $"Routing error: {ex.Message}";
         }
-
-        _routing = false;
     }
 
     private class NavRouteResult

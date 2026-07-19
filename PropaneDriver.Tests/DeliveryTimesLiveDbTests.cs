@@ -67,7 +67,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
             ZipCode = "00000",
             Latitude = 0.0,
             Longitude = 0.0,
-            AvgDeliveryTimeSeconds = 0
+            AvgDeliveryTimeMinutes = 0
         };
         _db.Addresses.Add(address);
         await _db.SaveChangesAsync();
@@ -113,7 +113,7 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
             ZipCode = "00000",
             Latitude = 0,
             Longitude = 0,
-            AvgDeliveryTimeSeconds = 0
+            AvgDeliveryTimeMinutes = 0
         };
         _db.Addresses.Add(address);
         await _db.SaveChangesAsync();

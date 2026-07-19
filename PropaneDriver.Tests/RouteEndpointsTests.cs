@@ -22,6 +22,7 @@ public class RouteEndpointsTests
             Date = date,
             CreatedAt = DateTime.UtcNow
         };
+        db.Routes.Add(route);
         for (int i = 0; i < deliveryCount; i++)
         {
             var address = new AddressDbRecord
@@ -36,19 +37,19 @@ public class RouteEndpointsTests
             };
             db.Addresses.Add(address);
 
-            route.Deliveries.Add(new DeliveryDbRecord
+            // No Route.Deliveries navigation anymore: insert via the DbSet and
+            // link by RouteId.
+            db.Deliveries.Add(new DeliveryDbRecord
             {
                 Id = Guid.NewGuid(),
                 RouteId = route.Id,
                 AddressId = address.Id,
                 CustomerName = $"Customer {i}",
                 Status = 0,
-                AvgDeliveryTimeMinutes = 15,
                 SortOrder = i,
                 CreatedAt = DateTime.UtcNow
             });
         }
-        db.Routes.Add(route);
         db.SaveChanges();
         return route;
     }
@@ -68,23 +69,18 @@ public class RouteEndpointsTests
         deliveries[2].SortOrder = 0;
         await db.SaveChangesAsync();
 
-        var result = await db.Routes
+        var orderedNames = await db.Deliveries
             .AsNoTracking()
-            .Where(r => r.DriverId == driverId && r.Date == date)
-            .Select(r => new
-            {
-                Deliveries = r.Deliveries
-                    .OrderBy(d => d.SortOrder)
-                    .Select(d => d.CustomerName)
-                    .ToList()
-            })
-            .FirstAsync();
+            .Where(d => d.RouteId == route.Id)
+            .OrderBy(d => d.SortOrder)
+            .Select(d => d.CustomerName)
+            .ToListAsync();
 
-        Assert.Equal(3, result.Deliveries.Count);
+        Assert.Equal(3, orderedNames.Count);
         // After OrderBy(SortOrder): deliveries[2] (SortOrder=0) first, then [1], then [0].
-        Assert.Equal("Customer 2", result.Deliveries[0]);
-        Assert.Equal("Customer 1", result.Deliveries[1]);
-        Assert.Equal("Customer 0", result.Deliveries[2]);
+        Assert.Equal("Customer 2", orderedNames[0]);
+        Assert.Equal("Customer 1", orderedNames[1]);
+        Assert.Equal("Customer 0", orderedNames[2]);
     }
 
     [Fact]
@@ -117,8 +113,8 @@ public class RouteEndpointsTests
             {
                 Id = r.Id.ToString(),
                 Date = r.Date,
-                DeliveryCount = r.Deliveries.Count(),
-                CompletedCount = r.Deliveries.Count(d => d.Status == 2)
+                DeliveryCount = db.Deliveries.Count(d => d.RouteId == r.Id),
+                CompletedCount = db.Deliveries.Count(d => d.RouteId == r.Id && d.Status == 2)
             })
             .ToListAsync();
 
@@ -225,7 +221,6 @@ public class RouteEndpointsTests
                 Id = Guid.NewGuid(),
                 AddressId = address.Id,
                 CustomerName = d.CustomerName,
-                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                 SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
                 Status = 0,
                 CreatedAt = DateTime.UtcNow
@@ -237,10 +232,12 @@ public class RouteEndpointsTests
             Id = Guid.NewGuid(),
             DriverId = driverId,
             Date = dto.Date,
-            CreatedAt = DateTime.UtcNow,
-            Deliveries = deliveries
+            CreatedAt = DateTime.UtcNow
         };
+        foreach (var d in deliveries)
+            d.RouteId = route.Id;
         db.Routes.Add(route);
+        db.Deliveries.AddRange(deliveries);
         await db.SaveChangesAsync();
 
         var stored = await db.Deliveries
@@ -302,7 +299,7 @@ public class RouteEndpointsTests
         var driverId = Guid.NewGuid();
         var date = DateOnly.FromDateTime(DateTime.Today);
         var route = SeedRouteWithDeliveries(db, driverId, date, deliveryCount: 1);
-        var delivery = route.Deliveries[0];
+        var delivery = await db.Deliveries.FirstAsync(d => d.RouteId == route.Id);
 
         var now = DateTime.UtcNow;
         db.Alerts.AddRange(

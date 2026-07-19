@@ -27,33 +27,19 @@ namespace PropaneDriver.Server.Data
         [MaxLength(20)]
         public string ZipCode { get; set; } = string.Empty;
 
-        public double Latitude { get; set; }
+        public double? Latitude { get; set; }
 
-        public double Longitude { get; set; }
+        public double? Longitude { get; set; }
 
-        public double AvgDeliveryTimeSeconds { get; set; }
+        // Rolling average of recorded delivery durations for this address,
+        // in minutes. Computed from the DeliveryTimes table.
+        public double AvgDeliveryTimeMinutes { get; set; }
 
-        // Free-text note describing where the propane tank sits on the
-        // property (e.g. "behind garage, left of AC unit"). Optional;
-        // drivers can leave it blank and existing addresses will read back
-        // as null until someone fills it in.
         [MaxLength(500)]
         public string? TankLocation { get; set; }
 
         // Driveway requires the driver to back the truck in (vs. pull
-        // forward and turn around). Defaults false; existing rows pick
-        // this up automatically when the column is added with a default.
+        // forward and turn around). Defaults false
         public bool BackIn { get; set; }
-
-        // Address skips the GPS-geofence delivery-time logic. The driver
-        // taps Start/Stop buttons in the UI and the elapsed time is saved
-        // when they stop. Used for stops where the truck sits parked for
-        // a long fill (e.g. bulk tanks) and the geofence either never
-        // re-fires or fires at the wrong time.
-        public bool LongRunning { get; set; }
-
-        // Navigation
-        public List<DeliveryDbRecord> Deliveries { get; set; } = new();
-        public List<DeliveryTimeDbRecord> DeliveryTimes { get; set; } = new();
     }
 }

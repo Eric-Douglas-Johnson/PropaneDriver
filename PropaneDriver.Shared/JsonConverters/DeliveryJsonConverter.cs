@@ -13,7 +13,7 @@ namespace PropaneDriver.Shared.JsonConverters
     public class DeliveryJsonConverter : JsonConverter<IDelivery>
     {
         public override IDelivery? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            => JsonSerializer.Deserialize<PropaneDelivery>(ref reader, options);
+            => JsonSerializer.Deserialize<PropaneDeliveryDto>(ref reader, options);
 
         public override void Write(Utf8JsonWriter writer, IDelivery value, JsonSerializerOptions options)
             => JsonSerializer.Serialize(writer, value, value.GetType(), options);

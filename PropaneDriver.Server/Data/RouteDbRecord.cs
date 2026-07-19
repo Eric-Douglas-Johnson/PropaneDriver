@@ -17,8 +17,5 @@ namespace PropaneDriver.Server.Data
         public double EstimatedRouteTime { get; set; }
 
         public DateTime CreatedAt { get; set; }
-
-        // Navigation
-        public List<DeliveryDbRecord> Deliveries { get; set; } = new();
     }
 }

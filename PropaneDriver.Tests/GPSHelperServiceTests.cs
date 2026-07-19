@@ -27,14 +27,15 @@ public class GPSHelperServiceTests
             State = "MN",
             ZipCode = "55746",
             Latitude = lat,
-            Longitude = lng
+            Longitude = lng,
+            // Per-stop servicing time now lives on the address.
+            AvgDeliveryTimeMinutes = avgMinutes
         };
         var delivery = new DeliveryDbRecord
         {
             Id = Guid.NewGuid(),
             AddressId = address.Id,
             SortOrder = sortOrder,
-            AvgDeliveryTimeMinutes = avgMinutes,
             CustomerName = $"Stop-{sortOrder}",
             CreatedAt = DateTime.UtcNow
         };

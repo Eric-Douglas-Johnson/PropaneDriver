@@ -1,6 +1,6 @@
 namespace PropaneDriver.Shared.Dtos
 {
-    public class GeoAddressDto
+    public class AddressDto
     {
         public Guid Id { get; set; }
         public string Street { get; set; } = string.Empty;
@@ -9,7 +9,7 @@ namespace PropaneDriver.Shared.Dtos
         public string ZipCode { get; set; } = string.Empty;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-        public double AvgDeliveryTimeSeconds { get; set; }
+        public double AvgDeliveryTimeMinutes { get; set; }
 
         // Optional free-text note about where the tank sits on the
         // property. Null until the admin fills it in.
@@ -17,10 +17,6 @@ namespace PropaneDriver.Shared.Dtos
 
         // True when the driver must back the truck into this driveway.
         public bool BackIn { get; set; }
-
-        // True when this address skips the GPS-geofence timer flow and
-        // uses driver-driven Start/Stop buttons instead.
-        public bool LongRunning { get; set; }
 
         public string FullAddress =>
             string.Join(", ", new[] { Street, City, State, ZipCode }

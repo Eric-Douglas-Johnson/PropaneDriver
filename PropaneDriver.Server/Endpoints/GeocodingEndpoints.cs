@@ -53,8 +53,8 @@ namespace PropaneDriver.Server.Endpoints
                 {
                     return Results.Ok(new GeocodingResultDto
                     {
-                        Latitude = dbMatch.Latitude,
-                        Longitude = dbMatch.Longitude,
+                        Latitude = dbMatch.Latitude ?? 0,
+                        Longitude = dbMatch.Longitude ?? 0,
                         Street = dbMatch.Street,
                         City = dbMatch.City,
                         State = dbMatch.State,

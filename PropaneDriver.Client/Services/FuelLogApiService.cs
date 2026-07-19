@@ -92,28 +92,78 @@ namespace PropaneDriver.Client.Services
             }
         }
 
+        // Backoff between save retries. One entry per retry, so the total number
+        // of attempts is this length plus the initial attempt.
+        private static readonly TimeSpan[] SaveRetryBackoffDelays =
+        {
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(3)
+        };
+
+        // The fuel-log PUT is a full replace keyed by the signed-in driver, so
+        // replaying the same save is idempotent and safe to retry. On the Free
+        // hosting tier the worker idles out, and the first request after that
+        // fails with the browser's "TypeError: Load failed" (a dead keep-alive
+        // connection / cold start); the very same save succeeds moments later.
+        // Retrying a couple of times with a short backoff makes that self-heal so
+        // the driver never sees a spurious "Save failed".
         public async Task<bool> SaveFuelLogAsync(SaveFuelLogDto dto)
         {
-            try
+            var totalAttempts = SaveRetryBackoffDelays.Length + 1;
+            for (var attemptNumber = 1; attemptNumber <= totalAttempts; attemptNumber++)
             {
-                var response = await _http.PutAsJsonAsync("api/fuel-log", dto);
-                if (!response.IsSuccessStatusCode)
+                var isFinalAttempt = attemptNumber == totalAttempts;
+                try
                 {
+                    var response = await _http.PutAsJsonAsync("api/fuel-log", dto);
+                    if (response.IsSuccessStatusCode)
+                        return true;
+
+                    // A 5xx is transient (cold start / restart) and worth retrying;
+                    // a 4xx won't improve on retry, so report it and stop.
+                    var isTransientStatus = (int)response.StatusCode >= 500;
+                    if (isTransientStatus && !isFinalAttempt)
+                    {
+                        await Task.Delay(SaveRetryBackoffDelays[attemptNumber - 1]);
+                        continue;
+                    }
+
                     var body = await response.Content.ReadAsStringAsync();
                     await ErrorLogService.LogErrorAsync(
                         "FuelLogApiService.SaveFuelLogAsync",
-                        $"PUT api/fuel-log returned {(int)response.StatusCode}: {body}");
+                        $"PUT api/fuel-log returned {(int)response.StatusCode} after {attemptNumber} attempt(s): {body}");
                     return false;
                 }
-                return true;
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                {
+                    // Network-level failure: the browser's "TypeError: Load failed"
+                    // or a timeout. These are the transient cold-start failures, so
+                    // retry until the attempts are exhausted.
+                    if (!isFinalAttempt)
+                    {
+                        await Task.Delay(SaveRetryBackoffDelays[attemptNumber - 1]);
+                        continue;
+                    }
+
+                    await ErrorLogService.LogErrorAsync(
+                        "FuelLogApiService.SaveFuelLogAsync",
+                        $"Exception saving fuel log after {attemptNumber} attempt(s): {ex.Message}");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    // Not a known-transient failure — don't retry, just report it
+                    // the way this method always has.
+                    await ErrorLogService.LogErrorAsync(
+                        "FuelLogApiService.SaveFuelLogAsync",
+                        $"Exception saving fuel log: {ex.Message}");
+                    return false;
+                }
             }
-            catch (Exception ex)
-            {
-                await ErrorLogService.LogErrorAsync(
-                    "FuelLogApiService.SaveFuelLogAsync",
-                    $"Exception saving fuel log: {ex.Message}");
-                return false;
-            }
+
+            // Unreachable — every path inside the loop returns — but the compiler
+            // needs a terminal value.
+            return false;
         }
     }
 }

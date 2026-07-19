@@ -74,6 +74,6 @@ namespace PropaneDriver.Client.Services
         public string City { get; set; } = string.Empty;
         public string State { get; set; } = string.Empty;
         public string ZipCode { get; set; } = string.Empty;
-        public double AvgDeliveryTimeSeconds { get; set; }
+        public double AvgDeliveryTimeMinutes { get; set; }
     }
 }

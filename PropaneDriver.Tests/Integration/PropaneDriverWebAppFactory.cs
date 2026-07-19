@@ -153,7 +153,7 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
             ZipCode = "55001",
             Latitude = 44.0,
             Longitude = -93.0,
-            AvgDeliveryTimeSeconds = 0,
+            AvgDeliveryTimeMinutes = 0,
         };
         db.Addresses.Add(address);
 
@@ -164,7 +164,6 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
             AddressId = address.Id,
             CustomerName = "Test Customer",
             Status = 0,
-            AvgDeliveryTimeMinutes = 0,
             SortOrder = 0,
             CreatedAt = DateTime.UtcNow,
         };

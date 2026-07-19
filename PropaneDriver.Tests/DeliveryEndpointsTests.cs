@@ -40,7 +40,6 @@ public class DeliveryEndpointsTests
             AddressId = address.Id,
             CustomerName = "Ada Lovelace",
             Status = 0,
-            AvgDeliveryTimeMinutes = 15,
             SortOrder = 0,
             CreatedAt = DateTime.UtcNow
         };

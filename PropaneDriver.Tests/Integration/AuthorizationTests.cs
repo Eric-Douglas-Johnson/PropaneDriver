@@ -465,7 +465,7 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    // ---------- PUT /api/addresses/{id}/long-running (AdminOnly — stays admin-only) ----------
+    // ---------- PUT /api/deliveries/{id}/long-running (AdminOnly — stays admin-only) ----------
 
     [Fact]
     public async Task UpdateLongRunning_DriverRole_Returns403()
@@ -473,8 +473,8 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         var driver = _factory.SeedDriver("longrun-driver", role: "driver");
         using var client = _factory.CreateClientForDriver(driver);
         var response = await client.PutAsJsonAsync(
-            $"/api/addresses/{Guid.NewGuid()}/long-running",
-            new AddressLongRunningUpdateDto { LongRunning = true });
+            $"/api/deliveries/{Guid.NewGuid()}/long-running",
+            new DeliveryLongRunningUpdateDto { LongRunning = true });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
@@ -484,8 +484,8 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         var admin = _factory.SeedDriver("longrun-admin", role: "admin");
         using var client = _factory.CreateClientForDriver(admin);
         var response = await client.PutAsJsonAsync(
-            $"/api/addresses/{Guid.NewGuid()}/long-running",
-            new AddressLongRunningUpdateDto { LongRunning = true });
+            $"/api/deliveries/{Guid.NewGuid()}/long-running",
+            new DeliveryLongRunningUpdateDto { LongRunning = true });
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 

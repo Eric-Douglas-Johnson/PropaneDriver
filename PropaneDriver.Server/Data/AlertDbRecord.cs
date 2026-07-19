@@ -17,8 +17,5 @@ namespace PropaneDriver.Server.Data
         public DateTime CreatedAt { get; set; }
 
         public bool Seen { get; set; }
-
-        // Navigation
-        public DeliveryDbRecord? Delivery { get; set; }
     }
 }

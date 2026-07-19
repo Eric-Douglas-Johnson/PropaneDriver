@@ -361,8 +361,7 @@
         {
             <div class="tools-stats-range">
                 @_stats.SampleCount sample@(_stats.SampleCount == 1 ? "" : "s") •
-                @FormatRecordedRange(_stats.OldestRecordedAt, _stats.NewestRecordedAt) •
-                @_stats.GeofencedSampleCount geofenced / @_stats.LongRunningSampleCount long-running
+                @FormatRecordedRange(_stats.OldestRecordedAt, _stats.NewestRecordedAt)
             </div>
 
             <div class="tools-stats-grid">
@@ -436,10 +435,6 @@
                                     <tr>
                                         <td>
                                             @slowAddress.Street, @slowAddress.City @slowAddress.State
-                                            @if (slowAddress.IsLongRunning)
-                                            {
-                                                <span class="tools-tag tools-tag--lr" title="Manual start/stop, not geofenced">LR</span>
-                                            }
                                         </td>
                                         <td class="num">@slowAddress.SampleCount</td>
                                         <td class="num">@FormatDuration(slowAddress.MeanSeconds)</td>
@@ -473,10 +468,6 @@
                                     <tr>
                                         <td>
                                             @frequentAddress.Street, @frequentAddress.City @frequentAddress.State
-                                            @if (frequentAddress.IsLongRunning)
-                                            {
-                                                <span class="tools-tag tools-tag--lr" title="Manual start/stop, not geofenced">LR</span>
-                                            }
                                         </td>
                                         <td class="num">@frequentAddress.SampleCount</td>
                                         <td class="num">@FormatDuration(frequentAddress.MeanSeconds)</td>

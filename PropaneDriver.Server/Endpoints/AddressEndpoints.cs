@@ -20,19 +20,20 @@ namespace PropaneDriver.Server.Endpoints
                 var address = await db.Addresses
                     .AsNoTracking()
                     .Where(a => a.Id == id)
-                    .Select(a => new GeoAddressDto
+                    .Select(a => new AddressDto
                     {
                         Id = a.Id,
                         Street = a.Street,
                         City = a.City,
                         State = a.State,
                         ZipCode = a.ZipCode,
-                        Latitude = a.Latitude,
-                        Longitude = a.Longitude,
-                        AvgDeliveryTimeSeconds = a.AvgDeliveryTimeSeconds,
+                        // Null (never geocoded) collapses to the 0 = "unset"
+                        // sentinel the DTO/HasCoordinates convention expects.
+                        Latitude = a.Latitude ?? 0,
+                        Longitude = a.Longitude ?? 0,
+                        AvgDeliveryTimeMinutes = a.AvgDeliveryTimeMinutes,
                         TankLocation = a.TankLocation,
-                        BackIn = a.BackIn,
-                        LongRunning = a.LongRunning
+                        BackIn = a.BackIn
                     })
                     .FirstOrDefaultAsync();
 
@@ -42,19 +43,13 @@ namespace PropaneDriver.Server.Endpoints
             }).RequireAuthorization("AuthenticatedDriver");
 
             // Overwrite the stored coordinates on an Address row. Used by the
-            // driver-side "set pin here" button when the geocoded location is
-            // off (common for rural long driveways where Google drops the pin
-            // at the road entrance instead of the tank). Leaves every other
-            // field on the row untouched.
+            // driver-side "set pin here" button 
             group.MapPut("{id:guid}/coordinates", async (
                 Guid id,
                 AddressCoordinatesUpdateDto dto,
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
-                // Sanity-check the payload. (0,0) is the canonical "unset"
-                // sentinel our code uses elsewhere, and absurd values almost
-                // always indicate a broken GPS frame rather than a real fix.
                 if (dto.Latitude == 0 && dto.Longitude == 0)
                     return Results.BadRequest(new { Message = "Latitude and Longitude cannot both be 0." });
                 if (dto.Latitude < -90 || dto.Latitude > 90)
@@ -163,39 +158,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Toggle the LongRunning flag on an Address row. When true,
-            // the driver client uses Start/Stop buttons instead of the
-            // GPS-geofence auto-timer for deliveries to this address.
-            group.MapPut("{id:guid}/long-running", async (
-                Guid id,
-                AddressLongRunningUpdateDto dto,
-                PropaneDriverDbContext db,
-                ILogger<Program> logger) =>
-            {
-                var address = await db.Addresses.FindAsync(id);
-                if (address is null)
-                    return Results.NotFound(new { Message = $"Address {id} not found." });
-
-                address.LongRunning = dto.LongRunning;
-
-                try
-                {
-                    await db.SaveChangesAsync();
-                    logger.LogInformation(
-                        "Updated LongRunning for Address {AddressId} to {LongRunning}",
-                        id, dto.LongRunning);
-
-                    return Results.Ok(new { id, address.LongRunning });
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to update LongRunning for Address {AddressId}", id);
-                    return Results.Problem(
-                        detail: ex.Message,
-                        title: "Failed to update long-running flag",
-                        statusCode: 500);
-                }
-            }).RequireAuthorization("AdminOnly");
+            // LongRunning moved to the delivery (PUT api/deliveries/{id}/long-running).
 
             return app;
         }

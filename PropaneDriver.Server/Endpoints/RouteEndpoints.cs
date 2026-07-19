@@ -29,53 +29,12 @@ namespace PropaneDriver.Server.Endpoints
 
                 var route = await db.Routes
                     .AsNoTracking()
-                    .Where(r => r.DriverId == driverId && r.Date == date)
-                    .Select(r => new RouteDto
-                    {
-                        Id = r.Id.ToString(),
-                        DriverId = r.DriverId.ToString(),
-                        Date = r.Date,
-                        EstimatedRouteTime = r.EstimatedRouteTime,
-                        Deliveries = r.Deliveries
-                            .OrderBy(d => d.SortOrder)
-                            .Select(d => (IDelivery)new PropaneDelivery
-                            {
-                                Id = d.Id.ToString(),
-                                CustomerName = d.CustomerName,
-                                Date = r.Date,
-                                Location = new GeoAddressDto
-                                {
-                                    Id = d.Address!.Id,
-                                    Street = d.Address.Street,
-                                    City = d.Address.City,
-                                    State = d.Address.State,
-                                    ZipCode = d.Address.ZipCode,
-                                    Latitude = d.Address.Latitude,
-                                    Longitude = d.Address.Longitude,
-                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
-                                    TankLocation = d.Address.TankLocation,
-                                    BackIn = d.Address.BackIn,
-                                    LongRunning = d.Address.LongRunning
-                                },
-                                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                                Status = d.Status,
-                                Alerts = d.Alerts
-                                    .OrderBy(a => a.CreatedAt)
-                                    .Select(a => new AlertDto
-                                    {
-                                        Id = a.Id.ToString(),
-                                        DeliveryId = a.DeliveryId.ToString(),
-                                        Message = a.Message,
-                                        CreatedAt = a.CreatedAt,
-                                        Seen = a.Seen
-                                    })
-                                    .ToList()
-                            })
-                            .ToList()
-                    })
-                    .FirstOrDefaultAsync();
+                    .FirstOrDefaultAsync(r => r.DriverId == driverId && r.Date == date);
 
-                return route is null ? Results.NotFound() : Results.Ok(route);
+                if (route is null) return Results.NotFound();
+
+                var routeDto = await BuildRouteDtoAsync(route, db);
+                return Results.Ok(routeDto);
             }).RequireAuthorization("AuthenticatedDriver");
 
             // List all routes for a driver (summary info). Drivers may list
@@ -97,8 +56,8 @@ namespace PropaneDriver.Server.Endpoints
                     {
                         Id = r.Id.ToString(),
                         Date = r.Date,
-                        DeliveryCount = r.Deliveries.Count(),
-                        CompletedCount = r.Deliveries.Count(d => d.Status == 2)
+                        DeliveryCount = db.Deliveries.Count(d => d.RouteId == r.Id),
+                        CompletedCount = db.Deliveries.Count(d => d.RouteId == r.Id && d.Status == 2)
                     })
                     .ToListAsync();
 
@@ -156,53 +115,11 @@ namespace PropaneDriver.Server.Endpoints
                     TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, centralTz));
                 var route = await db.Routes
                     .AsNoTracking()
-                    .Where(r => r.DriverId == driverId && r.Date == today)
-                    .Select(r => new RouteDto
-                    {
-                        Id = r.Id.ToString(),
-                        DriverId = r.DriverId.ToString(),
-                        Date = r.Date,
-                        EstimatedRouteTime = r.EstimatedRouteTime,
-                        Deliveries = r.Deliveries
-                            .OrderBy(d => d.SortOrder)
-                            .Select(d => (IDelivery)new PropaneDelivery
-                            {
-                                Id = d.Id.ToString(),
-                                CustomerName = d.CustomerName,
-                                Date = r.Date,
-                                Location = new GeoAddressDto
-                                {
-                                    Id = d.Address!.Id,
-                                    Street = d.Address.Street,
-                                    City = d.Address.City,
-                                    State = d.Address.State,
-                                    ZipCode = d.Address.ZipCode,
-                                    Latitude = d.Address.Latitude,
-                                    Longitude = d.Address.Longitude,
-                                    AvgDeliveryTimeSeconds = d.Address.AvgDeliveryTimeSeconds,
-                                    TankLocation = d.Address.TankLocation,
-                                    BackIn = d.Address.BackIn,
-                                    LongRunning = d.Address.LongRunning
-                                },
-                                AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
-                                Status = d.Status,
-                                Alerts = d.Alerts
-                                    .OrderBy(a => a.CreatedAt)
-                                    .Select(a => new AlertDto
-                                    {
-                                        Id = a.Id.ToString(),
-                                        DeliveryId = a.DeliveryId.ToString(),
-                                        Message = a.Message,
-                                        CreatedAt = a.CreatedAt,
-                                        Seen = a.Seen
-                                    })
-                                    .ToList()
-                            })
-                            .ToList()
-                    })
-                    .FirstOrDefaultAsync();
+                    .FirstOrDefaultAsync(r => r.DriverId == driverId && r.Date == today);
 
                 if (route is null) return Results.NotFound();
+
+                var routeDto = await BuildRouteDtoAsync(route, db);
 
                 // Hydrate the actual recorded delivery time on each completed
                 // stop so the minimized "Complete" row can show the duration
@@ -210,7 +127,7 @@ namespace PropaneDriver.Server.Endpoints
                 // dictionary is empty. The DeliveryTimes table is keyed by the
                 // delivery's string Id (Guid.ToString()), so we group by it and
                 // pick the most recent record per delivery.
-                var deliveryIds = route.Deliveries.Select(d => d.Id).ToList();
+                var deliveryIds = routeDto.Deliveries.Select(d => d.Id).ToList();
                 if (deliveryIds.Count > 0)
                 {
                     var times = await db.DeliveryTimes
@@ -224,14 +141,14 @@ namespace PropaneDriver.Server.Endpoints
                             g => g.Key,
                             g => g.OrderByDescending(x => x.RecordedAt).First().TimeIntervalSeconds);
 
-                    foreach (var d in route.Deliveries)
+                    foreach (var d in routeDto.Deliveries)
                     {
                         if (latestByDelivery.TryGetValue(d.Id, out var seconds))
                             d.RecordedTimeSeconds = seconds;
                     }
                 }
 
-                return Results.Ok(route);
+                return Results.Ok(routeDto);
             }).RequireAuthorization("AuthenticatedDriver");
 
             // Create a route with deliveries. Drivers create their own
@@ -291,15 +208,10 @@ namespace PropaneDriver.Server.Endpoints
                             && EF.Functions.Collate(a.State, ci) == state
                             && EF.Functions.Collate(a.ZipCode, ci) == zip);
 
-                        // Normalize the tank-location note: trim, and treat
-                        // whitespace-only as "not provided" so we don't overwrite
-                        // an existing stored value with an empty string.
-                        var tankLocation = string.IsNullOrWhiteSpace(d.TankLocation)
-                            ? null
-                            : d.TankLocation.Trim();
-
                         if (address is null)
                         {
+                            // TankLocation stays null at create time — it's an
+                            // address-only field set later via the address endpoint.
                             address = new AddressDbRecord
                             {
                                 Id = Guid.NewGuid(),
@@ -309,10 +221,8 @@ namespace PropaneDriver.Server.Endpoints
                                 ZipCode = zip,
                                 Latitude = d.Latitude,
                                 Longitude = d.Longitude,
-                                AvgDeliveryTimeSeconds = 0,
-                                TankLocation = tankLocation,
-                                BackIn = d.BackIn,
-                                LongRunning = d.LongRunning
+                                AvgDeliveryTimeMinutes = 0,
+                                BackIn = d.BackIn
                             };
                             db.Addresses.Add(address);
                         }
@@ -322,27 +232,6 @@ namespace PropaneDriver.Server.Endpoints
                             {
                                 address.Latitude = d.Latitude;
                                 address.Longitude = d.Longitude;
-                            }
-
-                            // Only update TankLocation when the caller actually
-                            // supplied one — a null/blank value on a fresh route
-                            // submit shouldn't wipe a previously-saved note.
-                            if (tankLocation is not null)
-                            {
-                                address.TankLocation = tankLocation;
-                            }
-
-                            // Carry the LongRunning checkbox onto an existing
-                            // address so a repeat customer flagged at create
-                            // time actually gets the manual start/stop timer.
-                            // Only flip it ON here: the create form's checkbox
-                            // isn't pre-filled from the stored value, so an
-                            // unchecked box on a fresh submit must not silently
-                            // clear a flag managed authoritatively via the Admin
-                            // per-row toggle.
-                            if (d.LongRunning)
-                            {
-                                address.LongRunning = true;
                             }
                         }
 
@@ -362,9 +251,9 @@ namespace PropaneDriver.Server.Endpoints
                             Id = Guid.NewGuid(),
                             AddressId = addressCache[key].Id,
                             CustomerName = d.CustomerName,
-                            AvgDeliveryTimeMinutes = d.AvgDeliveryTimeMinutes,
                             SortOrder = d.SortOrder == 0 ? i : d.SortOrder,
                             Status = 0,
+                            LongRunning = d.LongRunning,
                             CreatedAt = DateTime.UtcNow
                         };
                     }).ToList();
@@ -378,14 +267,19 @@ namespace PropaneDriver.Server.Endpoints
                         DriverId = driverId,
                         Date = dto.Date,
                         CreatedAt = DateTime.UtcNow,
-                        EstimatedRouteTime = estimatedRouteTime,
-                        Deliveries = deliveries
+                        EstimatedRouteTime = estimatedRouteTime
                     };
 
+                    // No navigation collection anymore: point each delivery at
+                    // the route by FK and insert both explicitly.
+                    foreach (var delivery in deliveries)
+                        delivery.RouteId = route.Id;
+
                     db.Routes.Add(route);
+                    db.Deliveries.AddRange(deliveries);
                     await db.SaveChangesAsync();
 
-                    return Results.Ok(new { route.Id, DeliveryCount = route.Deliveries.Count });
+                    return Results.Ok(new { route.Id, DeliveryCount = deliveries.Count });
                 }
                 catch (Exception ex)
                 {
@@ -410,77 +304,51 @@ namespace PropaneDriver.Server.Endpoints
                     string.IsNullOrWhiteSpace(dto.Street) ||
                     string.IsNullOrWhiteSpace(dto.City) ||
                     string.IsNullOrWhiteSpace(dto.State) ||
-                    string.IsNullOrWhiteSpace(dto.ZipCode))
-                    return Results.BadRequest(new { Message = "Customer name and all address fields are required." });
+                    string.IsNullOrWhiteSpace(dto.ZipCode) ||
+                    dto.Latitude == 0.0 ||
+                    dto.Longitude == 0.0)
+
+                    return Results.BadRequest(new { Message = "Customer name, address fields, longitude and latitude are required." });
 
                 try
                 {
                     var route = await db.Routes
-                        .Include(r => r.Deliveries)
                         .FirstOrDefaultAsync(r => r.Id == routeId);
+
                     if (route is null) return Results.NotFound();
+                    if (!user.CanAccessDriverData(route.DriverId)) return Results.Forbid();
 
-                    if (!user.CanAccessDriverData(route.DriverId))
-                        return Results.Forbid();
+                    var address = await GetExistingAddress(dto, db);
 
-                    var street = dto.Street.Trim();
-                    var city = dto.City.Trim();
-                    var state = dto.State.Trim();
-                    var zip = dto.ZipCode.Trim();
-
-                    const string ci = "SQL_Latin1_General_CP1_CI_AS";
-                    var address = await db.Addresses.FirstOrDefaultAsync(a =>
-                        EF.Functions.Collate(a.Street, ci) == street
-                        && EF.Functions.Collate(a.City, ci) == city
-                        && EF.Functions.Collate(a.State, ci) == state
-                        && EF.Functions.Collate(a.ZipCode, ci) == zip);
-
-                    var tankLocation = string.IsNullOrWhiteSpace(dto.TankLocation)
-                        ? null
-                        : dto.TankLocation.Trim();
-
-                    if (address is null)
+                    if (address is null) //address does not exist, so add
                     {
+                        // LongRunning is per-delivery now; TankLocation is set
+                        // separately via the address endpoint. Neither is written here.
                         address = new AddressDbRecord
                         {
                             Id = Guid.NewGuid(),
-                            Street = street,
-                            City = city,
-                            State = state,
-                            ZipCode = zip,
+                            Street = dto.Street,
+                            City = dto.City,
+                            State = dto.State,
+                            ZipCode = dto.ZipCode,
                             Latitude = dto.Latitude,
                             Longitude = dto.Longitude,
-                            AvgDeliveryTimeSeconds = 0,
-                            TankLocation = tankLocation,
-                            BackIn = dto.BackIn,
-                            LongRunning = dto.LongRunning
+                            AvgDeliveryTimeMinutes = 0,
+                            BackIn = dto.BackIn
                         };
+
                         db.Addresses.Add(address);
                     }
-                    else
-                    {
-                        if (dto.Latitude != 0 || dto.Longitude != 0)
-                        {
-                            address.Latitude = dto.Latitude;
-                            address.Longitude = dto.Longitude;
-                        }
-                        if (tankLocation is not null)
-                        {
-                            address.TankLocation = tankLocation;
-                        }
 
-                        // Flip LongRunning ON when requested (see the bulk
-                        // create path above for why we never clear it here).
-                        if (dto.LongRunning)
-                        {
-                            address.LongRunning = true;
-                        }
-                    }
                     await db.SaveChangesAsync();
 
-                    var nextSort = route.Deliveries.Count == 0
-                        ? 0
-                        : route.Deliveries.Max(d => d.SortOrder) + 1;
+                    // Next sort order is max(existing)+1, computed in SQL so we
+                    // don't need the route's (now-removed) delivery collection.
+                    var maxSortOrder = await db.Deliveries
+                        .Where(d => d.RouteId == route.Id)
+                        .Select(d => (int?)d.SortOrder)
+                        .MaxAsync();
+                    var nextSort = maxSortOrder.HasValue ? maxSortOrder.Value + 1 : 0;
 
                     var delivery = new DeliveryDbRecord
                     {
@@ -488,9 +356,9 @@ namespace PropaneDriver.Server.Endpoints
                         RouteId = route.Id,
                         AddressId = address.Id,
                         CustomerName = dto.CustomerName.Trim(),
-                        AvgDeliveryTimeMinutes = dto.AvgDeliveryTimeMinutes,
                         SortOrder = nextSort,
                         Status = 0,
+                        LongRunning = dto.LongRunning,
                         CreatedAt = DateTime.UtcNow
                     };
                     db.Deliveries.Add(delivery);
@@ -523,6 +391,88 @@ namespace PropaneDriver.Server.Endpoints
             }).RequireAuthorization("AuthenticatedDriver");
 
             return app;
+        }
+
+        private static async Task<RouteDto> BuildRouteDtoAsync(RouteDbRecord route, PropaneDriverDbContext db)
+        {
+            var deliveriesWithAddress = await db.Deliveries
+                .AsNoTracking()
+                .Where(d => d.RouteId == route.Id)
+                .OrderBy(d => d.SortOrder)
+                .Join(db.Addresses,
+                    d => d.AddressId,
+                    a => a.Id,
+                    (d, a) => new { Delivery = d, Address = a })
+                .ToListAsync();
+
+            var deliveryIds = deliveriesWithAddress.Select(x => x.Delivery.Id).ToList();
+
+            var alertsByDelivery = (await db.Alerts
+                    .AsNoTracking()
+                    .Where(a => deliveryIds.Contains(a.DeliveryId))
+                    .OrderBy(a => a.CreatedAt)
+                    .ToListAsync())
+                .GroupBy(a => a.DeliveryId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            return new RouteDto
+            {
+                Id = route.Id.ToString(),
+                DriverId = route.DriverId.ToString(),
+                Date = route.Date,
+                EstimatedRouteTime = route.EstimatedRouteTime,
+                Deliveries = deliveriesWithAddress
+                    .Select(x => (IDelivery)new PropaneDeliveryDto
+                    {
+                        Id = x.Delivery.Id.ToString(),
+                        CustomerName = x.Delivery.CustomerName,
+                        Date = route.Date,
+                        LongRunning = x.Delivery.LongRunning,
+                        Address = new AddressDto
+                        {
+                            Id = x.Address.Id,
+                            Street = x.Address.Street,
+                            City = x.Address.City,
+                            State = x.Address.State,
+                            ZipCode = x.Address.ZipCode,
+                            Latitude = x.Address.Latitude ?? 0,
+                            Longitude = x.Address.Longitude ?? 0,
+                            AvgDeliveryTimeMinutes = x.Address.AvgDeliveryTimeMinutes,
+                            TankLocation = x.Address.TankLocation,
+                            BackIn = x.Address.BackIn
+                        },
+                        Status = x.Delivery.Status,
+                        Alerts = (alertsByDelivery.TryGetValue(x.Delivery.Id, out var alerts)
+                                ? alerts
+                                : new List<AlertDbRecord>())
+                            .Select(a => new AlertDto
+                            {
+                                Id = a.Id.ToString(),
+                                DeliveryId = a.DeliveryId.ToString(),
+                                Message = a.Message,
+                                CreatedAt = a.CreatedAt,
+                                Seen = a.Seen
+                            })
+                            .ToList()
+                    })
+                    .ToList()
+            };
+        }
+
+        private static async Task<AddressDbRecord?> GetExistingAddress(CreateDeliveryDto dto, PropaneDriverDbContext db)
+        {
+            var street = dto.Street.Trim();
+            var city = dto.City.Trim();
+            var state = dto.State.Trim();
+            var zip = dto.ZipCode.Trim();
+
+            const string ci = "SQL_Latin1_General_CP1_CI_AS";
+
+            return await db.Addresses.FirstOrDefaultAsync(a =>
+                EF.Functions.Collate(a.Street, ci) == street
+                && EF.Functions.Collate(a.City, ci) == city
+                && EF.Functions.Collate(a.State, ci) == state
+                && EF.Functions.Collate(a.ZipCode, ci) == zip);
         }
     }
 }

@@ -17,11 +17,6 @@ namespace PropaneDriver.Shared.Dtos
         public double MaximumSeconds { get; set; }
         public double TotalSeconds { get; set; }
 
-        // Addresses flagged LongRunning use manual start/stop instead of
-        // the GPS geofence, so it's useful to know how the sample splits.
-        public int LongRunningSampleCount { get; set; }
-        public int GeofencedSampleCount { get; set; }
-
         public System.Collections.Generic.List<DeliveryTimeDistributionBucketDto> Distribution { get; set; } = new();
         public System.Collections.Generic.List<DeliveryTimeAddressStatDto> SlowestAddresses { get; set; } = new();
         public System.Collections.Generic.List<DeliveryTimeAddressStatDto> MostFrequentAddresses { get; set; } = new();
@@ -43,6 +38,5 @@ namespace PropaneDriver.Shared.Dtos
         public int SampleCount { get; set; }
         public double MeanSeconds { get; set; }
         public double MedianSeconds { get; set; }
-        public bool IsLongRunning { get; set; }
     }
 }

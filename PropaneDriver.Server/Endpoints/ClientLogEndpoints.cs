@@ -59,7 +59,7 @@ namespace PropaneDriver.Server.Endpoints
                           [ZipCode] nvarchar(20) NOT NULL,
                           [Latitude] float NOT NULL DEFAULT 0,
                           [Longitude] float NOT NULL DEFAULT 0,
-                          [AvgDeliveryTimeSeconds] float NOT NULL DEFAULT 0,
+                          [AvgDeliveryTimeMinutes] float NOT NULL DEFAULT 0,
                           CONSTRAINT [UQ_Addresses_Location] UNIQUE ([Street],[City],[State],[ZipCode])
                       )",
 
@@ -69,7 +69,7 @@ namespace PropaneDriver.Server.Endpoints
                     //    has already been migrated and d.[Street] no longer exists, which
                     //    trips "Invalid column name" at compile time.
                     @"IF EXISTS (SELECT 1 FROM sys.columns WHERE Name=N'Street' AND Object_ID=Object_ID(N'[dbo].[Deliveries]'))
-                      EXEC('INSERT INTO [Addresses] ([Id],[Street],[City],[State],[ZipCode],[Latitude],[Longitude],[AvgDeliveryTimeSeconds])
+                      EXEC('INSERT INTO [Addresses] ([Id],[Street],[City],[State],[ZipCode],[Latitude],[Longitude],[AvgDeliveryTimeMinutes])
                             SELECT NEWID(),d.[Street],d.[City],d.[State],d.[ZipCode],AVG(d.[Latitude]),AVG(d.[Longitude]),0
                             FROM [Deliveries] d
                             WHERE LEN(TRIM(d.[Street]))>0 AND LEN(TRIM(d.[City]))>0 AND LEN(TRIM(d.[State]))>0 AND LEN(TRIM(d.[ZipCode]))>0

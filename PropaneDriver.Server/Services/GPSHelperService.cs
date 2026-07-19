@@ -43,8 +43,12 @@ namespace PropaneDriver.Server.Services
             double deliveryMinutes = 0;
             foreach (var d in ordered)
             {
-                deliveryMinutes += d.AvgDeliveryTimeMinutes > 0
-                    ? d.AvgDeliveryTimeMinutes
+                // Per-stop time now lives on the address (in minutes).
+                var avgMinutes = addressById.TryGetValue(d.AddressId, out var addr)
+                    ? addr.AvgDeliveryTimeMinutes
+                    : 0;
+                deliveryMinutes += avgMinutes > 0
+                    ? avgMinutes
                     : DefaultDeliveryMinutes;
             }
 
@@ -62,15 +66,15 @@ namespace PropaneDriver.Server.Services
                     continue;
 
                 driveMinutes += EstimateDriveMinutes(
-                    prevAddr.Latitude, prevAddr.Longitude,
-                    currAddr.Latitude, currAddr.Longitude);
+                    prevAddr.Latitude.GetValueOrDefault(), prevAddr.Longitude.GetValueOrDefault(),
+                    currAddr.Latitude.GetValueOrDefault(), currAddr.Longitude.GetValueOrDefault());
             }
 
             return (int)Math.Round(deliveryMinutes + driveMinutes);
         }
 
         private static bool HasCoordinates(AddressDbRecord a)
-            => a.Latitude != 0 || a.Longitude != 0;
+            => a.Latitude.GetValueOrDefault() != 0 || a.Longitude.GetValueOrDefault() != 0;
 
         private static double EstimateDriveMinutes(double lat1, double lng1, double lat2, double lng2)
         {

@@ -1,3 +1,4 @@
+
 using Microsoft.EntityFrameworkCore;
 
 namespace PropaneDriver.Server.Data
@@ -34,10 +35,6 @@ namespace PropaneDriver.Server.Data
                 entity.ToTable("DeliveryTimes");
                 entity.HasIndex(e => e.AddressId);
                 entity.HasIndex(e => e.DeliveryId);
-                entity.HasOne(e => e.Address)
-                      .WithMany(a => a.DeliveryTimes)
-                      .HasForeignKey(e => e.AddressId)
-                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<DriverDbRecord>(entity =>
@@ -75,12 +72,14 @@ namespace PropaneDriver.Server.Data
                 entity.HasIndex(e => e.RouteId);
                 entity.HasIndex(e => new { e.RouteId, e.SortOrder });
                 entity.HasIndex(e => e.AddressId);
-                entity.HasOne(e => e.Route)
-                      .WithMany(r => r.Deliveries)
+                // Relationships kept FK-only (no navigation properties) so the
+                // schema and cascade behavior are unchanged; queries join by id.
+                entity.HasOne<RouteDbRecord>()
+                      .WithMany()
                       .HasForeignKey(e => e.RouteId)
                       .OnDelete(DeleteBehavior.Cascade);
-                entity.HasOne(e => e.Address)
-                      .WithMany(a => a.Deliveries)
+                entity.HasOne<AddressDbRecord>()
+                      .WithMany()
                       .HasForeignKey(e => e.AddressId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
@@ -89,8 +88,8 @@ namespace PropaneDriver.Server.Data
             {
                 entity.ToTable("Alerts");
                 entity.HasIndex(e => e.DeliveryId);
-                entity.HasOne(e => e.Delivery)
-                      .WithMany(d => d.Alerts)
+                entity.HasOne<DeliveryDbRecord>()
+                      .WithMany()
                       .HasForeignKey(e => e.DeliveryId)
                       .OnDelete(DeleteBehavior.Cascade);
             });

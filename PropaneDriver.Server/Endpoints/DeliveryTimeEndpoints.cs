@@ -49,7 +49,8 @@ namespace PropaneDriver.Server.Endpoints
                         times.RemoveAt(0);
                     }
 
-                    address.AvgDeliveryTimeSeconds = times.Count > 0 ? times.Average() : 0;
+                    // Stored average is in minutes; recorded intervals are seconds.
+                    address.AvgDeliveryTimeMinutes = times.Count > 0 ? times.Average() / 60.0 : 0;
                     await db.SaveChangesAsync();
 
                     logger.LogInformation("Saved delivery time Id={Id} for Address={AddressId}", entity.Id, dto.AddressId);
@@ -78,7 +79,7 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(new
                 {
                     AddressId = addressId,
-                    address.AvgDeliveryTimeSeconds,
+                    address.AvgDeliveryTimeMinutes,
                     address.Street,
                     address.City,
                     address.State,
@@ -96,9 +97,7 @@ namespace PropaneDriver.Server.Endpoints
                 DateTime? to,
                 PropaneDriverDbContext db) =>
             {
-                var query = db.DeliveryTimes
-                    .Include(deliveryTime => deliveryTime.Address)
-                    .AsQueryable();
+                var query = db.DeliveryTimes.AsQueryable();
 
                 if (from.HasValue)
                 {
@@ -111,15 +110,19 @@ namespace PropaneDriver.Server.Endpoints
                     query = query.Where(deliveryTime => deliveryTime.RecordedAt <= toUtc);
                 }
 
+                // Join to Addresses by id to pull the address columns the stats
+                // rows need (no navigation property on DeliveryTimeDbRecord).
                 var records = await query
-                    .Select(deliveryTime => new DeliveryTimeStatsRow(
-                        deliveryTime.AddressId,
-                        deliveryTime.TimeIntervalSeconds,
-                        deliveryTime.RecordedAt,
-                        deliveryTime.Address!.Street,
-                        deliveryTime.Address!.City,
-                        deliveryTime.Address!.State,
-                        deliveryTime.Address!.LongRunning))
+                    .Join(db.Addresses,
+                        deliveryTime => deliveryTime.AddressId,
+                        address => address.Id,
+                        (deliveryTime, address) => new DeliveryTimeStatsRow(
+                            deliveryTime.AddressId,
+                            deliveryTime.TimeIntervalSeconds,
+                            deliveryTime.RecordedAt,
+                            address.Street,
+                            address.City,
+                            address.State))
                     .ToListAsync();
 
                 var stats = new DeliveryTimeStatsDto { SampleCount = records.Count };
@@ -140,9 +143,6 @@ namespace PropaneDriver.Server.Endpoints
                 stats.MeanSeconds = sortedSeconds.Average();
                 stats.MedianSeconds = ComputeMedian(sortedSeconds);
                 stats.StandardDeviationSeconds = ComputeStandardDeviation(sortedSeconds, stats.MeanSeconds);
-
-                stats.LongRunningSampleCount = records.Count(record => record.IsLongRunning);
-                stats.GeofencedSampleCount = records.Count - stats.LongRunningSampleCount;
 
                 // Five buckets in minutes. The last is unbounded so very slow
                 // outliers (bulk fills, problem stops) all land in one place.
@@ -190,7 +190,6 @@ namespace PropaneDriver.Server.Endpoints
                             Street = firstRowForAddress.Street,
                             City = firstRowForAddress.City,
                             State = firstRowForAddress.State,
-                            IsLongRunning = firstRowForAddress.IsLongRunning,
                             SampleCount = sortedTimesForAddress.Length,
                             MeanSeconds = sortedTimesForAddress.Average(),
                             MedianSeconds = ComputeMedian(sortedTimesForAddress)
@@ -224,8 +223,7 @@ namespace PropaneDriver.Server.Endpoints
             DateTime RecordedAt,
             string Street,
             string City,
-            string State,
-            bool IsLongRunning);
+            string State);
 
         private static double ComputeMedian(IReadOnlyList<double> sortedValues)
         {

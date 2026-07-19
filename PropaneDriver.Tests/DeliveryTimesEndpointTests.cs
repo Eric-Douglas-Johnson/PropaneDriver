@@ -25,7 +25,7 @@ public class DeliveryTimesEndpointTests
             ZipCode = zip,
             Latitude = 47.0,
             Longitude = -93.0,
-            AvgDeliveryTimeSeconds = 0
+            AvgDeliveryTimeMinutes = 0
         };
 
     private static DeliveryTimeDbRecord MakeEntity(Guid addressId, string deliveryId, double seconds) =>
