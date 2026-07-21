@@ -317,7 +317,11 @@
     color: whitesmoke;
     border: 1px solid #2a2a4a;
     border-radius: 6px;
-    padding: 0.5rem 1rem;
+    /* Tall enough to hit reliably from the seat with a gloved thumb — past
+       the 44px/48px touch-target floors, since this gets tapped while the
+       truck is moving. Matched by .btn-route so the pair stays level. */
+    padding: 0.9rem 1rem;
+    min-height: 3.5rem;
     font-size: 1.25rem;
     font-weight: 500;
     cursor: pointer;
@@ -346,7 +350,9 @@
     color: whitesmoke;
     border: 1px solid #2a2a4a;
     border-radius: 6px;
-    padding: 0.5rem 1rem;
+    /* Height matched to .btn-back — see the note there. */
+    padding: 0.9rem 1rem;
+    min-height: 3.5rem;
     font-size: 1.25rem;
     font-weight: 500;
     cursor: pointer;
