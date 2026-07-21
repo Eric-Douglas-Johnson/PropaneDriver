@@ -352,6 +352,10 @@
     cursor: pointer;
     line-height: 1.2;
     box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    /* Hold the width of the wider "Refresh Route" label so swapping to
+       "Routing…" doesn't make the button visibly shrink mid-tap. */
+    min-width: 10.5rem;
+    text-align: center;
 }
 
 .btn-route:hover:not(:disabled) {

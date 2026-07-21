@@ -153,9 +153,9 @@
             &larr; Deliveries
         </button>
         <button class="btn-route" @onclick="FetchAndDrawRoute"
-                disabled="@string.IsNullOrWhiteSpace(RoutingDestination)"
+                disabled="@(_isRouting || string.IsNullOrWhiteSpace(RoutingDestination))"
                 title="Redraw the route to the destination above from your current position">
-            Refresh Route
+            @(_isRouting ? "Routing…" : "Refresh Route")
         </button>
         <button class="center-btn" @onclick="CenterOnLocation" title="Center on my location">&#8982;</button>
     </div>
@@ -169,6 +169,10 @@
     private string _fullDestination = string.Empty;
     private string? _status;
     private bool _mapInitialized;
+
+    // True while a Directions request is outstanding. Gates the Refresh Route
+    // button so repeated taps don't each bill a request.
+    private bool _isRouting;
 
     // Tank-location state. _addressId = Guid.Empty means "this
     // destination wasn't launched from a delivery row" (e.g. ad-hoc
@@ -486,49 +490,67 @@
     {
         if (string.IsNullOrWhiteSpace(RoutingDestination)) return;
 
+        // Every call here is a billed Directions request, and on a slow rural
+        // connection the driver gets no feedback that one is in flight — so
+        // they tap again. Drop taps while one is outstanding rather than
+        // firing a request per tap.
+        if (_isRouting) return;
+
+        _isRouting = true;
         StateHasChanged();
-
-        // Origin = current GPS position.
-        var originLat = GeolocationService.CurrentLatitude;
-        var originLon = GeolocationService.CurrentLongitude;
-
-        if (originLat == 0 && originLon == 0)
-        {
-            _status = "Waiting for GPS fix to draw route…";
-            return;
-        }
 
         try
         {
-            // Google's DirectionsService geocodes the destination address
-            // internally, so we pass the raw address string instead of
-            // doing a separate geocode call.
-            var result = await JS.InvokeAsync<NavRouteResult>(
-                "navMapDrawRoute", originLat, originLon, RoutingDestination);
+            // Origin = current GPS position.
+            var originLat = GeolocationService.CurrentLatitude;
+            var originLon = GeolocationService.CurrentLongitude;
 
-            var distMiles = result.DistanceMeters / MetersPerMile;
-            var durMin = result.DurationSeconds / 60.0;
-            _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
+            if (originLat == 0 && originLon == 0)
+            {
+                _status = "Waiting for GPS fix to draw route…";
+                return;
+            }
 
-            // Hand the maneuver list to the tracker and prime the banner from
-            // the current fix so the first turn shows immediately instead of
-            // waiting for the next GPS update to land.
-            _routeProgressTracker.SetSteps(result.Steps);
-            _progress = _routeProgressTracker.Update(originLat, originLon);
-            _lastRenderedBannerText = BuildBannerSignature(_progress);
+            try
+            {
+                // Google's DirectionsService geocodes the destination address
+                // internally, so we pass the raw address string instead of
+                // doing a separate geocode call.
+                var result = await JS.InvokeAsync<NavRouteResult>(
+                    "navMapDrawRoute", originLat, originLon, RoutingDestination);
+
+                var distMiles = result.DistanceMeters / MetersPerMile;
+                var durMin = result.DurationSeconds / 60.0;
+                _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
+
+                // Hand the maneuver list to the tracker and prime the banner from
+                // the current fix so the first turn shows immediately instead of
+                // waiting for the next GPS update to land.
+                _routeProgressTracker.SetSteps(result.Steps);
+                _progress = _routeProgressTracker.Update(originLat, originLon);
+                _lastRenderedBannerText = BuildBannerSignature(_progress);
+            }
+            catch (Exception ex)
+            {
+                _status = $"Routing error: {ex.Message}";
+                _routeProgressTracker.Clear();
+                _progress = null;
+                _lastRenderedBannerText = string.Empty;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _status = $"Routing error: {ex.Message}";
-            _routeProgressTracker.Clear();
-            _progress = null;
-            _lastRenderedBannerText = string.Empty;
-        }
+            // finally, not a trailing statement: the no-GPS-fix path above
+            // returns early, and a throw here would otherwise wedge the button
+            // disabled for the rest of the session.
+            _isRouting = false;
 
-        // Required for the OnAfterRenderAsync call path: that lifecycle method
-        // does not re-render when it completes, so without this the banner (and
-        // the status line) stay blank until some later event forces a render.
-        StateHasChanged();
+            // Also required for the OnAfterRenderAsync call path: that lifecycle
+            // method does not re-render when it completes, so without this the
+            // banner and status line stay blank until something else forces a
+            // render.
+            StateHasChanged();
+        }
     }
 
     private class NavRouteResult
