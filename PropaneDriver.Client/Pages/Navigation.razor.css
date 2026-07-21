@@ -189,38 +189,6 @@
     cursor: default;
 }
 
-.nav-buttons {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.btn-route {
-    background-color: #0f0f1e;
-    color: whitesmoke;
-    border: 1px solid #2a2a4a;
-    border-radius: 6px;
-    padding: 0.55rem 1.4rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-    cursor: pointer;
-    line-height: 1.2;
-}
-
-.btn-route:hover {
-    background-color: #1f1f3a;
-    border-color: #3a3a6a;
-}
-
-.btn-route:active {
-    background-color: #2a2a4a;
-}
-
-.btn-route:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
 /* Next-maneuver banner. Sits between the header card and the map so it lands
    in the driver's natural glance path. Sized like .destination-input rather
    than like body text — this is read from the seat, at speed, in one look.
@@ -364,6 +332,40 @@
 
 .btn-back:active {
     background-color: #2a2a4a;
+}
+
+/* Mirrors .btn-back across the top of the map: Deliveries goes back, Route
+   goes forward. Same size and treatment so the pair reads as one control
+   strip rather than two unrelated buttons. */
+.btn-route {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10;
+    background-color: #1a1a2e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    line-height: 1.2;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.btn-route:hover:not(:disabled) {
+    background-color: #1f1f3a;
+    border-color: #3a3a6a;
+}
+
+.btn-route:active:not(:disabled) {
+    background-color: #2a2a4a;
+}
+
+.btn-route:disabled {
+    opacity: 0.6;
+    cursor: default;
 }
 
 /* Tank location inline editor */

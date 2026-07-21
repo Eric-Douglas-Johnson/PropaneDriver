@@ -41,14 +41,6 @@
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
 
-        <div class="nav-buttons">
-            <button class="btn-route" @onclick="FetchAndDrawRoute"
-                    disabled="@string.IsNullOrWhiteSpace(RoutingDestination)"
-                    title="Route to the destination above">
-                Route
-            </button>
-        </div>
-
         @if (_addressId != Guid.Empty)
         {
             <div class="addr-meta">
@@ -149,6 +141,11 @@
         <div id="google-map"></div>
         <button class="btn-back" @onclick="BackToDeliveries" title="Back to Deliveries">
             &larr; Deliveries
+        </button>
+        <button class="btn-route" @onclick="FetchAndDrawRoute"
+                disabled="@string.IsNullOrWhiteSpace(RoutingDestination)"
+                title="Redraw the route to the destination above from your current position">
+            Refresh Route
         </button>
         <button class="center-btn" @onclick="CenterOnLocation" title="Center on my location">&#8982;</button>
     </div>
