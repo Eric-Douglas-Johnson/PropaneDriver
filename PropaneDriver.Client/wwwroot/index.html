@@ -218,6 +218,18 @@
             return;
         };
 
+        // Google returns step instructions as HTML ("Turn <b>left</b> onto Main
+        // St<div style=...>Destination will be on the right</div>"). Insert a
+        // separator at block boundaries before stripping so the two sentences
+        // don't run together, then let the DOM decode the entities for us.
+        window._navStripHtml = function (html) {
+            if (!html) return '';
+            var withBreaks = String(html).replace(/<div[^>]*>/gi, ' — ');
+            var el = document.createElement('div');
+            el.innerHTML = withBreaks;
+            return (el.textContent || '').replace(/\s+/g, ' ').trim();
+        };
+
         // Route from (originLat, originLon) to a destination address string.
         // DirectionsService geocodes the destination internally, so we don't
         // need a separate geocoding step on the client for navigation.
@@ -266,7 +278,19 @@
                         resolve({
                             distanceMeters: leg.distance ? leg.distance.value : 0,
                             durationSeconds: leg.duration ? leg.duration.value : 0,
-                            destinationAddress: leg.end_address || destinationAddress
+                            destinationAddress: leg.end_address || destinationAddress,
+                            steps: (leg.steps || []).map(function (step) {
+                                return {
+                                    instruction: window._navStripHtml(step.instructions),
+                                    maneuver: step.maneuver || '',
+                                    distanceMeters: step.distance ? step.distance.value : 0,
+                                    // start_location/end_location are LatLng objects —
+                                    // lat/lng are methods, not properties. Calling them
+                                    // is required or these serialize as empty objects.
+                                    endLat: step.end_location ? step.end_location.lat() : 0,
+                                    endLng: step.end_location ? step.end_location.lng() : 0
+                                };
+                            })
                         });
                     } catch (err) {
                         console.error('[navMapDrawRoute] error rendering directions:', err);

@@ -41,6 +41,14 @@
         <input type="text" class="form-control destination-input" placeholder="Destination address"
                value="@_destination" @oninput="OnDestinationInput" />
 
+        <div class="nav-buttons">
+            <button class="btn-route" @onclick="FetchAndDrawRoute"
+                    disabled="@string.IsNullOrWhiteSpace(RoutingDestination)"
+                    title="Route to the destination above">
+                Route
+            </button>
+        </div>
+
         @if (_addressId != Guid.Empty)
         {
             <div class="addr-meta">
@@ -111,6 +119,27 @@
         }
     </div>
 
+    @if (_progress is not null && _progress.CurrentStep is not null)
+    {
+        <div class="turn-banner">
+            <span class="turn-glyph">@ManeuverGlyph(_progress.CurrentStep.Maneuver)</span>
+            <div class="turn-text">
+                <span class="turn-distance">in @FormatDistance(_progress.MetersToNextManeuver)</span>
+                <span class="turn-instruction">@_progress.CurrentStep.Instruction</span>
+            </div>
+            <span class="turn-remaining">@FormatDistance(_progress.MetersRemainingToDestination) left</span>
+        </div>
+    }
+    else if (_progress is not null && _progress.HasArrived)
+    {
+        <div class="turn-banner turn-banner-arrived">
+            <span class="turn-glyph">◎</span>
+            <div class="turn-text">
+                <span class="turn-instruction">Arriving at destination</span>
+            </div>
+        </div>
+    }
+
     @if (!string.IsNullOrEmpty(_status))
     {
         <div class="nav-status">@_status</div>
@@ -148,6 +177,19 @@
     private bool _savingBackIn;
 
     private List<AlertDto> _alerts = new();
+
+    // Turn-by-turn state. The tracker holds the drawn route's maneuver list and
+    // decides which one the driver is working on; _progress is the last snapshot
+    // it produced and is what the banner renders. Null until a route is drawn,
+    // which is also how the banner knows to stay hidden for an ad-hoc typed
+    // destination that was never routed.
+    private readonly RouteProgressTracker _routeProgressTracker = new();
+    private RouteProgressSnapshot? _progress;
+
+    // Last rendered banner text. GPS fixes arrive about once a second; re-rendering
+    // on every one churns the whole page for a string that usually hasn't changed,
+    // so we only call StateHasChanged when the driver-visible text actually differs.
+    private string _lastRenderedBannerText = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -364,7 +406,65 @@
             await JS.InvokeVoidAsync("navMapUpdateDriver", lat, lon);
         }
         catch { }
+
+        if (!_routeProgressTracker.HasRoute) return;
+
+        _progress = _routeProgressTracker.Update(lat, lon);
+
+        // Only re-render when the text the driver would actually see changes.
+        var bannerText = BuildBannerSignature(_progress);
+        if (bannerText == _lastRenderedBannerText) return;
+        _lastRenderedBannerText = bannerText;
+
+        // This fires off the geolocation callback, not the renderer's
+        // synchronization context, so the re-render must be marshalled back
+        // with InvokeAsync — a bare StateHasChanged() throws here.
+        await InvokeAsync(StateHasChanged);
     }
+
+    // Collapses the snapshot down to exactly what the banner displays, so
+    // sub-threshold GPS jitter doesn't trigger a render.
+    private static string BuildBannerSignature(RouteProgressSnapshot? progress)
+    {
+        if (progress is null) return string.Empty;
+        if (progress.HasArrived) return "arrived";
+        if (progress.CurrentStep is null) return string.Empty;
+
+        return string.Concat(
+            progress.CurrentStep.Instruction,
+            "|", FormatDistance(progress.MetersToNextManeuver),
+            "|", FormatDistance(progress.MetersRemainingToDestination));
+    }
+
+    private const double MetersPerMile = 1609.34;
+
+    // Under a quarter mile a driver wants feet — "in 300 feet" is actionable
+    // where "in 0.1 mi" is not.
+    private static string FormatDistance(double meters)
+    {
+        var miles = meters / MetersPerMile;
+        if (miles < 0.25)
+        {
+            var feet = meters / 0.3048;
+            return $"{Math.Round(feet / 50) * 50:F0} ft";
+        }
+        return $"{miles:F1} mi";
+    }
+
+    // Google's maneuver vocabulary grows over time, so anything unrecognized
+    // (and the empty maneuver it reports for most first/last steps) falls back
+    // to a straight arrow rather than rendering a blank tile.
+    private static string ManeuverGlyph(string? maneuver) => maneuver switch
+    {
+        "turn-left" or "turn-sharp-left" or "turn-slight-left" or "ramp-left"
+            or "fork-left" or "keep-left" => "↰",
+        "turn-right" or "turn-sharp-right" or "turn-slight-right" or "ramp-right"
+            or "fork-right" or "keep-right" => "↱",
+        "uturn-left" or "uturn-right" => "↶",
+        "roundabout-left" or "roundabout-right" => "↻",
+        "merge" => "⇗",
+        _ => "↑",
+    };
 
     private void OnDestinationInput(ChangeEventArgs e)
     {
@@ -399,14 +499,29 @@
             var result = await JS.InvokeAsync<NavRouteResult>(
                 "navMapDrawRoute", originLat, originLon, RoutingDestination);
 
-            var distMiles = result.DistanceMeters / 1609.34;
+            var distMiles = result.DistanceMeters / MetersPerMile;
             var durMin = result.DurationSeconds / 60.0;
             _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
+
+            // Hand the maneuver list to the tracker and prime the banner from
+            // the current fix so the first turn shows immediately instead of
+            // waiting for the next GPS update to land.
+            _routeProgressTracker.SetSteps(result.Steps);
+            _progress = _routeProgressTracker.Update(originLat, originLon);
+            _lastRenderedBannerText = BuildBannerSignature(_progress);
         }
         catch (Exception ex)
         {
             _status = $"Routing error: {ex.Message}";
+            _routeProgressTracker.Clear();
+            _progress = null;
+            _lastRenderedBannerText = string.Empty;
         }
+
+        // Required for the OnAfterRenderAsync call path: that lifecycle method
+        // does not re-render when it completes, so without this the banner (and
+        // the status line) stay blank until some later event forces a render.
+        StateHasChanged();
     }
 
     private class NavRouteResult
@@ -419,6 +534,9 @@
 
         [System.Text.Json.Serialization.JsonPropertyName("destinationAddress")]
         public string DestinationAddress { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("steps")]
+        public List<NavRouteStep> Steps { get; set; } = new();
     }
 
     public async ValueTask DisposeAsync()

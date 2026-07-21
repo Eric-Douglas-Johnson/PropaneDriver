@@ -195,6 +195,95 @@
     flex-wrap: wrap;
 }
 
+.btn-route {
+    background-color: #0f0f1e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 0.55rem 1.4rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.btn-route:hover {
+    background-color: #1f1f3a;
+    border-color: #3a3a6a;
+}
+
+.btn-route:active {
+    background-color: #2a2a4a;
+}
+
+.btn-route:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* Next-maneuver banner. Sits between the header card and the map so it lands
+   in the driver's natural glance path. Sized like .destination-input rather
+   than like body text — this is read from the seat, at speed, in one look.
+   Uses a cool blue accent to stay distinct from the amber #ff9f43 that
+   .tank-location already owns. */
+.turn-banner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1.15rem;
+    background-color: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-left: 5px solid #4a6cf7;
+    border-radius: 8px;
+}
+
+.turn-glyph {
+    font-size: 3.2rem;
+    line-height: 1;
+    color: #7f9cff;
+    flex: 0 0 auto;
+}
+
+.turn-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.turn-distance {
+    font-size: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: #8892b0;
+}
+
+.turn-instruction {
+    font-size: 1.9rem;
+    font-weight: 600;
+    color: whitesmoke;
+    line-height: 1.2;
+}
+
+.turn-remaining {
+    flex: 0 0 auto;
+    align-self: flex-end;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #7f9cff;
+    white-space: nowrap;
+}
+
+.turn-banner-arrived {
+    border-left-color: #2ecc71;
+}
+
+.turn-banner-arrived .turn-glyph {
+    color: #2ecc71;
+}
+
 .nav-controls input::placeholder {
     color: #8892b0;
 }
