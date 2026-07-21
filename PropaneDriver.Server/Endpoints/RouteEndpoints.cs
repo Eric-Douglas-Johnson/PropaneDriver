@@ -151,11 +151,7 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(routeDto);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Create a route with deliveries. Drivers create their own
-            // routes via the Dispatch page; admins create on behalf of any
-            // driver via the Admin page. The DriverId in the body is what's
-            // used, but we reject it if a non-admin tries to create a route
-            // for someone else.
+            // Create a route with deliveries
             group.MapPost("", async (
                 CreateRouteDto dto,
                 ClaimsPrincipal user,
@@ -168,12 +164,12 @@ namespace PropaneDriver.Server.Endpoints
                 if (!user.CanAccessDriverData(driverId))
                     return Results.Forbid();
 
-
                 var invalidDelivery = dto.Deliveries.FirstOrDefault(d =>
                     string.IsNullOrWhiteSpace(d.Street) ||
                     string.IsNullOrWhiteSpace(d.City) ||
                     string.IsNullOrWhiteSpace(d.State) ||
                     string.IsNullOrWhiteSpace(d.ZipCode));
+
                 if (invalidDelivery is not null)
                     return Results.BadRequest(new { Message = $"All address fields are required for every delivery. Missing field on: {invalidDelivery.CustomerName}" });
 
@@ -190,6 +186,7 @@ namespace PropaneDriver.Server.Endpoints
                         var city = d.City.Trim();
                         var state = d.State.Trim();
                         var zip = d.ZipCode.Trim();
+
                         // Case-fold the cache key so "Main St" and "main st" in the
                         // same batch resolve to the same Address row. The DB
                         // lookup below is already case-insensitive via collation.
@@ -202,6 +199,7 @@ namespace PropaneDriver.Server.Endpoints
                         // being explicit matches what /api/geocode uses and keeps
                         // us safe against any future instance that happens to be CS.
                         const string ci = "SQL_Latin1_General_CP1_CI_AS";
+
                         var address = await db.Addresses.FirstOrDefaultAsync(a =>
                             EF.Functions.Collate(a.Street, ci) == street
                             && EF.Functions.Collate(a.City, ci) == city
@@ -232,6 +230,7 @@ namespace PropaneDriver.Server.Endpoints
                             // Only seed coordinates from the create-form geocode when
                             // the address has none stored yet.
                             var hasCoords = (address.Latitude ?? 0) != 0 || (address.Longitude ?? 0) != 0;
+
                             if (!hasCoords && (d.Latitude != 0 || d.Longitude != 0))
                             {
                                 address.Latitude = d.Latitude;
