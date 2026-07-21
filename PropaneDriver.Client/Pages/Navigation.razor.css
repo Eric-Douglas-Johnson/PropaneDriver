@@ -220,12 +220,18 @@
     min-width: 0;
 }
 
+/* Distance to the next turn. Sized and coloured to match .turn-instruction
+   below it: this is the number the driver acts on, so it gets the same weight
+   as the maneuver text rather than reading as a caption above it. */
 .turn-distance {
-    font-size: 1rem;
+    font-size: 1.9rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: #8892b0;
+    /* Tracking eased off from the small-caps value it carried at 1rem — at
+       this size the wide spacing pulls the number apart. */
+    letter-spacing: 0.03em;
+    color: whitesmoke;
+    line-height: 1.2;
 }
 
 .turn-instruction {
@@ -233,15 +239,6 @@
     font-weight: 600;
     color: whitesmoke;
     line-height: 1.2;
-}
-
-.turn-remaining {
-    flex: 0 0 auto;
-    align-self: flex-end;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: #7f9cff;
-    white-space: nowrap;
 }
 
 .turn-banner-arrived {
@@ -256,9 +253,13 @@
     color: #8892b0;
 }
 
+/* Only carries errors now that the route summary is gone, so it's sized and
+   coloured to be caught from the seat rather than to sit quietly under the
+   banner the way the old summary line did. */
 .nav-status {
-    font-size: 0.85rem;
-    color: #8892b0;
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #fca5a5;
     padding: 0 0.25rem;
 }
 

@@ -127,7 +127,6 @@
                 <span class="turn-distance">in @FormatDistance(_progress.MetersToNextManeuver)</span>
                 <span class="turn-instruction">@_progress.NextManeuver.Instruction</span>
             </div>
-            <span class="turn-remaining">@FormatDistance(_progress.MetersRemainingToDestination) left</span>
         </div>
     }
     else if (_progress is not null && _progress.IsFinalApproach)
@@ -150,6 +149,8 @@
         </div>
     }
 
+    @* Errors only — routing failures, a missing GPS fix, a save that didn't
+       take. Nothing renders here in normal operation. *@
     @if (!string.IsNullOrEmpty(_status))
     {
         <div class="nav-status">@_status</div>
@@ -470,8 +471,7 @@
 
         return string.Concat(
             progress.NextManeuver?.Instruction ?? "final-approach",
-            "|", FormatDistance(progress.MetersToNextManeuver),
-            "|", FormatDistance(progress.MetersRemainingToDestination));
+            "|", FormatDistance(progress.MetersToNextManeuver));
     }
 
     private const double MetersPerMile = 1609.34;
@@ -556,9 +556,11 @@
                     "navMapDrawRoute", originLat, originLon, RoutingDestination,
                     _destinationLatitude, _destinationLongitude);
 
-                var distMiles = result.DistanceMeters / MetersPerMile;
-                var durMin = result.DurationSeconds / 60.0;
-                _status = $"{_destination} — {distMiles:F1} mi, {durMin:F0} min";
+                // Nothing to report on success: the destination is already in
+                // the input above and the banner owns the distance, so a status
+                // line here only repeats what's on screen. Clear any error left
+                // over from a previous attempt.
+                _status = null;
 
                 // Hand the maneuver list to the tracker and prime the banner from
                 // the current fix so the first turn shows immediately instead of
