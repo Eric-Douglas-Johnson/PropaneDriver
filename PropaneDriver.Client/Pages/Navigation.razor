@@ -111,15 +111,25 @@
         }
     </div>
 
-    @if (_progress is not null && _progress.CurrentStep is not null)
+    @if (_progress is not null && _progress.NextManeuver is not null)
     {
         <div class="turn-banner">
-            <span class="turn-glyph">@ManeuverGlyph(_progress.CurrentStep.Maneuver)</span>
+            <span class="turn-glyph">@ManeuverGlyph(_progress.NextManeuver.Maneuver)</span>
             <div class="turn-text">
                 <span class="turn-distance">in @FormatDistance(_progress.MetersToNextManeuver)</span>
-                <span class="turn-instruction">@_progress.CurrentStep.Instruction</span>
+                <span class="turn-instruction">@_progress.NextManeuver.Instruction</span>
             </div>
             <span class="turn-remaining">@FormatDistance(_progress.MetersRemainingToDestination) left</span>
+        </div>
+    }
+    else if (_progress is not null && _progress.IsFinalApproach)
+    {
+        <div class="turn-banner turn-banner-arrived">
+            <span class="turn-glyph">◎</span>
+            <div class="turn-text">
+                <span class="turn-distance">in @FormatDistance(_progress.MetersToNextManeuver)</span>
+                <span class="turn-instruction">Arriving at destination</span>
+            </div>
         </div>
     }
     else if (_progress is not null && _progress.HasArrived)
@@ -127,7 +137,7 @@
         <div class="turn-banner turn-banner-arrived">
             <span class="turn-glyph">◎</span>
             <div class="turn-text">
-                <span class="turn-instruction">Arriving at destination</span>
+                <span class="turn-instruction">Arrived</span>
             </div>
         </div>
     }
@@ -425,10 +435,10 @@
     {
         if (progress is null) return string.Empty;
         if (progress.HasArrived) return "arrived";
-        if (progress.CurrentStep is null) return string.Empty;
+        if (!progress.HasGuidance) return string.Empty;
 
         return string.Concat(
-            progress.CurrentStep.Instruction,
+            progress.NextManeuver?.Instruction ?? "final-approach",
             "|", FormatDistance(progress.MetersToNextManeuver),
             "|", FormatDistance(progress.MetersRemainingToDestination));
     }
