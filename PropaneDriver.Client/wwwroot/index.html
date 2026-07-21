@@ -230,10 +230,15 @@
             return (el.textContent || '').replace(/\s+/g, ' ').trim();
         };
 
-        // Route from (originLat, originLon) to a destination address string.
-        // DirectionsService geocodes the destination internally, so we don't
-        // need a separate geocoding step on the client for navigation.
-        window.navMapDrawRoute = function (originLat, originLon, destinationAddress) {
+        // Route from (originLat, originLon) to the destination. Prefer the
+        // stored pin (destinationLat/destinationLon) when the caller has one:
+        // those coordinates are where the driver actually has to stop, which
+        // on a rural route is often nowhere near where geocoding the mailing
+        // address lands. Fall back to the address string otherwise —
+        // DirectionsService geocodes it internally, so no separate client
+        // geocoding step is needed.
+        window.navMapDrawRoute = function (originLat, originLon, destinationAddress,
+                                           destinationLat, destinationLon) {
             return new Promise(function (resolve, reject) {
                 if (!window._navDirectionsService || !window._navDirectionsRenderer) {
                     console.error('[navMapDrawRoute] Map not initialized. service=',
@@ -241,10 +246,16 @@
                     reject(new Error('Map not initialized.'));
                     return;
                 }
-                console.log('[navMapDrawRoute] requesting route', originLat, originLon, '->', destinationAddress);
+                var hasPin = typeof destinationLat === 'number' && typeof destinationLon === 'number'
+                    && isFinite(destinationLat) && isFinite(destinationLon);
+                var destination = hasPin
+                    ? { lat: destinationLat, lng: destinationLon }
+                    : destinationAddress;
+                console.log('[navMapDrawRoute] requesting route', originLat, originLon, '->',
+                    hasPin ? destinationLat + ',' + destinationLon : destinationAddress);
                 window._navDirectionsService.route({
                     origin: { lat: originLat, lng: originLon },
-                    destination: destinationAddress,
+                    destination: destination,
                     travelMode: google.maps.TravelMode.DRIVING,
                     region: 'us'
                 }, function (result, status) {

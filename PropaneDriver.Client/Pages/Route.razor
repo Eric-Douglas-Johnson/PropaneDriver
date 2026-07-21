@@ -743,6 +743,15 @@
         // server round-trip, and knows which address to PUT against
         // when the driver taps "Add tank location".
         var qs = $"destination={dest}&addressId={delivery.Address.Id}&deliveryId={delivery.Id}";
+
+        // Route to the stored pin rather than the mailing address whenever
+        // this address has one — it's the spot the truck actually has to
+        // reach, and it survives addresses that geocode badly or not at all.
+        if (delivery.Address.HasCoordinates)
+        {
+            qs += $"&destinationLat={delivery.Address.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                + $"&destinationLon={delivery.Address.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        }
         if (!string.IsNullOrWhiteSpace(delivery.Address.TankLocation))
         {
             qs += $"&tankLocation={Uri.EscapeDataString(delivery.Address.TankLocation)}";

@@ -27,6 +27,14 @@
     [SupplyParameterFromQuery(Name = "backIn")]
     public bool BackInQuery { get; set; }
 
+    // The address's stored pin, when it has one. Routing prefers these over
+    // the destination string; see FetchAndDrawRoute.
+    [SupplyParameterFromQuery(Name = "destinationLat")]
+    public double? DestinationLatQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "destinationLon")]
+    public double? DestinationLonQuery { get; set; }
+
     // Optional: if launched from a specific delivery row, we fetch the
     // alerts attached to that delivery so they can be shown at the top
     // of the nav page. Empty/missing means no alerts are loaded.
@@ -167,6 +175,12 @@
 
     private string _destination = string.Empty;
     private string _fullDestination = string.Empty;
+
+    // The destination's stored pin. Null when the address has none, or when
+    // the driver has typed over the destination — at that point the pin
+    // belongs to a different place than the text on screen.
+    private double? _destinationLatitude;
+    private double? _destinationLongitude;
     private string? _status;
     private bool _mapInitialized;
 
@@ -220,6 +234,13 @@
 
         _backIn = BackInQuery;
 
+        if (DestinationLatQuery is { } queryLatitude && DestinationLonQuery is { } queryLongitude
+            && (queryLatitude != 0 || queryLongitude != 0))
+        {
+            _destinationLatitude = queryLatitude;
+            _destinationLongitude = queryLongitude;
+        }
+
         // Refetch canonical address state from the server so the UI
         // reflects flags toggled in other places (Admin page, prior
         // nav session) instead of trusting the URL the page launched
@@ -234,6 +255,12 @@
                     ? null
                     : fresh.TankLocation;
                 _backIn = fresh.BackIn;
+
+                if (fresh.HasCoordinates)
+                {
+                    _destinationLatitude = fresh.Latitude;
+                    _destinationLongitude = fresh.Longitude;
+                }
             }
         }
 
@@ -481,6 +508,12 @@
     {
         _destination = e.Value?.ToString() ?? string.Empty;
         _fullDestination = string.Empty;
+
+        // The pin came from the address this page was launched with. Once the
+        // driver types a different destination, routing to it would silently
+        // ignore what they typed, so drop it and geocode the text instead.
+        _destinationLatitude = null;
+        _destinationLongitude = null;
     }
 
     private string RoutingDestination =>
@@ -513,11 +546,15 @@
 
             try
             {
-                // Google's DirectionsService geocodes the destination address
-                // internally, so we pass the raw address string instead of
-                // doing a separate geocode call.
+                // Route to the address's stored pin when it has one. Geocoding
+                // the address string lands on the road frontage or, for the
+                // rural addresses on these routes, on the wrong end of a long
+                // driveway; the pin is where the truck actually parks. The
+                // address string still goes along as the fallback the JS uses
+                // when there's no pin.
                 var result = await JS.InvokeAsync<NavRouteResult>(
-                    "navMapDrawRoute", originLat, originLon, RoutingDestination);
+                    "navMapDrawRoute", originLat, originLon, RoutingDestination,
+                    _destinationLatitude, _destinationLongitude);
 
                 var distMiles = result.DistanceMeters / MetersPerMile;
                 var durMin = result.DurationSeconds / 60.0;
