@@ -12,6 +12,10 @@
     padding: 0.75rem 1rem;
     background-color: #1a1a2e;
     border: 1px solid #2a2a4a;
+    /* Same blue edge as .turn-banner below the map, so the two cards the
+       driver reads — delivery info up top, next maneuver down below — are
+       visibly the same kind of thing. */
+    border-left: 5px solid #4a6cf7;
     border-radius: 8px;
 }
 
@@ -210,6 +214,15 @@
     line-height: 1;
     color: #7f9cff;
     flex: 0 0 auto;
+    /* Stretched horizontally rather than sized up outright: direction is read
+       off the arrow's horizontal sweep, so widening it is what makes the turn
+       readable at a glance — and it doesn't make the banner any taller. The
+       fixed box is wide enough to hold the stretched glyph, which is drawn by
+       transform and so contributes nothing to layout on its own. */
+    display: inline-block;
+    width: 5rem;
+    text-align: center;
+    transform: scaleX(1.6);
 }
 
 .turn-text {
