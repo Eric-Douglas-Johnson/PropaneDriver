@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -56,13 +57,24 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             // Swap in InMemory for the relational DbContext registration.
-            // Removing both ServiceType variants because AddDbContext
-            // registers DbContextOptions<T> AND DbContextOptions.
-            var typedOptions = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<PropaneDriverDbContext>));
-            if (typedOptions is not null) services.Remove(typedOptions);
+            // Three ServiceTypes have to go, not two: AddDbContext registers
+            // DbContextOptions<T> and DbContextOptions, and as of EF Core 10
+            // it also registers the options-building delegate itself as an
+            // IDbContextOptionsConfiguration<T>. Leaving that third one in
+            // place means Program.cs's UseSqlServer callback still runs
+            // alongside ours, and its DefaultAzureCredential token fetch
+            // fails on any machine without a managed identity.
+            var registrationsToRemove = services
+                .Where(descriptor =>
+                    descriptor.ServiceType == typeof(DbContextOptions<PropaneDriverDbContext>)
+                    || descriptor.ServiceType == typeof(DbContextOptions)
+                    || descriptor.ServiceType == typeof(IDbContextOptionsConfiguration<PropaneDriverDbContext>))
+                .ToList();
 
-            var untypedOptions = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions));
-            if (untypedOptions is not null) services.Remove(untypedOptions);
+            foreach (var registration in registrationsToRemove)
+            {
+                services.Remove(registration);
+            }
 
             services.AddDbContext<PropaneDriverDbContext>(options =>
                 options.UseInMemoryDatabase(DatabaseName));

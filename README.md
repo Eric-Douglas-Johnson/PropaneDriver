@@ -67,8 +67,8 @@ An admin-only Tools page (`/tools`, gated by `[Authorize(Roles = "admin")]`) tha
 ## Architecture at a glance
 
 ```
-PropaneDriver.Client   Blazor WebAssembly (.NET 8) — UI, geolocation, geofencing, speech
-PropaneDriver.Server   ASP.NET Core 8 minimal-API host — endpoints, EF Core, Azure services
+PropaneDriver.Client   Blazor WebAssembly (.NET 10) — UI, geolocation, geofencing, speech
+PropaneDriver.Server   ASP.NET Core 10 minimal-API host — endpoints, EF Core, Azure services
 PropaneDriver.Shared   DTOs and interfaces shared across the wire
 PropaneDriver.Tests    xUnit tests against an in-memory + live-SQL test harness
 ```
@@ -93,7 +93,7 @@ These are the kinds of calls a reviewer would want to see explained on a take-ho
 
 ## Running it
 
-Prerequisites: .NET 8 SDK, an Azure SQL database (or LocalDB if you wire up a local connection string), and Azure credentials available to `DefaultAzureCredential` (Azure CLI login, Visual Studio auth, or a managed identity).
+Prerequisites: .NET 10 SDK, an Azure SQL database (or LocalDB if you wire up a local connection string), and Azure credentials available to `DefaultAzureCredential` (Azure CLI login, Visual Studio auth, or a managed identity).
 
 ```powershell
 # Restore and build

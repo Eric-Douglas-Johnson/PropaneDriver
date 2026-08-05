@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Build stage ----
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files first for restore-layer caching
@@ -17,11 +17,11 @@ RUN dotnet publish PropaneDriver.Server/PropaneDriver.Server.csproj \
     -c Release -o /app/publish /p:UseAppHost=false
 
 # ---- Runtime stage ----
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# .NET 8 containers listen on 8080 by default
+# .NET containers listen on 8080 by default
 EXPOSE 8080
 ENV ASPNETCORE_HTTP_PORTS=8080
 
