@@ -94,9 +94,10 @@ namespace PropaneDriver.Server.Services
 
         private async Task<FuelPriceSnapshotDto> FetchSnapshotFromEiaAsync()
         {
-            // appsettings.json ships an empty "Eia:ApiKey" placeholder, so a
-            // plain ?? would stop there and never reach the environment
-            // variable — fall through on blank, not just null.
+            // Fall through on blank, not just null. A plain ?? would treat a
+            // configured-but-empty value as present and never reach the
+            // environment variable — which is easy to end up with, since an
+            // empty string in a settings file is a value rather than an absence.
             var apiKey = _configuration["Eia:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
                 apiKey = Environment.GetEnvironmentVariable("EIA_API_KEY");

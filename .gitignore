@@ -33,3 +33,7 @@ x86/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+
+## Local-only configuration (never committed, never published).
+## See local.settings.example.json for the expected shape.
+local.settings.json

@@ -1,0 +1,65 @@
+// Copy to local.settings.json and fill in the values you need. That file is
+// gitignored, excluded from the Docker build context, and removed from Content
+// so it can never be published — nothing in it can reach production.
+// Production values live in App Service application settings instead.
+//
+// Two settings are REQUIRED — the app throws on startup without them:
+//   ConnectionStrings:DefaultConnection   (no fallback; the old hardcoded
+//                                          default pointed at production)
+//   Jwt:Key                                (HS256, at least 32 characters)
+//
+// appsettings.json is empty by design, so this file is the ONLY source of
+// configuration for a local run — there is nothing underneath it to fall back
+// to. A key you leave commented out is simply absent; see each entry below for
+// what that costs you. Note that an empty string is a value, not an absence,
+// so "" will not fall through to a code default either.
+//
+// Keys use the flat colon form, the same style as the user-secrets store.
+{
+  // REQUIRED. The app authenticates to SQL with DefaultAzureCredential, so this
+  // is expected to be an Azure SQL server that accepts an Entra token — today
+  // that means production. Be aware that local runs then read and write
+  // production data, and that the schema initializer and the admin seeder both
+  // execute against it on startup.
+  "ConnectionStrings:DefaultConnection": "Server=tcp:<server>.database.windows.net,1433;Database=<database>;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;",
+
+  // REQUIRED. Any string of 32+ characters works locally; it only has to match
+  // itself. Production uses the Jwt__Key application setting, so tokens issued
+  // here are not valid there and vice versa. Issuer, Audience, and
+  // ExpirationHours all have code defaults (PropaneDriver, PropaneDriverClient,
+  // 12) and only need setting if you want to diverge from them.
+  "Jwt:Key": "at-least-32-characters-long-for-hs256-signing",
+  // "Jwt:Issuer": "PropaneDriver",
+  // "Jwt:Audience": "PropaneDriverClient",
+  // "Jwt:ExpirationHours": 12,
+
+  // Local telemetry. While this is absent the exporter is never registered,
+  // which is what keeps the test suite and local runs off Application Insights.
+  // "APPLICATIONINSIGHTS_CONNECTION_STRING": "InstrumentationKey=...;IngestionEndpoint=https://centralus-0.in.applicationinsights.azure.com/",
+
+  // "DocumentIntelligence:Endpoint": "https://docintel-propane-driver.cognitiveservices.azure.com/",
+  // "DocumentIntelligence:ApiKey": "...",
+
+  // "Eia:ApiKey": "...",
+  // "GoogleMaps:JsApiKey": "...",
+  // "GoogleGeocoding:ApiKey": "...",
+
+  // Outbound email (password reset). EmailService throws when either is missing,
+  // so without both the password-reset endpoint returns 500 — it is the only
+  // thing that resolves the service, so nothing else is affected.
+  // "AcsEndpoint": "https://acs-propane-driver.unitedstates.communication.azure.com/",
+  // "AcsSenderAddress": "DoNotReply@....azurecomm.net",
+
+  // Base URL used to build password-reset links. Absent, the code falls back to
+  // a hardcoded https://propane-driver.azurewebsites.net, which is the retired
+  // app name and no longer resolves.
+  // "AppBaseUrl": "https://localhost:7240",
+
+  // Admin bootstrap. An absent or empty password short-circuits the seeder,
+  // leaving the Drivers table alone; the rest default to admin / Site / Admin.
+  // "AdminSeed:Password": "",
+  // "AdminSeed:UserName": "admin",
+  // "AdminSeed:Email": "you@example.com",
+  // "AdminSeed:FirstName": "Site",
+  // "AdminSeed:LastName": "Admin"
+}

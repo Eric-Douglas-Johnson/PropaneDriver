@@ -29,6 +29,31 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
     public const string JwtIssuer = "PropaneDriverTest";
     public const string JwtAudience = "PropaneDriverTestClient";
 
+    // The connection string is never dialed — ConfigureServices replaces the
+    // whole SQL DbContext registration with InMemory. An unreachable host keeps
+    // it that way: if that swap ever regresses, the test fails instead of
+    // reaching a real server.
+    private const string UnreachableConnectionString =
+        "Server=tcp:do-not-connect.invalid,1433;Database=PropaneDriverTest;";
+
+    // ConnectionStrings:DefaultConnection and Jwt:Key are both read inline by
+    // Program.cs during startup and both now throw when missing, so neither can
+    // come from ConfigureAppConfiguration below — those callbacks are layered on
+    // only after Program has already run. Environment variables are part of the
+    // default configuration that CreateBuilder assembles, so they are visible in
+    // time. This is the same channel App Service uses, "__" separator included.
+    //
+    // A static constructor runs before the first factory instance exists, which
+    // is well before any host is built.
+    static PropaneDriverWebAppFactory()
+    {
+        Environment.SetEnvironmentVariable(
+            "ConnectionStrings__DefaultConnection", UnreachableConnectionString);
+        Environment.SetEnvironmentVariable("Jwt__Key", JwtKey);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", JwtIssuer);
+        Environment.SetEnvironmentVariable("Jwt__Audience", JwtAudience);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -37,6 +62,13 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         {
             configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                // Restated here so anything resolving config after startup —
+                // JwtTokenService reads the "Jwt" section lazily at issuance
+                // time — sees the test values even when a developer's
+                // local.settings.json defines its own. That file is layered
+                // last within Program.cs, ahead of the environment variables
+                // set in the static constructor, but behind this collection.
+                ["ConnectionStrings:DefaultConnection"] = UnreachableConnectionString,
                 ["Jwt:Issuer"] = JwtIssuer,
                 ["Jwt:Audience"] = JwtAudience,
                 ["Jwt:Key"] = JwtKey,
@@ -79,13 +111,14 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
             services.AddDbContext<PropaneDriverDbContext>(options =>
                 options.UseInMemoryDatabase(DatabaseName));
 
-            // Program.cs reads Jwt:Key/Issuer/Audience and binds them onto
-            // JwtBearerOptions before the factory's ConfigureAppConfiguration
-            // callback layers in our test values — so the bearer middleware
-            // would otherwise validate against the appsettings placeholder
-            // while JwtTokenService (which reads config lazily at issuance
-            // time) signs with our test key. Re-bind validation here so both
-            // sides agree.
+            // Program.cs binds Jwt:Key/Issuer/Audience onto JwtBearerOptions
+            // during startup, reading whatever configuration exists at that
+            // point — the environment variables from the static constructor,
+            // unless a developer's local.settings.json overrides them, since
+            // Program.cs layers that file after the environment. JwtTokenService
+            // reads the section lazily at issuance time and so sees the in-memory
+            // collection above, which wins over both. Re-bind validation here so
+            // the two sides agree either way.
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters

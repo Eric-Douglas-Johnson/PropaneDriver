@@ -19,6 +19,15 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.10" />
   </ItemGroup>
 
+  <!-- Local-only config. The Web SDK globs **/*.json into Content, which would
+       otherwise publish this file straight into the container image. Removing it
+       from Content keeps it out of both build output and publish output; the
+       config source in Program.cs reads it from the content root at dev time. -->
+  <ItemGroup>
+    <Content Remove="local.settings*.json" />
+    <None Include="local.settings*.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\PropaneDriver.Client\PropaneDriver.Client.csproj" />
     <ProjectReference Include="..\PropaneDriver.Shared\PropaneDriver.Shared.csproj" />

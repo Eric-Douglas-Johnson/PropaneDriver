@@ -218,9 +218,9 @@ public class AdminAccountSeederTests
     [Fact]
     public void EnsureAdminSeeded_EmptyPassword_DoesNotCreateAdminButStillDemotesTestDriver()
     {
-        // Operator-friendly path: leaving AdminSeed:Password blank in
-        // appsettings should keep the seeder from creating a row with a
-        // weak default password. The test_driver demotion must still run.
+        // Operator-friendly path: leaving AdminSeed:Password blank should keep
+        // the seeder from creating a row with a weak default password. The
+        // test_driver demotion must still run.
         var dbName = $"seeder-skip-create-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig(password: ""));
 

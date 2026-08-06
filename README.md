@@ -106,7 +106,23 @@ dotnet run --project PropaneDriver.Server
 dotnet test PropaneDriver.Tests
 ```
 
-Azure-specific configuration (Document Intelligence endpoint/key, ACS connection string, Google Geocoding key) is supplied via user secrets or environment variables — no credentials are committed.
+### Local configuration
+
+`appsettings.json` is committed and deliberately empty — no connection string, no JWT key, no admin credentials, no Azure endpoints, not even log levels. Configuration comes from App Service application settings in production and from `local.settings.json` locally, and the two never share a file. Copy the template and fill it in before the first run:
+
+```powershell
+copy PropaneDriver.Server\local.settings.example.json PropaneDriver.Server\local.settings.json
+```
+
+Two of those settings are required and the host throws on startup without them: `ConnectionStrings:DefaultConnection` and `Jwt:Key` (32+ characters, HS256). The connection string deliberately has **no** fallback — the previous hardcoded default pointed at the production Azure SQL server, so a machine with nothing configured would silently read and write production data through the schema initializer and the admin seeder. Since `appsettings.json` is empty, there is nothing underneath `local.settings.json` to fall back to: a key you omit is simply absent, and an empty string is a value rather than an absence. The template documents what each omission costs.
+
+The app authenticates to SQL with `DefaultAzureCredential` and attaches the resulting Entra token to the connection, so the connection string is expected to name an Azure SQL server that accepts one. There is no local-database path today: a `Trusted_Connection` string fails, because `SqlConnection` rejects an access token set alongside credentials the string already carries. Until a staging database exists, a local run therefore points at production — including the schema initializer and the admin seeder on startup.
+
+`local.settings.json` is kept out of production three separate ways — gitignored, excluded from the Docker build context, and removed from `Content` in the `.csproj` so `dotnet publish` cannot copy it into the image. Production reads the same keys from App Service application settings, using the `__` separator in place of `:` — `ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Logging__LogLevel__Default`, and so on — so no configuration ever moves between the two environments.
+
+User secrets still work (the project has a `UserSecretsId`) and load in the Development environment, but `local.settings.json` is layered last and wins where both define a key.
+
+The integration tests boot the real `Program`, so `PropaneDriverWebAppFactory` supplies its own connection string, JWT config, and a blank admin-seed password. Those layer on top of `local.settings.json` and win, which keeps `dotnet test` deterministic whether or not the file exists.
 
 Telemetry is opt-in: set `APPLICATIONINSIGHTS_CONNECTION_STRING` and the host exports traces, metrics, and logs to Application Insights via OpenTelemetry. Leave it unset — as local runs and the test suite do — and the exporter is never registered.
 

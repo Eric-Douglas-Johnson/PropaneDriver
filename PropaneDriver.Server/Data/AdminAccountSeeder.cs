@@ -30,7 +30,7 @@ namespace PropaneDriver.Server.Data
                 {
                     logger.LogWarning(
                         "AdminSeed:Password is not configured; skipping admin account bootstrap. " +
-                        "Set the value in appsettings (or User Secrets) and restart to seed the admin user.");
+                        "Set the value in local.settings.json (or an AdminSeed__Password application setting) and restart to seed the admin user.");
                 }
                 else
                 {

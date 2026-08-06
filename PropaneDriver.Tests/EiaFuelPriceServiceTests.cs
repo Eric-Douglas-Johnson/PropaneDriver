@@ -64,9 +64,9 @@ public class EiaFuelPriceServiceTests
     [Fact]
     public async Task Snapshot_UsesEnvironmentVariable_WhenConfigPlaceholderIsEmpty()
     {
-        // appsettings.json ships "Eia:ApiKey": "" — production sets the key
-        // via the EIA_API_KEY app setting, and the empty placeholder must
-        // not shadow it. (Regression test: the placeholder originally won.)
+        // A configured-but-empty "Eia:ApiKey" must not shadow the EIA_API_KEY
+        // environment variable, since an empty string is a value rather than an
+        // absence. (Regression test: the empty value originally won.)
         var originalEnv = Environment.GetEnvironmentVariable(EnvVarName);
         try
         {

@@ -6,6 +6,7 @@
 .gitignore
 **/*.user
 **/appsettings.Development.json
+**/local.settings.json
 test_*.jpg
 test_*.xlsx
 Dockerfile
