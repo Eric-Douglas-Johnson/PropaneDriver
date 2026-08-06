@@ -108,6 +108,8 @@ dotnet test PropaneDriver.Tests
 
 Azure-specific configuration (Document Intelligence endpoint/key, ACS connection string, Google Geocoding key) is supplied via user secrets or environment variables — no credentials are committed.
 
+Telemetry is opt-in: set `APPLICATIONINSIGHTS_CONNECTION_STRING` and the host exports traces, metrics, and logs to Application Insights via OpenTelemetry. Leave it unset — as local runs and the test suite do — and the exporter is never registered.
+
 ## Project layout
 
 ```

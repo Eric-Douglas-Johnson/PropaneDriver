@@ -1,5 +1,6 @@
 using System.Text;
 using Azure.Identity;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +80,21 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
     options.AddPolicy("AuthenticatedDriver", policy => policy.RequireAuthenticatedUser());
 });
+
+// OpenTelemetry, exported to Application Insights. Only wired up when a
+// connection string is actually configured — UseAzureMonitor throws if it
+// can't find one, which would take down local runs and every integration
+// test that boots the real Program via WebApplicationFactory. In App Service
+// the setting arrives as an environment variable of the same name; locally
+// it comes from user secrets or the appsettings placeholder.
+var applicationInsightsConnectionString =
+    builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+
+if (!string.IsNullOrWhiteSpace(applicationInsightsConnectionString))
+{
+    builder.Services.AddOpenTelemetry().UseAzureMonitor(azureMonitorOptions =>
+        azureMonitorOptions.ConnectionString = applicationInsightsConnectionString);
+}
 
 var app = builder.Build();
 
