@@ -383,27 +383,45 @@
         <!-- Add delivery form -->
         <div class="add-delivery-form">
             <div class="admin-row">
+                <div class="admin-field" style="align-self:flex-end; padding-bottom:0.35rem;">
+                    <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
+                        <input type="checkbox" @bind="_automaticAddressSearch" />
+                        Auto Search
+                        <span class="info-icon" title="@AutomaticAddressSearchDescription">?</span>
+                    </label>
+                </div>
+                @if (!_automaticAddressSearch)
+                {
+                    <div class="admin-field" style="align-self:flex-end; max-width:120px;">
+                        <button class="btn btn-sm btn-outline-info" @onclick="SearchAddressNow"
+                                disabled="@(_geocoding || string.IsNullOrWhiteSpace(_newStreet))">
+                            @(_geocoding ? "Searching…" : "Search")
+                        </button>
+                    </div>
+                }
+            </div>
+            <div class="admin-row">
                 <div class="admin-field flex-2">
                     <label>Street</label>
                     <input type="text" class="form-control form-control-sm"
-                           @bind="_newStreet" @onfocusout="TryGeocode" />
+                           @bind="_newStreet" @onfocusout="TryGeocodeOnFieldExit" />
                 </div>
             </div>
             <div class="admin-row">
                 <div class="admin-field">
                     <label>City</label>
                     <input type="text" class="form-control form-control-sm"
-                           @bind="_newCity" @onfocusout="TryGeocode" />
+                           @bind="_newCity" @onfocusout="TryGeocodeOnFieldExit" />
                 </div>
                 <div class="admin-field" style="max-width:80px;">
                     <label>State</label>
                     <input type="text" class="form-control form-control-sm"
-                           @bind="_newState" @onfocusout="TryGeocode" />
+                           @bind="_newState" @onfocusout="TryGeocodeOnFieldExit" />
                 </div>
                 <div class="admin-field" style="max-width:110px;">
                     <label>Zip</label>
                     <input type="text" class="form-control form-control-sm"
-                           @bind="_newZip" @onfocusout="TryGeocode" />
+                           @bind="_newZip" @onfocusout="TryGeocodeOnFieldExit" />
                 </div>
                 <div class="admin-field" style="max-width:160px;">
                     <label>Latitude</label>
@@ -531,9 +549,18 @@
     private string? _geocodeStatus;
     private string _lastGeocodedAddress = string.Empty;
 
+    // When true (the default), leaving any address field kicks off a geocode
+    // lookup. Unchecking it means the Google API is only hit when the driver
+    // clicks Search — useful when typing an address a field at a time, or
+    // when entering coordinates by hand.
+    private bool _automaticAddressSearch = true;
+
     // Single source of truth for the help-tooltip copy.
     private const string LongRunningDescription =
         "Use Start/Stop buttons on the delivery page to record delivery time.";
+
+    private const string AutomaticAddressSearchDescription =
+        "Look up coordinates as soon as you leave an address field. Uncheck to search only when you click Search.";
 
     private List<CreateDeliveryDto> _pendingDeliveries = new();
     private string? _createStatus;
@@ -698,6 +725,22 @@
             _routeStatus = $"Error: {ex.Message}";
             _routeStatusSuccess = false;
         }
+    }
+
+    // Bound to @onfocusout on the address fields — a no-op unless the driver
+    // has left Auto Search checked.
+    private async Task TryGeocodeOnFieldExit()
+    {
+        if (!_automaticAddressSearch) return;
+        await TryGeocode();
+    }
+
+    // Explicit Search click: always hits the API, even if the address hasn't
+    // changed since the last lookup, so a retry after a failure works.
+    private async Task SearchAddressNow()
+    {
+        _lastGeocodedAddress = string.Empty;
+        await TryGeocode();
     }
 
     private async Task TryGeocode()
@@ -966,7 +1009,12 @@
         _newLatStr = string.Empty;
         _newLonStr = string.Empty;
         _lastGeocodedAddress = string.Empty;
-        await TryGeocode();
+        _geocodeStatus = null;
+
+        // Same rule as the address fields: with Auto Search off, loading a
+        // scanned row just fills the form and waits for a Search click.
+        if (_automaticAddressSearch)
+            await TryGeocode();
     }
 
     private void ClearImportedRows()
