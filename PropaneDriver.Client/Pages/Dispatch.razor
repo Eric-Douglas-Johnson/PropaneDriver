@@ -383,24 +383,6 @@
         <!-- Add delivery form -->
         <div class="add-delivery-form">
             <div class="admin-row">
-                <div class="admin-field" style="align-self:flex-end; padding-bottom:0.35rem;">
-                    <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
-                        <input type="checkbox" @bind="_automaticAddressSearch" />
-                        Auto Search
-                        <span class="info-icon" title="@AutomaticAddressSearchDescription">?</span>
-                    </label>
-                </div>
-                @if (!_automaticAddressSearch)
-                {
-                    <div class="admin-field" style="align-self:flex-end; max-width:120px;">
-                        <button class="btn btn-sm btn-outline-info" @onclick="SearchAddressNow"
-                                disabled="@(_geocoding || string.IsNullOrWhiteSpace(_newStreet))">
-                            @(_geocoding ? "Searching…" : "Search")
-                        </button>
-                    </div>
-                }
-            </div>
-            <div class="admin-row">
                 <div class="admin-field flex-2">
                     <label>Street</label>
                     <input type="text" class="form-control form-control-sm"
@@ -431,6 +413,22 @@
                     <label>Longitude</label>
                     <input type="text" class="form-control form-control-sm" @bind="_newLonStr" />
                 </div>
+                <div class="admin-field" style="align-self:flex-end; padding-bottom:0.35rem;">
+                    <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
+                        <input type="checkbox" @bind="_automaticAddressSearch" />
+                        Auto Search
+                        <span class="info-icon" title="@AutomaticAddressSearchDescription">?</span>
+                    </label>
+                </div>
+                @if (!_automaticAddressSearch)
+                {
+                    <div class="admin-field" style="align-self:flex-end; max-width:120px;">
+                        <button class="btn btn-sm btn-outline-info" @onclick="SearchAddressNow"
+                                disabled="@(_geocoding || string.IsNullOrWhiteSpace(_newStreet))">
+                            @(_geocoding ? "Searching…" : "Search")
+                        </button>
+                    </div>
+                }
                 <div class="admin-field" style="align-self:flex-end; padding-bottom:0.35rem;">
                     <label class="d-inline-flex align-items-center gap-2 m-0" style="font-size:0.9rem; color:whitesmoke;">
                         <input type="checkbox" @bind="_newLongRunning" />
