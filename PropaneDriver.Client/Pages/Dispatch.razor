@@ -445,17 +445,25 @@
             {
                 <div class="mt-1" style="font-size:0.8rem; color:#8892b0;">@_geocodeStatus</div>
             }
-            <button class="btn btn-sm btn-outline-info mt-2" @onclick="AddDeliveryToList"
-                    disabled="@(string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
-                Add Delivery
-            </button>
-            @if (_loadedRoute is not null)
-            {
-                <button class="btn btn-sm btn-outline-success mt-2 ms-2" @onclick="AddDeliveryToLoadedRoute"
-                        disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
-                    @(_appendingToRoute ? "Adding…" : "Add to Loaded Route")
+            @* Clear sits hard right via ms-auto — far enough from the add
+               buttons that a stray click can't queue a delivery instead. *@
+            <div class="d-flex align-items-center mt-2">
+                <button class="btn btn-sm btn-outline-info" @onclick="AddDeliveryToList"
+                        disabled="@(string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                    Add Delivery
                 </button>
-            }
+                @if (_loadedRoute is not null)
+                {
+                    <button class="btn btn-sm btn-outline-success ms-2" @onclick="AddDeliveryToLoadedRoute"
+                            disabled="@(_appendingToRoute || string.IsNullOrWhiteSpace(_newStreet) || string.IsNullOrWhiteSpace(_newCity) || string.IsNullOrWhiteSpace(_newState) || string.IsNullOrWhiteSpace(_newZip))">
+                        @(_appendingToRoute ? "Adding…" : "Add to Loaded Route")
+                    </button>
+                }
+                <button class="btn btn-sm btn-outline-info ms-auto" @onclick="ClearAddressFields"
+                        disabled="@(!AddressFormHasAnyInput)">
+                    Clear Fields
+                </button>
+            </div>
         </div>
 
         <!-- Pending deliveries -->
@@ -538,7 +546,7 @@
     // New delivery form fields
     private string _newStreet = string.Empty;
     private string _newCity = string.Empty;
-    private string _newState = "MN";
+    private string _newState = DefaultState;
     private string _newZip = string.Empty;
     private string _newLatStr = string.Empty;
     private string _newLonStr = string.Empty;
@@ -559,6 +567,21 @@
 
     private const string AutomaticAddressSearchDescription =
         "Look up coordinates as soon as you leave an address field. Uncheck to search only when you click Search.";
+
+    // The state the form starts on and returns to when cleared — nearly every
+    // stop on these routes is in-state.
+    private const string DefaultState = "MN";
+
+    // Drives the Clear Fields button: nothing to clear once the form is back
+    // to how it looks on a fresh page load.
+    private bool AddressFormHasAnyInput =>
+        !string.IsNullOrWhiteSpace(_newStreet) ||
+        !string.IsNullOrWhiteSpace(_newCity) ||
+        !string.IsNullOrWhiteSpace(_newZip) ||
+        !string.IsNullOrWhiteSpace(_newLatStr) ||
+        !string.IsNullOrWhiteSpace(_newLonStr) ||
+        _newState != DefaultState ||
+        _newLongRunning;
 
     private List<CreateDeliveryDto> _pendingDeliveries = new();
     private string? _createStatus;
@@ -774,6 +797,22 @@
         }
 
         _geocoding = false;
+    }
+
+    // Wipes the whole address form, unlike the partial reset the add buttons
+    // do — those deliberately keep City/State/Zip so consecutive stops in the
+    // same town don't have to be retyped.
+    private void ClearAddressFields()
+    {
+        _newStreet = string.Empty;
+        _newCity = string.Empty;
+        _newState = DefaultState;
+        _newZip = string.Empty;
+        _newLatStr = string.Empty;
+        _newLonStr = string.Empty;
+        _newLongRunning = false;
+        _geocodeStatus = null;
+        _lastGeocodedAddress = string.Empty;
     }
 
     private void AddDeliveryToList()
