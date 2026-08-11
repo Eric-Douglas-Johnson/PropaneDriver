@@ -37,6 +37,8 @@ builder.Services.AddScoped<AddressApiService>();
 builder.Services.AddScoped<FuelLogApiService>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeocodingService>();
+builder.Services.AddScoped<DeliveryTimerService>();
+builder.Services.AddScoped<DeliveryCompletionService>();
 builder.Services.AddScoped<GeoFenceService>();
 builder.Services.AddScoped<SpeechService>();
 

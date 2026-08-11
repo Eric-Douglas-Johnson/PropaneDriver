@@ -7,6 +7,8 @@
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
+@inject DeliveryTimerService DeliveryTimers
+@inject DeliveryCompletionService DeliveryCompletion
 @inject RouteApiService RouteApi
 @inject DeliveryApiService DeliveryApi
 @inject DeliveryTimeApiService DeliveryTimeApi
@@ -123,9 +125,9 @@
                         {
                             var inside = _geoFenceStatus?.IsInsideFence == true;
                             <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
-                            @if (delivery.LongRunning && GeoFenceService.IsManualTimerRunning)
+                            @if (delivery.LongRunning && DeliveryTimers.IsRunningFor(delivery.Id))
                             {
-                                <span class="delivery-status-badge manual-timer-badge">@FormatTimer(_timerSeconds)</span>
+                                <span class="delivery-status-badge manual-timer-badge">@FormatTimer(DeliveryTimers.ElapsedSecondsFor(delivery.Id))</span>
                             }
                         }
                         <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
@@ -279,19 +281,21 @@
                     @_tankLocationStatus
                 </div>
             }
-            @if (_selectedDelivery.LongRunning && _activeDelivery?.Id == _selectedDelivery.Id)
+            @if (_selectedDelivery.LongRunning)
             {
+                var timerRunningForSelected = DeliveryTimers.IsRunningFor(_selectedDelivery.Id);
+
                 <div class="manual-timer-panel">
-                    <div class="manual-timer-display">@FormatTimer(_timerSeconds)</div>
+                    <div class="manual-timer-display">@FormatTimer(DeliveryTimers.ElapsedSecondsFor(_selectedDelivery.Id))</div>
                     <div class="manual-timer-actions">
                         <button class="btn btn-lg btn-success"
                                 @onclick="StartManualTimer"
-                                disabled="@(GeoFenceService.IsManualTimerRunning || _togglingManualTimer)">
+                                disabled="@(timerRunningForSelected || _togglingManualTimer || !ActiveDeliveryIsSelected())">
                             Start Timer
                         </button>
                         <button class="btn btn-lg btn-danger"
                                 @onclick="StopManualTimer"
-                                disabled="@(!GeoFenceService.IsManualTimerRunning || _togglingManualTimer)">
+                                disabled="@(!timerRunningForSelected || _togglingManualTimer)">
                             Stop Timer
                         </button>
                     </div>
@@ -363,7 +367,6 @@
     private IDelivery? _selectedDelivery;
     private IDelivery? _activeDelivery;
     private GeoFenceEventArgs? _geoFenceStatus;
-    private double _timerSeconds;
     private string? _gpsError;
     private string? _saveStatus;
     private bool _saveSuccess;
@@ -371,59 +374,29 @@
     private bool _gpsChecking;
     private GpsCheckResult? _gpsCheckResult;
     private string? _gpsCheckError;
-
-    // State for the "Set GPS from Truck" button in delivery details. Lives
-    // on the page (not the GeoFenceService) because it's a one-shot user
-    // action tied to whichever delivery is currently selected.
     private bool _settingAddressGps;
     private string? _addressGpsStatus;
     private bool _addressGpsSuccess;
-
-    // Disables the "+ Back In" button while the PUT is in flight so a
-    // double-tap can't fire two writes.
     private bool _settingBackIn;
-
-    // Inline "Add Alert" editor state for the selected delivery.
     private bool _addingAlertOpen;
     private string _alertDraft = string.Empty;
     private bool _savingAlert;
     private string? _alertSaveStatus;
     private bool _alertSaveSuccess;
     private bool _dictatingAlert;
-
-    // Inline "Set Tank Location" editor state for the selected delivery.
     private bool _editingTankLocation;
     private string _tankLocationDraft = string.Empty;
     private bool _savingTankLocation;
     private string? _tankLocationStatus;
     private bool _tankLocationSuccess;
     private bool _dictatingTankLocation;
-
-    // Disables the "Force Next" button while the status update is in flight
-    // so the driver can't double-tap and skip two deliveries by accident.
     private bool _forcingNext;
-
-    // Same idea for "Cancel Delivery" — guards against a double-tap firing
-    // two status updates while the first PUT is in flight.
     private bool _cancellingActiveDelivery;
-
-    // Same idea for the LongRunning manual Start/Stop buttons — protects
-    // against a double-tap firing two starts or two stops in quick
-    // succession before the service has a chance to flip its state.
     private bool _togglingManualTimer;
-
-    // Per-delivery completion duration in seconds, populated as deliveries
-    // finish during this session (geofence flow + Force Next). Drives the
-    // duration label on minimized completed rows. Deliveries that were
-    // already complete on page load won't have an entry — those rows render
-    // without a duration.
     private readonly Dictionary<string, double> _completedTimesSeconds = new();
-
     private record GpsCheckResult(double Latitude, double Longitude, double Accuracy);
-
     private string? _loadError;
     private bool _loaded;
-
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
         : 0;
@@ -431,15 +404,12 @@
     protected override async Task OnInitializedAsync()
     {
         GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
-        GeoFenceService.OnTimerTick += HandleTimerTick;
-        GeoFenceService.OnSaveResult += HandleSaveResult;
-        GeoFenceService.OnDeliveryCompleted += HandleDeliveryCompleted;
+        DeliveryTimers.OnTick += HandleTimerTick;
+        DeliveryCompletion.OnSaveResult += HandleSaveResult;
+        DeliveryCompletion.OnDeliveryCompleted += HandleDeliveryCompleted;
         GeolocationService.OnError += HandleGpsError;
 
         await LoadTodayRouteAsync();
-
-        // Set the initial active delivery (used by the geofence)
-        await SetActiveDeliveryAsync(FindNextDelivery());
 
         // Auto-start GPS monitoring
         await GeolocationService.StartWatchingAsync();
@@ -494,24 +464,15 @@
                 Driver = driver,
                 TotalStops = _deliveries.Count,
                 CompletedStops = _deliveries.Count(d => d.Status == 2),
-                // Server-side GPSHelperService stores expected route duration in
-                // minutes on the RouteDbRecord. Project it forward from "now" so
-                // the "Est. Completion" tile shows a clock time the driver can
-                // actually plan against (e.g. "3:47 PM") rather than a raw
-                // duration. If the server didn't compute one (missing GPS on
-                // every stop, for instance), leave it blank.
                 EstimatedCompletionTime = route.EstimatedRouteTime > 0
                     ? FormatHours(route.EstimatedRouteTime)
                     : string.Empty,
-                // The UI renders alerts directly from _deliveries so that
-                // per-alert Seen state can be tracked and clicked; the
-                // RouteSummaryDto.Alerts string list is no longer used for
-                // this page's Alerts section.
                 Alerts = new List<string>()
             };
         }
 
-        _selectedDelivery = FindNextDelivery() ?? _deliveries.FirstOrDefault();
+        await SetActiveDeliveryAsync(FindNextDelivery());
+
         _loaded = true;
     }
 
@@ -531,17 +492,6 @@
         OpenGoogleMapsDirections(_activeDelivery);
     }
 
-    // "Force Next" — manually mark the current active delivery as Complete
-    // and advance the active pointer to the next pending stop. Use case:
-    // the geofence didn't trip (GPS pin off, radius too tight, driver parked
-    // far from the tank, etc.) but the delivery is actually done and the
-    // driver needs to move on. The driver enters the actual delivery time
-    // in minutes so we can still persist a DeliveryTime row for the
-    // address-average stats — otherwise force-skipping would quietly skew
-    // the route-time estimates toward 0 for repeat stops.
-    //
-    // The input itself doubles as the confirmation: a valid number means
-    // proceed, Cancel or blank means abort.
     private async Task ForceNextDelivery()
     {
         if (_activeDelivery is null || _forcingNext) return;
@@ -562,6 +512,7 @@
 
         // window.prompt returns the typed string, or null on Cancel.
         var raw = await JS.InvokeAsync<string?>("prompt", promptText, "");
+
         if (string.IsNullOrWhiteSpace(raw)) return; // cancel or empty => abort
 
         if (!double.TryParse(raw.Trim(), System.Globalization.NumberStyles.Float,
@@ -585,6 +536,7 @@
 
         _forcingNext = true;
         _saveStatus = null;
+
         StateHasChanged();
 
         // 1) Save the DeliveryTime row first. If this fails the whole flow
@@ -635,16 +587,10 @@
             + (next is not null ? $" — now active: {next.Address.Street}" : " — no more pending deliveries");
         _saveSuccess = true;
         _forcingNext = false;
+
         StateHasChanged();
     }
 
-    // "Cancel Delivery" — abandon the active delivery without recording a
-    // delivery time. Marks status=Complete so the row drops out of pending
-    // and the active pointer advances, but no DeliveryTime row is written
-    // (a zero-length stop would skew the address-average stats and poison
-    // future route estimates). Use case: driver pulled up to the wrong
-    // stop, the route had a duplicate, the customer cancelled at the door,
-    // etc. Force Next is the sibling action that DOES record a time.
     private async Task CancelActiveDelivery()
     {
         if (_activeDelivery is null || _cancellingActiveDelivery) return;
@@ -702,10 +648,18 @@
     private async Task StartManualTimer()
     {
         if (_togglingManualTimer || _activeDelivery is null) return;
+        if (DeliveryTimers.IsAnyTimerRunning) return;
+
         _togglingManualTimer = true;
+
         try
         {
-            await GeoFenceService.StartManualTimerAsync();
+            await DeliveryTimers.StartAsync(_activeDelivery.Id);
+        }
+        catch (ArgumentException ex)
+        {
+            await ErrorLogService.LogErrorAsync(
+                "Route.StartManualTimer", $"Starting manual timer failed: {ex.Message}");
         }
         finally
         {
@@ -713,18 +667,21 @@
         }
     }
 
+    // Stopping ends the stop: the elapsed time goes through the same completion
+    // pipeline the geofence uses, so HandleDeliveryCompleted advances the route.
     private async Task StopManualTimer()
     {
-        if (_togglingManualTimer || !GeoFenceService.IsManualTimerRunning) return;
+        if (_togglingManualTimer || _activeDelivery is null) return;
+        if (!DeliveryTimers.IsRunningFor(_activeDelivery.Id)) return;
+
         _togglingManualTimer = true;
+
         try
         {
-            // The GeoFenceService stops the tick, saves the DeliveryTime,
-            // marks the delivery complete, and fires OnDeliveryCompleted —
-            // which our HandleDeliveryCompleted already routes through to
-            // advance the active pointer and update the completed-times
-            // dictionary. Same downstream path the geofence flow takes.
-            await GeoFenceService.StopManualTimerAsync();
+            var completedDelivery = _activeDelivery;
+            var elapsedSeconds = await DeliveryTimers.StopAsync();
+
+            await DeliveryCompletion.CompleteAsync(completedDelivery, elapsedSeconds);
         }
         finally
         {
@@ -840,12 +797,9 @@
         _settingAddressGps = false;
     }
 
+    // Action taken when user manually selects a delivery
     private void SelectDelivery(IDelivery delivery)
     {
-        // Selecting a delivery only changes the detail view; the geofence
-        // stays locked to the current/active delivery. Close any open
-        // inline editors so a draft for the previous row can't be saved
-        // against the newly-selected one.
         _selectedDelivery = delivery;
         _addingAlertOpen = false;
         _alertDraft = string.Empty;
@@ -855,10 +809,6 @@
         _tankLocationStatus = null;
     }
 
-    // Toggles the BackIn flag for the selected delivery's address. Same
-    // button serves both directions — label flips between "+ Back In" and
-    // "− Back In" so the driver can clear a mistakenly-set flag without
-    // jumping to the Navigation page.
     private async Task ToggleBackIn()
     {
         if (_selectedDelivery is null || _settingBackIn) return;
@@ -1075,24 +1025,21 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private async void HandleDeliveryCompleted(IDelivery completed, double elapsedSeconds)
+    private async void HandleDeliveryCompleted(IDelivery completedDelivery, double elapsedSeconds)
     {
-        // The GeoFenceService has already set completed.Status = 2 and
-        // persisted it server-side. We just need to update UI state and
-        // advance to the next pending delivery.
-        var localMatch = _deliveries.FirstOrDefault(d => d.Id == completed.Id);
+        var localMatch = _deliveries.FirstOrDefault(d => d.Id == completedDelivery.Id);
         if (localMatch is not null) localMatch.Status = 2;
 
-        _completedTimesSeconds[completed.Id] = elapsedSeconds;
-
+        _completedTimesSeconds[completedDelivery.Id] = elapsedSeconds;
         _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
 
-        var next = FindNextDelivery();
-        if (next is not null && next.Id != completed.Id)
+        var nextDelivery = FindNextDelivery();
+
+        if (nextDelivery is not null && nextDelivery.Id != completedDelivery.Id)
         {
-            await SetActiveDeliveryAsync(next);
+            await SetActiveDeliveryAsync(nextDelivery);
         }
-        else if (next is null)
+        else if (nextDelivery is null)
         {
             await SetActiveDeliveryAsync(null);
         }
@@ -1100,32 +1047,43 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private IDelivery? FindNextDelivery()
-    => _deliveries.FirstOrDefault(d => d.Status == 0);
+    private IDelivery? FindNextDelivery() => _deliveries.FirstOrDefault(d => d.Status == 0);
 
+    // A delivery cannot be set to active without also being selected
     private async Task SetActiveDeliveryAsync(IDelivery? delivery)
     {
         _activeDelivery = delivery;
+        _selectedDelivery = delivery;
+
         _geoFenceStatus = null;
-        _timerSeconds = 0;
         _wasInsideFence = false;
 
-        // Awaited so that on initial page load, any persisted fence-entry
-        // timer is restored before the GPS service starts emitting position
-        // updates. A fire-and-forget call would race with the first GPS tick
-        // and the timer would restart from zero.
-        await GeoFenceService.SetTargetAsync(delivery);
+        // Awaited before the fence is armed so a timer persisted across a page
+        // reload is back in memory first. A fire-and-forget call would race
+        // with the first GPS tick and the timer would restart from zero.
+        await DeliveryTimers.RestoreAsync();
 
-        // Keep the detail view in sync if nothing is selected yet
-        if (_selectedDelivery is null && delivery is not null)
+        // Drop a restored timer belonging to a different (or completed) stop so
+        // it can't poison this one.
+        if (DeliveryTimers.IsAnyTimerRunning && !DeliveryTimers.IsRunningFor(delivery?.Id))
         {
-            _selectedDelivery = delivery;
+            await DeliveryTimers.ClearAsync();
         }
+
+        // LongRunning stops are driver-timed, so they get no fence target.
+        // Passing null also disarms the fence when the route is finished.
+        GeoFenceService.SetTarget(delivery?.LongRunning == true ? null : delivery);
     }
 
+    private bool ActiveDeliveryIsSelected()
+    {
+        return _activeDelivery?.Id == _selectedDelivery?.Id;
+    }
+
+    // The clock is read straight off DeliveryTimers during render, so a tick
+    // only needs to trigger one.
     private void HandleTimerTick(double seconds)
     {
-        _timerSeconds = seconds;
         InvokeAsync(StateHasChanged);
     }
 
@@ -1162,6 +1120,7 @@
     private static string FormatTimer(double totalSeconds)
     {
         var ts = TimeSpan.FromSeconds(totalSeconds);
+
         return ts.Hours > 0
             ? $"{ts.Hours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
             : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
@@ -1201,9 +1160,9 @@
     public async ValueTask DisposeAsync()
     {
         GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
-        GeoFenceService.OnTimerTick -= HandleTimerTick;
-        GeoFenceService.OnSaveResult -= HandleSaveResult;
-        GeoFenceService.OnDeliveryCompleted -= HandleDeliveryCompleted;
+        DeliveryTimers.OnTick -= HandleTimerTick;
+        DeliveryCompletion.OnSaveResult -= HandleSaveResult;
+        DeliveryCompletion.OnDeliveryCompleted -= HandleDeliveryCompleted;
         GeolocationService.OnError -= HandleGpsError;
 
         // Do NOT dispose GeolocationService — it is a shared singleton.

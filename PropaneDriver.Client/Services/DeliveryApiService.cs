@@ -19,15 +19,16 @@ namespace PropaneDriver.Client.Services
             try
             {
                 var response = await _http.PutAsJsonAsync(
-                    $"api/deliveries/{deliveryId}/status",
-                    new DeliveryStatusUpdateDto { Status = status });
+                    $"api/deliveries/{deliveryId}/status", new DeliveryStatusUpdateDto { Status = status });
 
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
+
                     await ErrorLogService.LogErrorAsync(
-                        "DeliveryApiService.UpdateStatusAsync",
+                        "DeliveryApiService.UpdateStatusAsync", 
                         $"PUT api/deliveries/{deliveryId}/status returned {(int)response.StatusCode}: {body}");
+
                     return false;
                 }
                 return true;
@@ -48,8 +49,7 @@ namespace PropaneDriver.Client.Services
             try
             {
                 var response = await _http.PutAsJsonAsync(
-                    $"api/deliveries/{deliveryId}/long-running",
-                    new DeliveryLongRunningUpdateDto { LongRunning = longRunning });
+                    $"api/deliveries/{deliveryId}/long-running", new DeliveryLongRunningUpdateDto { LongRunning = longRunning });
 
                 if (!response.IsSuccessStatusCode)
                 {

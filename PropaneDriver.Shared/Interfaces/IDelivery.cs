@@ -4,8 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace PropaneDriver.Shared.Interfaces
 {
-    // Abstraction over a deliverable stop. Concrete implementations represent
-    // different sources (manual entry today; CSV/CRM/tank-monitor pulls later).
+    // Abstraction over a deliverable stop.
     // Code that consumes a delivery should depend on IDelivery so a new source
     // can plug in without touching every call site.
     [JsonConverter(typeof(DeliveryJsonConverter))]
