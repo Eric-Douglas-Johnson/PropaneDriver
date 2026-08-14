@@ -11,8 +11,12 @@ namespace PropaneDriver.Client.Services
     {
         private const int COMPLETED_STATUS = 2;
 
-        // Floor on recorded time. Stops shorter than this skew the
-        // address-average stats that drive route estimates.
+        // Geofenced stops shorter than this are treated as a false trigger —
+        // the fence catching a quick drive-in/drive-out — and are discarded
+        // outright: no time row, no completion, no advancing the route. The
+        // delivery stays pending so a real attempt can complete it. Manual
+        // driver-stopped timers are exempt (the driver confirms the stop
+        // deliberately), which callers opt into via enforceMinimumDuration.
         private const double MINIMUM_DELIVERY_SECONDS = 5 * 60;
 
         private readonly DeliveryTimeApiService _deliveryTimeApi;
@@ -31,7 +35,8 @@ namespace PropaneDriver.Client.Services
 
         // Returns true when the delivery ended up complete, so callers can tell
         // a finished stop from one that needs another attempt.
-        public async Task<bool> CompleteAsync(IDelivery? delivery, double rawElapsedSeconds)
+        public async Task<bool> CompleteAsync(
+            IDelivery? delivery, double rawElapsedSeconds, bool enforceMinimumDuration = true)
         {
             if (delivery is null)
             {
@@ -57,14 +62,24 @@ namespace PropaneDriver.Client.Services
                 return false;
             }
 
-            var elapsedSeconds = Math.Max(rawElapsedSeconds, MINIMUM_DELIVERY_SECONDS);
+            // Too short to be a real stop — discard it rather than flooring it
+            // up: a padded row would still skew the address stats, and
+            // completing would advance the route off a stop that never happened.
+            if (enforceMinimumDuration && rawElapsedSeconds < MINIMUM_DELIVERY_SECONDS)
+            {
+                await ErrorLogService.LogErrorAsync(
+                    "DeliveryCompletionService.CompleteAsync",
+                    $"Ignoring {rawElapsedSeconds:F0}s stop for delivery '{delivery.Id}' — " +
+                    "under the 5-minute minimum, likely a fence blip");
+                return false;
+            }
 
-            await SaveDeliveryTimeAsync(delivery, elapsedSeconds);
+            await SaveDeliveryTimeAsync(delivery, rawElapsedSeconds);
 
             if (delivery.Status != COMPLETED_STATUS)
             {
                 await MarkCompleteAsync(delivery);
-                OnDeliveryCompleted?.Invoke(delivery, elapsedSeconds);
+                OnDeliveryCompleted?.Invoke(delivery, rawElapsedSeconds);
             }
 
             return true;

@@ -669,6 +669,9 @@
 
     // Stopping ends the stop: the elapsed time goes through the same completion
     // pipeline the geofence uses, so HandleDeliveryCompleted advances the route.
+    // The driver confirms first — the timer keeps running on Cancel — and a
+    // confirmed stop always counts, even under the 5-minute fence-blip minimum,
+    // because a deliberate tap isn't a false trigger.
     private async Task StopManualTimer()
     {
         if (_togglingManualTimer || _activeDelivery is null) return;
@@ -678,10 +681,19 @@
 
         try
         {
+            var elapsedMinutes = DeliveryTimers.ElapsedSecondsFor(_activeDelivery.Id) / 60.0;
+            var confirmed = await JS.InvokeAsync<bool>(
+                "confirm",
+                $"Stop the timer for {_activeDelivery.Address.FullAddress}?\n\n" +
+                $"Elapsed: {elapsedMinutes:F1} min — this saves the delivery time " +
+                "and marks the stop complete.");
+            if (!confirmed) return;
+
             var completedDelivery = _activeDelivery;
             var elapsedSeconds = await DeliveryTimers.StopAsync();
 
-            await DeliveryCompletion.CompleteAsync(completedDelivery, elapsedSeconds);
+            await DeliveryCompletion.CompleteAsync(
+                completedDelivery, elapsedSeconds, enforceMinimumDuration: false);
         }
         finally
         {

@@ -99,6 +99,72 @@ public class GeoFenceServiceTests
         Assert.Equal(0, delivery.Status);
     }
 
+    // Driving into the fence and straight back out (a drive-by clip or a GPS
+    // blip) must not record a time, complete the stop, or advance the route.
+    // The fence stays armed on the same delivery so a real visit can finish it.
+    [Fact]
+    public void QuickFenceBounceDiscardsTheStopAndKeepsTheDeliveryPending()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+        var completedCount = 0;
+        harness.DeliveryCompletion.OnDeliveryCompleted += (_, _) => completedCount++;
+
+        harness.GeoFence.SetTarget(delivery);
+        harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+        harness.Geolocation.OnPositionUpdate(OutsideFenceLatitude, TankLongitude, accuracy: 5);
+
+        Assert.Equal(0, completedCount);
+        Assert.Equal(0, delivery.Status);
+        Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
+        Assert.True(harness.GeoFence.IsMonitoring);
+
+        // A return visit re-arms the clock for the real attempt.
+        harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+        Assert.True(harness.DeliveryTimers.IsRunningFor(delivery.Id));
+    }
+
+    [Fact]
+    public async Task CompleteAsyncRejectsStopsUnderFiveMinutes()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+
+        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+            delivery, rawElapsedSeconds: 299);
+
+        Assert.False(wasCompleted);
+        Assert.Equal(0, delivery.Status);
+    }
+
+    // The manual driver-stopped timer path opts out of the minimum: a
+    // confirmed, deliberate stop counts no matter how short it was.
+    [Fact]
+    public async Task CompleteAsyncAllowsShortStopsWhenTheMinimumIsNotEnforced()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+
+        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+            delivery, rawElapsedSeconds: 90, enforceMinimumDuration: false);
+
+        Assert.True(wasCompleted);
+        Assert.Equal(2, delivery.Status);
+    }
+
+    [Fact]
+    public async Task CompleteAsyncCompletesStopsAtTheFiveMinuteMinimum()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+
+        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+            delivery, rawElapsedSeconds: 300);
+
+        Assert.True(wasCompleted);
+        Assert.Equal(2, delivery.Status);
+    }
+
     private static PropaneDeliveryDto DeliveryAtTank() => new()
     {
         Id = Guid.NewGuid().ToString(),
