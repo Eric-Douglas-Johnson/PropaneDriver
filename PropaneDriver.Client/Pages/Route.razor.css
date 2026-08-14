@@ -162,6 +162,19 @@
     font-size: 1rem;
 }
 
+/* Full-width variant of the menu button that sits under the Deliveries
+   header, above the first delivery row. */
+.navigate-next-btn {
+    width: 100%;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.navigate-next-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .delivery-item {
     padding: 0.75rem;
     border: 1px solid #2a2a4a;

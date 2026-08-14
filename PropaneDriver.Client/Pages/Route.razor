@@ -11,7 +11,6 @@
 @inject DeliveryCompletionService DeliveryCompletion
 @inject RouteApiService RouteApi
 @inject DeliveryApiService DeliveryApi
-@inject DeliveryTimeApiService DeliveryTimeApi
 @inject AddressApiService AddressApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -26,11 +25,6 @@
 <div class="deliveries-menu">
     <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
     <button class="menu-btn" @onclick="NavigateToActive" disabled="@(_activeDelivery is null)">Navigate to Active</button>
-    <button class="menu-btn" @onclick="ForceNextDelivery"
-            disabled="@(_activeDelivery is null || _forcingNext)"
-            title="Mark the current active delivery complete without recording a time, and advance to the next pending stop">
-        @(_forcingNext ? "Advancing…" : "Force Next")
-    </button>
 </div>
 
 <!-- Route Summary -->
@@ -84,6 +78,12 @@
     <!-- Delivery List (Left) -->
     <div class="delivery-list">
         <h5>Deliveries</h5>
+        <button class="menu-btn navigate-next-btn"
+                @onclick="NavigateToNext"
+                disabled="@(NextPendingDelivery() is null)"
+                title="Open navigation to the next pending stop after the active one">
+            Navigate to Next
+        </button>
         @if (!string.IsNullOrEmpty(_saveStatus))
         {
             <div class="@(_saveSuccess ? "text-success" : "text-danger") mb-2" style="font-size:0.8rem;">@_saveStatus</div>
@@ -390,7 +390,6 @@
     private string? _tankLocationStatus;
     private bool _tankLocationSuccess;
     private bool _dictatingTankLocation;
-    private bool _forcingNext;
     private bool _cancellingActiveDelivery;
     private bool _togglingManualTimer;
     private readonly Dictionary<string, double> _completedTimesSeconds = new();
@@ -492,103 +491,20 @@
         OpenGoogleMapsDirections(_activeDelivery);
     }
 
-    private async Task ForceNextDelivery()
+    // The stop the driver would head to after the active one: the first
+    // pending delivery that isn't already active. When nothing is active
+    // (start of route, or the route just finished), it's simply the first
+    // pending stop.
+    private IDelivery? NextPendingDelivery() =>
+        _deliveries.FirstOrDefault(d => d.Status == 0 && d.Id != _activeDelivery?.Id);
+
+    // Same as NavigateToActive, but for the upcoming stop — lets the driver
+    // preview the drive to the next delivery while the current one is active.
+    private void NavigateToNext()
     {
-        if (_activeDelivery is null || _forcingNext) return;
-
-        var current = _activeDelivery;
-        var nextCandidate = _deliveries
-            .Where(d => d.Status == 0 && d.Id != current.Id)
-            .FirstOrDefault();
-
-        var promptText =
-            $"Force-advance past {current.Address.FullAddress}?\n\n" +
-            $"Current active: {current.Address.FullAddress}\n" +
-            (nextCandidate is not null
-                ? $"Will advance to: {nextCandidate.Address.FullAddress}\n\n"
-                : "No more pending deliveries after this — active marker will be cleared.\n\n") +
-            "Enter the delivery time in MINUTES (e.g. 12 or 7.5).\n" +
-            "Cancel or leave blank to abort.";
-
-        // window.prompt returns the typed string, or null on Cancel.
-        var raw = await JS.InvokeAsync<string?>("prompt", promptText, "");
-
-        if (string.IsNullOrWhiteSpace(raw)) return; // cancel or empty => abort
-
-        if (!double.TryParse(raw.Trim(), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var minutes)
-            || minutes <= 0
-            || double.IsNaN(minutes) || double.IsInfinity(minutes))
-        {
-            _saveStatus = $"✗ Invalid delivery time '{raw}'. Must be a positive number of minutes.";
-            _saveSuccess = false;
-            StateHasChanged();
-            return;
-        }
-
-        if (current.Address.Id == Guid.Empty)
-        {
-            _saveStatus = $"✗ This stop has no linked address — cannot record a delivery time.";
-            _saveSuccess = false;
-            StateHasChanged();
-            return;
-        }
-
-        _forcingNext = true;
-        _saveStatus = null;
-
-        StateHasChanged();
-
-        // 1) Save the DeliveryTime row first. If this fails the whole flow
-        //    aborts and the delivery stays active, so the driver can retry
-        //    without a partial state where status=Complete but no time row
-        //    was ever stored.
-        var dto = new DeliveryTimeDto
-        {
-            DeliveryId = current.Id,
-            AddressId = current.Address.Id,
-            TimeIntervalSeconds = minutes * 60.0
-        };
-
-        var timeResult = await DeliveryTimeApi.SaveDeliveryTimeAsync(dto);
-        if (!timeResult.Success)
-        {
-            _saveStatus = $"✗ Failed to save delivery time: {timeResult.ErrorMessage}";
-            _saveSuccess = false;
-            _forcingNext = false;
-            StateHasChanged();
-            return;
-        }
-
-        // 2) Mark the delivery Complete on the server.
-        var ok = await DeliveryApi.UpdateStatusAsync(current.Id, 2);
-        if (!ok)
-        {
-            // Time row saved but status update failed — surface the mismatch
-            // so the driver knows the stop isn't fully reconciled. The server
-            // logs the HTTP failure via ErrorLogService already.
-            _saveStatus = $"✗ Saved time but failed to mark {current.Address.Street} complete — see ErrorLog.";
-            _saveSuccess = false;
-            _forcingNext = false;
-            StateHasChanged();
-            return;
-        }
-
-        // 3) Sync local state and advance the active pointer. Mirrors
-        //    HandleDeliveryCompleted on the normal geofence-driven flow.
-        current.Status = 2;
-        _completedTimesSeconds[current.Id] = minutes * 60.0;
-        _routeSummary.CompletedStops = _deliveries.Count(d => d.Status == 2);
-
-        var next = FindNextDelivery();
-        await SetActiveDeliveryAsync(next); // null clears the active marker when route is done
-
-        _saveStatus = $"✓ Saved {minutes:F1} min for {current.Address.Street}"
-            + (next is not null ? $" — now active: {next.Address.Street}" : " — no more pending deliveries");
-        _saveSuccess = true;
-        _forcingNext = false;
-
-        StateHasChanged();
+        var nextDelivery = NextPendingDelivery();
+        if (nextDelivery is null) return;
+        OpenGoogleMapsDirections(nextDelivery);
     }
 
     private async Task CancelActiveDelivery()
