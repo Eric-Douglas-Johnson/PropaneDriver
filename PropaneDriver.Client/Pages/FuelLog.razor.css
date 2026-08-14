@@ -43,6 +43,27 @@
     border-radius: 8px;
 }
 
+/* The copy below the grid: spacing flips to sit between the last row and the
+   action buttons (whose own margin-top provides the gap beneath). */
+.fuel-log-lognext--bottom {
+    margin-top: 1rem;
+    margin-bottom: 0;
+}
+
+/* Momentary save confirmation: the button goes green and reads "Saved" while
+   the flag is set. The flash pulses via filter (not background-color) because
+   the base background carries !important, which animation keyframes can't
+   override. */
+.fuel-log-lognext--saved {
+    background-color: #22a35e !important;
+    border-color: #1c7d49;
+    animation: fuel-log-saved-flash 0.35s ease-in-out 3;
+}
+
+@keyframes fuel-log-saved-flash {
+    50% { filter: brightness(1.45); }
+}
+
 .fuel-log-lognext-icon {
     font-size: 1.35rem;
     line-height: 1;

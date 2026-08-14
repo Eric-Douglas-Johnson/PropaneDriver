@@ -28,9 +28,9 @@
         }
         else
         {
-            <button class="btn fuel-log-lognext" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
-                <span class="fuel-log-lognext-icon">🎤</span>
-                <span class="fuel-log-lognext-label">@(_listening ? "Listening…" : "Log Next")</span>
+            <button class="btn fuel-log-lognext @LogNextButtonClass" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
+                <span class="fuel-log-lognext-icon">@LogNextButtonIcon</span>
+                <span class="fuel-log-lognext-label">@LogNextButtonLabel</span>
             </button>
 
             <div class="fuel-log-table">
@@ -87,6 +87,11 @@
                 }
             </div>
 
+            <button class="btn fuel-log-lognext fuel-log-lognext--bottom @LogNextButtonClass" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
+                <span class="fuel-log-lognext-icon">@LogNextButtonIcon</span>
+                <span class="fuel-log-lognext-label">@LogNextButtonLabel</span>
+            </button>
+
             <div class="fuel-log-actions">
                 <button class="btn btn-outline-secondary fuel-log-action" @onclick="AddRow">+ Add row</button>
                 <button class="btn btn-primary fuel-log-action" @onclick="SaveAsync" disabled="@_saving">
@@ -101,6 +106,15 @@
             {
                 <div class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
                     @_statusMessage
+                </div>
+            }
+
+            @if (_autoSaveState != AutoSaveState.Idle)
+            {
+                <div class="fuel-log-savemsg @(_autoSaveState == AutoSaveState.Failed ? "text-warning" : "text-muted")">
+                    @(_autoSaveState == AutoSaveState.Saving
+                        ? "Auto-saving…"
+                        : "Auto-save failed — entries are kept on this device. Tap Save fuel log to retry.")
                 </div>
             }
 
@@ -263,6 +277,7 @@
     // isn't lost. The driver still types the equipment number themselves.
     private async Task LogNextAsync()
     {
+        CancelSaveFlash();
         _listening = true;
         _statusMessage = null;
         StateHasChanged();
@@ -311,9 +326,10 @@
 
         targetRow.MeterValue = meterValue;
 
-        // Mirror the captured reading to this device so a reload can recover it,
-        // but leave the actual save to the driver's Save fuel log tap.
+        // Mirror the captured reading to this device so a reload can recover
+        // it, then push it to the server in the background.
         await PersistLocalDraftAsync(pendingSave: true);
+        QueueAutoSave();
 
         _statusSuccess = true;
         var gallons = GallonsForRow(_rows.IndexOf(targetRow));
@@ -337,6 +353,7 @@
         var targetRow = _rows[rowIndex];
         if (!string.IsNullOrWhiteSpace(targetRow.EquipmentNumber)) return;
 
+        CancelSaveFlash();
         _listening = true;
         _statusMessage = null;
         StateHasChanged();
@@ -378,9 +395,10 @@
 
         targetRow.EquipmentNumber = equipmentNumber;
 
-        // Mirror the captured unit number to this device, the same as a typed
-        // edit. The driver saves explicitly with Save fuel log.
+        // Mirror the captured unit number to this device, then push it to the
+        // server in the background alongside its meter reading.
         await PersistLocalDraftAsync(pendingSave: true);
+        QueueAutoSave();
         _statusSuccess = true;
         _statusMessage = $"Logged equipment #{equipmentNumber}.";
     }
@@ -430,41 +448,147 @@
     {
         _saving = true;
         _statusMessage = null;
+        _autoSaveState = AutoSaveState.Idle;
         StateHasChanged();
 
-        // Capture exactly what we're about to send, before any await — both the
-        // dto and its signature reflect the same instant. If a field is edited
-        // while the request is in flight, that edit won't be falsely counted as
-        // saved when the response comes back.
-        var signatureBeingSaved = CurrentSignature();
-        var saveDto = new SaveFuelLogDto
-        {
-            Entries = _rows.Select((row, index) => new FuelLogEntryDto
-            {
-                Id = row.Id,
-                EquipmentNumber = row.EquipmentNumber?.Trim() ?? string.Empty,
-                MeterValue = row.MeterValue ?? 0,
-                GallonsPumped = GallonsForRow(index) ?? 0,
-                SortOrder = index
-            }).ToList()
-        };
-
-        // Snapshot to this device before the network round-trip, so a crash or
-        // a closed tab mid-save can't lose the entries.
-        await PersistLocalDraftAsync(pendingSave: true);
-
-        var saved = await FuelLogApi.SaveFuelLogAsync(saveDto);
+        var saved = await SaveRowsToServerAsync();
 
         _saving = false;
         _statusSuccess = saved;
-        _statusMessage = saved ? "Saved." : "Save failed — try again.";
-        if (saved) _savedSignature = signatureBeingSaved;
+        _statusMessage = saved ? null : "Save failed — try again.";
+        if (saved) _ = FlashSaveConfirmationAsync();
+    }
 
-        // Record the result on-device. pendingSave reflects whether the current
-        // grid still differs from what's now saved, so a row edited while the
-        // save was in flight stays marked unsaved (and recoverable) instead of
-        // being dropped.
-        await PersistLocalDraftAsync(pendingSave: IsDirty);
+    // True while a fuel-log PUT is on the wire. Auto-saves and manual saves
+    // both funnel through SaveRowsToServerAsync's gate on this flag, so two
+    // saves can never overlap on the network — overlapping requests on a
+    // reused connection are what produced the "TypeError: Load failed"
+    // spurious failures on iOS Safari.
+    private bool _savePutInFlight;
+
+    // Send the current grid to the server, one request at a time. Waits for
+    // any in-flight save to finish first, then snapshots and sends the rows
+    // as they are at that moment — so a save queued behind another always
+    // carries the latest edits, never a stale copy.
+    private async Task<bool> SaveRowsToServerAsync()
+    {
+        while (_savePutInFlight) await Task.Delay(150);
+        _savePutInFlight = true;
+        try
+        {
+            // Capture exactly what we're about to send, before any await — both
+            // the dto and its signature reflect the same instant. If a field is
+            // edited while the request is in flight, that edit won't be falsely
+            // counted as saved when the response comes back.
+            var signatureBeingSaved = CurrentSignature();
+            var saveDto = new SaveFuelLogDto
+            {
+                Entries = _rows.Select((row, index) => new FuelLogEntryDto
+                {
+                    Id = row.Id,
+                    EquipmentNumber = row.EquipmentNumber?.Trim() ?? string.Empty,
+                    MeterValue = row.MeterValue ?? 0,
+                    GallonsPumped = GallonsForRow(index) ?? 0,
+                    SortOrder = index
+                }).ToList()
+            };
+
+            // Snapshot to this device before the network round-trip, so a crash
+            // or a closed tab mid-save can't lose the entries.
+            await PersistLocalDraftAsync(pendingSave: true);
+
+            var saved = await FuelLogApi.SaveFuelLogAsync(saveDto);
+            if (saved) _savedSignature = signatureBeingSaved;
+
+            // Record the result on-device. pendingSave reflects whether the
+            // current grid still differs from what's now saved, so a row edited
+            // while the save was in flight stays marked unsaved (and
+            // recoverable) instead of being dropped.
+            await PersistLocalDraftAsync(pendingSave: IsDirty);
+            return saved;
+        }
+        finally
+        {
+            _savePutInFlight = false;
+        }
+    }
+
+    private enum AutoSaveState { Idle, Saving, Failed }
+    private AutoSaveState _autoSaveState = AutoSaveState.Idle;
+
+    // Successful saves are confirmed on the Log Next buttons themselves: they
+    // turn green, flash a couple of times, and read "Saved" for a moment
+    // instead of showing a status label. The token guards overlapping flashes
+    // and cancellation — a newer flash or a cancel invalidates the pending
+    // revert so it can't cut the newer state short.
+    private bool _saveFlashActive;
+    private int _saveFlashToken;
+    private static readonly TimeSpan SaveFlashDuration = TimeSpan.FromMilliseconds(1600);
+
+    private string LogNextButtonClass => _saveFlashActive ? "fuel-log-lognext--saved" : string.Empty;
+    private string LogNextButtonIcon => !_listening && _saveFlashActive ? "✓" : "🎤";
+    private string LogNextButtonLabel =>
+        _listening ? "Listening…" : _saveFlashActive ? "Saved" : "Log Next";
+
+    private async Task FlashSaveConfirmationAsync()
+    {
+        var flashToken = ++_saveFlashToken;
+        _saveFlashActive = true;
+        await InvokeAsync(StateHasChanged);
+
+        await Task.Delay(SaveFlashDuration);
+        if (flashToken != _saveFlashToken) return;
+
+        _saveFlashActive = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelSaveFlash()
+    {
+        _saveFlashToken++;
+        _saveFlashActive = false;
+    }
+
+    // True while a queued auto-save is still waiting to snapshot the rows.
+    // Queuing another one in that window is redundant — the waiting save will
+    // pick up the newer values when it runs — so QueueAutoSave coalesces them.
+    private bool _autoSaveWaitingToSnapshot;
+
+    // Fire-and-forget save after a voice capture. Runs entirely in the
+    // background: Log Next and the grid stay usable while it's in flight, and
+    // a failure is non-fatal because the rows are already mirrored on-device —
+    // the driver can always fall back to the Save fuel log button.
+    private void QueueAutoSave()
+    {
+        if (_autoSaveWaitingToSnapshot) return;
+        _autoSaveWaitingToSnapshot = true;
+        _autoSaveState = AutoSaveState.Saving;
+        _ = RunQueuedAutoSaveAsync();
+    }
+
+    private async Task RunQueuedAutoSaveAsync()
+    {
+        try
+        {
+            // Wait out any in-flight save here (not just inside
+            // SaveRowsToServerAsync) so the coalescing flag can be cleared at
+            // the same moment the rows are snapshotted: once it's false, a new
+            // Log Next capture queues a fresh save rather than assuming this
+            // one will carry it.
+            while (_savePutInFlight) await Task.Delay(150);
+            _autoSaveWaitingToSnapshot = false;
+
+            var saved = await SaveRowsToServerAsync();
+            _autoSaveState = saved ? AutoSaveState.Idle : AutoSaveState.Failed;
+            if (saved) _ = FlashSaveConfirmationAsync();
+        }
+        catch
+        {
+            _autoSaveWaitingToSnapshot = false;
+            _autoSaveState = AutoSaveState.Failed;
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     // Mirror an edited meter or equipment field to this device's local storage.
@@ -475,6 +599,9 @@
     // reload before that save can still recover the entered readings.
     private async Task MirrorDraftAfterEditAsync()
     {
+        // A hand-typed edit makes the grid dirty again, so a lingering green
+        // "Saved" button would be misleading.
+        CancelSaveFlash();
         await PersistLocalDraftAsync(pendingSave: true);
     }
 

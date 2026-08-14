@@ -100,6 +100,10 @@ namespace PropaneDriver.Client.Services
             TimeSpan.FromSeconds(3)
         };
 
+        // Cap each attempt so a hung request fails into the retry path in
+        // seconds instead of stalling for HttpClient's 100-second default.
+        private static readonly TimeSpan SaveAttemptTimeout = TimeSpan.FromSeconds(20);
+
         // The fuel-log PUT is a full replace keyed by the signed-in driver, so
         // replaying the same save is idempotent and safe to retry. On the Free
         // hosting tier the worker idles out, and the first request after that
@@ -115,7 +119,8 @@ namespace PropaneDriver.Client.Services
                 var isFinalAttempt = attemptNumber == totalAttempts;
                 try
                 {
-                    var response = await _http.PutAsJsonAsync("api/fuel-log", dto);
+                    using var attemptTimeout = new CancellationTokenSource(SaveAttemptTimeout);
+                    var response = await _http.PutAsJsonAsync("api/fuel-log", dto, attemptTimeout.Token);
                     if (response.IsSuccessStatusCode)
                         return true;
 
