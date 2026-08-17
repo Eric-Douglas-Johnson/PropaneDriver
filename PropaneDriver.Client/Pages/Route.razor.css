@@ -160,6 +160,8 @@
     color: whitesmoke;
     margin-bottom: 0.75rem;
     font-size: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 /* Full-width variant of the menu button that sits under the Deliveries
@@ -298,6 +300,8 @@
     color: whitesmoke;
     margin-bottom: 1rem;
     font-size: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 .no-selection {
