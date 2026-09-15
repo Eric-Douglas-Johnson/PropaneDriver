@@ -14,10 +14,6 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/routes");
 
-            // Authenticated drivers may fetch routes for themselves; admin
-            // pulls any driver's route. Self-or-admin ownership is enforced
-            // server-side via the JWT NameIdentifier claim — a driver can't
-            // peek at another driver's route by guessing the URL.
             group.MapGet("{driverId:guid}/{date}", async (
                 Guid driverId,
                 DateOnly date,
@@ -37,9 +33,7 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(routeDto);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // List all routes for a driver (summary info). Drivers may list
-            // their own routes (Dispatch page); admins can list anyone's
-            // (Admin page).
+            // List all routes for a driver
             group.MapGet("driver/{driverId:guid}", async (
                 Guid driverId,
                 ClaimsPrincipal user,
@@ -64,8 +58,7 @@ namespace PropaneDriver.Server.Endpoints
                 return Results.Ok(routes);
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Delete a route and its deliveries. A driver can delete their
-            // own routes (Dispatch); an admin can delete any (Admin).
+            // Delete a route and its deliveries
             group.MapDelete("{id:guid}", async (
                 Guid id,
                 ClaimsPrincipal user,
@@ -111,8 +104,10 @@ namespace PropaneDriver.Server.Endpoints
             group.MapGet("today/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
             {
                 var centralTz = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
+
                 var today = DateOnly.FromDateTime(
                     TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, centralTz));
+
                 var route = await db.Routes
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.DriverId == driverId && r.Date == today);
@@ -120,14 +115,8 @@ namespace PropaneDriver.Server.Endpoints
                 if (route is null) return Results.NotFound();
 
                 var routeDto = await BuildRouteDtoAsync(route, db);
-
-                // Hydrate the actual recorded delivery time on each completed
-                // stop so the minimized "Complete" row can show the duration
-                // after a page reload, when the client-side _completedTimesSeconds
-                // dictionary is empty. The DeliveryTimes table is keyed by the
-                // delivery's string Id (Guid.ToString()), so we group by it and
-                // pick the most recent record per delivery.
                 var deliveryIds = routeDto.Deliveries.Select(d => d.Id).ToList();
+
                 if (deliveryIds.Count > 0)
                 {
                     var times = await db.DeliveryTimes
@@ -226,9 +215,6 @@ namespace PropaneDriver.Server.Endpoints
                         }
                         else
                         {
-                            // Don't clobber a manually-set pin (UpdateCoordinatesAsync).
-                            // Only seed coordinates from the create-form geocode when
-                            // the address has none stored yet.
                             var hasCoords = (address.Latitude ?? 0) != 0 || (address.Longitude ?? 0) != 0;
 
                             if (!hasCoords && (d.Latitude != 0 || d.Longitude != 0))
@@ -261,8 +247,7 @@ namespace PropaneDriver.Server.Endpoints
                         };
                     }).ToList();
 
-                    var estimatedRouteTime = await GPSHelperService.GetEstimatedRouteTime(
-                        deliveries, addressCache.Values.ToList());
+                    var estimatedRouteTime = await GPSHelperService.GetEstimatedRouteTime(deliveries, addressCache.Values.ToList());
 
                     var route = new RouteDbRecord
                     {

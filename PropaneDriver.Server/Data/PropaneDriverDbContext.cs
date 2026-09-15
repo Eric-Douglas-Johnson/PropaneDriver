@@ -72,12 +72,12 @@ namespace PropaneDriver.Server.Data
                 entity.HasIndex(e => e.RouteId);
                 entity.HasIndex(e => new { e.RouteId, e.SortOrder });
                 entity.HasIndex(e => e.AddressId);
-                // Relationships kept FK-only (no navigation properties) so the
-                // schema and cascade behavior are unchanged; queries join by id.
+
                 entity.HasOne<RouteDbRecord>()
                       .WithMany()
                       .HasForeignKey(e => e.RouteId)
                       .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasOne<AddressDbRecord>()
                       .WithMany()
                       .HasForeignKey(e => e.AddressId)

@@ -36,46 +36,31 @@ namespace PropaneDriver.Client.Services
         public bool IsInsideFence => _lastCheckWasInsideGeoFence;
         public bool IsMonitoring => _activeDelivery != null;
 
-        public GeoFenceService(
-            GeolocationService geolocationService,
+        public GeoFenceService(GeolocationService geolocationService,
             DeliveryTimerService deliveryTimerService,
             DeliveryCompletionService deliveryCompletion)
         {
             _geolocationService = geolocationService;
             _deliveryTimerService = deliveryTimerService;
             _deliveryCompletion = deliveryCompletion;
-            _geolocationService.OnPositionChanged += HandlePositionChanged;
+            _geolocationService.OnPositionChanged += HandleGpsPositionChange;
         }
 
-        // Arms the fence for a delivery, or disarms it when passed null. The
-        // caller decides which stops get geofenced; this service watches
-        // whatever it is handed.
         public void SetTarget(IDelivery? delivery)
         {
             _activeDelivery = delivery;
-
-            // A timer already running for this stop means the driver was inside
-            // the fence before a page reload. Relies on the caller having
-            // restored persisted timers first.
             _lastCheckWasInsideGeoFence = delivery is not null && _deliveryTimerService.IsRunningFor(delivery.Id);
         }
 
-        private async void HandlePositionChanged(double latitude, double longitude, double accuracy)
+        private async void HandleGpsPositionChange(double latitude, double longitude, double accuracy)
         {
             try
             {
-                // GPS updates fire continuously while the service is watching.
-                // "No active delivery" is just the idle state — the driver hasn't
-                // selected one yet, or finished the whole route. Bail silently;
-                // logging this as an error flooded ErrorLog with one row per fix.
                 if (_activeDelivery == null)
                 {
                     return;
                 }
 
-                // Same story for missing coordinates: not an error per fix, only
-                // worth noting once per delivery. Let the Admin page surface
-                // missing-GPS as a data-quality issue instead.
                 if (!_activeDelivery.Address.HasCoordinates)
                 {
                     return;
@@ -122,15 +107,13 @@ namespace PropaneDriver.Client.Services
             }
         }
 
-        // Leaving the fence ends the stop: stop the clock and hand the elapsed
-        // time to the completion pipeline.
         private async Task CompleteOnFenceExitAsync()
         {
             var departedDelivery = _activeDelivery;
             _lastCheckWasInsideGeoFence = false;
 
             var rawElapsedSeconds = await _deliveryTimerService.StopAsync();
-            var wasCompleted = await _deliveryCompletion.CompleteAsync(departedDelivery, rawElapsedSeconds);
+            var wasCompleted = await _deliveryCompletion.CompleteDeliveryAsync(departedDelivery, rawElapsedSeconds);
 
             // Disarm only once the stop is actually done, so a delivery that
             // failed to complete can still be retried on the next crossing.

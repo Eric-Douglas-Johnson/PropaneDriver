@@ -130,7 +130,7 @@ public class GeoFenceServiceTests
         var harness = new GeoFenceHarness();
         var delivery = DeliveryAtTank();
 
-        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+        var wasCompleted = await harness.DeliveryCompletion.CompleteDeliveryAsync(
             delivery, rawElapsedSeconds: 299);
 
         Assert.False(wasCompleted);
@@ -145,7 +145,7 @@ public class GeoFenceServiceTests
         var harness = new GeoFenceHarness();
         var delivery = DeliveryAtTank();
 
-        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+        var wasCompleted = await harness.DeliveryCompletion.CompleteDeliveryAsync(
             delivery, rawElapsedSeconds: 90, enforceMinimumDuration: false);
 
         Assert.True(wasCompleted);
@@ -158,7 +158,7 @@ public class GeoFenceServiceTests
         var harness = new GeoFenceHarness();
         var delivery = DeliveryAtTank();
 
-        var wasCompleted = await harness.DeliveryCompletion.CompleteAsync(
+        var wasCompleted = await harness.DeliveryCompletion.CompleteDeliveryAsync(
             delivery, rawElapsedSeconds: 300);
 
         Assert.True(wasCompleted);

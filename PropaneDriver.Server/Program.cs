@@ -120,9 +120,6 @@ if (!string.IsNullOrWhiteSpace(applicationInsightsConnectionString))
 
 var app = builder.Build();
 
-// Bootstrap the database schema (idempotent raw SQL; we don't use EF migrations).
-DatabaseInitializer.EnsureCreated(app.Services, app.Logger);
-
 // Seed/refresh the admin account from "AdminSeed" config. Runs every startup
 // but is idempotent — won't overwrite an existing admin's password.
 AdminAccountSeeder.EnsureAdminSeeded(app.Services, app.Logger);
