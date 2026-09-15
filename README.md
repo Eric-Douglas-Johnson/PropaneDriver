@@ -24,7 +24,7 @@ Role-based auth (driver and admin roles) backed by BCrypt-hashed passwords store
 ### Route overview
 ![Route list with active delivery and progress](docs/screenshots/route.png)
 
-The driver's day at a glance: today's stops with addresses and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to view GPS, navigate to the active stop. This is the page a driver actually lives on during a shift.
+The driver's day at a glance: today's stops with addresses and tank-location notes; an "active" delivery banner; per-address rolling-average delivery time; quick actions to navigate to the active or the next stop. This is the page a driver actually lives on during a shift.
 
 ### Navigation with tank-location notes and alerts
 ![Navigation page with tank-location note and active alert](docs/screenshots/navigation.png)
@@ -75,14 +75,14 @@ PropaneDriver.Tests    xUnit tests against an in-memory + live-SQL test harness
 
 - **Frontend.** Blazor WebAssembly. Razor pages with scoped CSS, a custom geofence service, a speech service for spoken turn-by-turn cues, and a client-side error logger that ships browser exceptions back to the server.
 - **Backend.** ASP.NET Core minimal APIs, organized one resource per file under `Endpoints/`, each exposing an `IEndpointRouteBuilder` extension method. `Program.cs` wires them up explicitly — no reflection-based discovery.
-- **Data.** Azure SQL via Entity Framework Core, accessed with `DefaultAzureCredential` and a managed identity token rather than a stored password. Schema is bootstrapped by an idempotent raw-SQL initializer (a deliberate choice — see below) instead of EF migrations.
+- **Data.** Azure SQL via Entity Framework Core, accessed with `DefaultAzureCredential` and a managed identity token rather than a stored password. The schema is changed directly against the database — there are no EF migrations and no startup bootstrap (a deliberate choice — see below).
 - **External services.** Azure Document Intelligence for OCR (both the dispatch-screenshot importer and the admin Tools scanner, with the prebuilt model chosen per-call via the `AzureDocumentIntelligenceModel` enum), Azure Communication Services for transactional email (password reset), Google Geocoding for address normalization, BCrypt for password hashing, JWT for the issued sign-in token.
 
 ## Notable engineering decisions
 
 These are the kinds of calls a reviewer would want to see explained on a take-home.
 
-- **Raw-SQL idempotent bootstrap, not EF migrations.** A single solo developer iterating on schema does not benefit from the migration ledger; they pay its costs. `DatabaseInitializer` runs `CREATE TABLE IF NOT EXISTS`-style SQL on startup. If the project ever grows a team, migrations get added; until then, the simpler tool wins.
+- **No migration ledger, and no startup schema bootstrap either.** A solo developer iterating on schema does not benefit from the migration ledger; they pay its costs. Earlier the host ran idempotent raw SQL on every startup to reconcile the schema, but a bootstrap that runs against production on every boot is its own hazard, so it was removed. The schema is now changed directly against the database. The cost is explicit: a fresh database has no automated provisioning path, so standing one up is a manual step. If the project grows a team or a second environment, migrations earn their keep; until then, the simpler tool wins.
 - **Endpoints as static extension methods, one file per resource.** Avoids the controller-class boilerplate of MVC while keeping each resource's routes physically co-located. Easy to grep, easy to test, easy to delete.
 - **DTOs in `PropaneDriver.Shared`, EF row types in `PropaneDriver.Server/Data` with a `*DbRecord` suffix.** Keeps the wire shape distinct from the storage shape so the database can be reshaped without breaking the client contract.
 - **Managed-identity auth to Azure SQL.** No connection-string passwords in config. The server requests a token from `DefaultAzureCredential` and attaches it to the SQL connection at request time.
@@ -114,9 +114,9 @@ dotnet test PropaneDriver.Tests
 copy PropaneDriver.Server\local.settings.example.json PropaneDriver.Server\local.settings.json
 ```
 
-Two of those settings are required and the host throws on startup without them: `ConnectionStrings:DefaultConnection` and `Jwt:Key` (32+ characters, HS256). The connection string deliberately has **no** fallback — the previous hardcoded default pointed at the production Azure SQL server, so a machine with nothing configured would silently read and write production data through the schema initializer and the admin seeder. Since `appsettings.json` is empty, there is nothing underneath `local.settings.json` to fall back to: a key you omit is simply absent, and an empty string is a value rather than an absence. The template documents what each omission costs.
+Two of those settings are required and the host throws on startup without them: `ConnectionStrings:DefaultConnection` and `Jwt:Key` (32+ characters, HS256). The connection string deliberately has **no** fallback — the previous hardcoded default pointed at the production Azure SQL server, so a machine with nothing configured would silently read and write production data through the admin seeder. Since `appsettings.json` is empty, there is nothing underneath `local.settings.json` to fall back to: a key you omit is simply absent, and an empty string is a value rather than an absence. The template documents what each omission costs.
 
-The app authenticates to SQL with `DefaultAzureCredential` and attaches the resulting Entra token to the connection, so the connection string is expected to name an Azure SQL server that accepts one. There is no local-database path today: a `Trusted_Connection` string fails, because `SqlConnection` rejects an access token set alongside credentials the string already carries. Until a staging database exists, a local run therefore points at production — including the schema initializer and the admin seeder on startup.
+The app authenticates to SQL with `DefaultAzureCredential` and attaches the resulting Entra token to the connection, so the connection string is expected to name an Azure SQL server that accepts one. There is no local-database path today: a `Trusted_Connection` string fails, because `SqlConnection` rejects an access token set alongside credentials the string already carries. Until a staging database exists, a local run therefore points at production — including the admin seeder on startup.
 
 `local.settings.json` is kept out of production three separate ways — gitignored, excluded from the Docker build context, and removed from `Content` in the `.csproj` so `dotnet publish` cannot copy it into the image. Production reads the same keys from App Service application settings, using the `__` separator in place of `:` — `ConnectionStrings__DefaultConnection`, `Jwt__Key`, `Logging__LogLevel__Default`, and so on — so no configuration ever moves between the two environments.
 
@@ -137,7 +137,7 @@ PropaneDriver.Client/
 PropaneDriver.Server/
   Endpoints/        One file per resource (Auth, Driver, Route, Delivery, Address, ...)
   Services/         DocumentIntelligence, Email, GPS helpers, dispatch-screenshot parser
-  Data/             EF DbContext, *DbRecord row types, schema initializer
+  Data/             EF DbContext, *DbRecord row types, admin account seeder
 PropaneDriver.Shared/
   Dtos/             Request/response shapes
   Interfaces/       Contracts shared across client and server
