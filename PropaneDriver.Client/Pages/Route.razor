@@ -22,7 +22,6 @@
 
 <!-- Top Button Menu -->
 <div class="deliveries-menu">
-    <button class="menu-btn" @onclick="ScrollToGpsCheck">View GPS</button>
     <button class="menu-btn" @onclick="NavigateToActive" disabled="@(_activeDelivery is null)">Navigate to Active</button>
 </div>
 
@@ -412,16 +411,6 @@
         await SetActiveDeliveryAsync(FindNextDelivery());
 
         _loaded = true;
-    }
-
-    private void AdjustFenceRadius(double deltaFeet)
-    {
-        GeoFenceService.AdjustFenceRadiusFeet(deltaFeet);
-    }
-
-    private async Task ScrollToGpsCheck()
-    {
-        await JS.InvokeVoidAsync("scrollToElement", "gps-check");
     }
 
     private void NavigateToActive()
