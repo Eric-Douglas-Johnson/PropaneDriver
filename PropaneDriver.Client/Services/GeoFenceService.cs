@@ -1,3 +1,5 @@
+
+using PropaneDriver.Client.ApiConsumers;
 using PropaneDriver.Shared.Dtos;
 using PropaneDriver.Shared.Interfaces;
 
@@ -81,7 +83,7 @@ namespace PropaneDriver.Client.Services
                     }
                     catch (ArgumentException ex)
                     {
-                        await ErrorLogService.LogErrorAsync(
+                        await ErrorLogApiConsumer.LogErrorAsync(
                             "GeoFenceService.HandlePositionChanged", $"Starting fence timer failed: {ex.Message}");
                     }
                 }
@@ -103,7 +105,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync("GeoFenceService", $"HandlePositionChanged failed: {ex.Message}");
+                await ErrorLogApiConsumer.LogErrorAsync("GeoFenceService", $"HandlePositionChanged failed: {ex.Message}");
             }
         }
 

@@ -1,5 +1,5 @@
 ﻿
-namespace PropaneDriver.Client.Classes
+namespace PropaneDriver.Client.HelperClasses
 {
     // Represents a timer that has been started for a delivery
     public class RunningTimer

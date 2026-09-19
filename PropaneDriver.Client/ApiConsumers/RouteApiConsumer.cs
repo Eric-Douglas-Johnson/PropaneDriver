@@ -2,13 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using PropaneDriver.Shared.Dtos;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public class RouteApiService
+    public class RouteApiConsumer
     {
         private readonly HttpClient _http;
 
-        public RouteApiService(HttpClient http)
+        public RouteApiConsumer(HttpClient http)
         {
             _http = http;
         }
@@ -26,7 +26,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.GetTodayRouteAsync",
                         $"GET api/routes/today/{driverId} returned {(int)response.StatusCode}: {body}");
                     return null;
@@ -36,7 +36,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.GetTodayRouteAsync",
                     $"Exception loading route for {driverId}: {ex.Message}");
                 return null;
@@ -53,7 +53,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.GetRoutesForDriverAsync",
                         $"GET api/routes/driver/{driverId} returned {(int)response.StatusCode}: {body}");
                     return new();
@@ -63,7 +63,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.GetRoutesForDriverAsync",
                     $"Exception loading routes for {driverId}: {ex.Message}");
                 return new();
@@ -80,7 +80,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.DeleteRouteAsync",
                         $"DELETE api/routes/{routeId} returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -89,7 +89,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.DeleteRouteAsync",
                     $"Exception deleting route {routeId}: {ex.Message}");
                 return false;
@@ -106,7 +106,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.DeleteAllRoutesForDriverAsync",
                         $"DELETE api/routes/driver/{driverId} returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -115,7 +115,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.DeleteAllRoutesForDriverAsync",
                     $"Exception deleting all routes for {driverId}: {ex.Message}");
                 return false;
@@ -130,7 +130,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.CreateRouteAsync",
                         $"POST api/routes returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -139,7 +139,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.CreateRouteAsync",
                     $"Exception creating route: {ex.Message}");
                 return false;
@@ -156,7 +156,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.AddDeliveryToRouteAsync",
                         $"POST api/routes/{routeId}/deliveries returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -165,7 +165,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "RouteApiService.AddDeliveryToRouteAsync",
                     $"Exception adding delivery to route {routeId}: {ex.Message}");
                 return false;

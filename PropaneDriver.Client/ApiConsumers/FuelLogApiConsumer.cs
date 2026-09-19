@@ -1,13 +1,13 @@
 using System.Net.Http.Json;
 using PropaneDriver.Shared.Dtos;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public class FuelLogApiService
+    public class FuelLogApiConsumer
     {
         private readonly HttpClient _http;
 
-        public FuelLogApiService(HttpClient http)
+        public FuelLogApiConsumer(HttpClient http)
         {
             _http = http;
         }
@@ -20,7 +20,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.GetFuelLogAsync",
                         $"GET api/fuel-log returned {(int)response.StatusCode}: {body}");
                     return new();
@@ -30,7 +30,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "FuelLogApiService.GetFuelLogAsync",
                     $"Exception loading fuel log: {ex.Message}");
                 return new();
@@ -48,7 +48,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.GetFuelLogForDriverAsync",
                         $"GET api/fuel-log/{driverId} returned {(int)response.StatusCode}: {body}");
                     return new();
@@ -58,7 +58,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "FuelLogApiService.GetFuelLogForDriverAsync",
                     $"Exception loading fuel log for driver {driverId}: {ex.Message}");
                 return new();
@@ -76,7 +76,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.DeleteFuelLogForDriverAsync",
                         $"DELETE api/fuel-log/{driverId} returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -85,7 +85,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "FuelLogApiService.DeleteFuelLogForDriverAsync",
                     $"Exception deleting fuel log for driver {driverId}: {ex.Message}");
                 return false;
@@ -134,7 +134,7 @@ namespace PropaneDriver.Client.Services
                     }
 
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.SaveFuelLogAsync",
                         $"PUT api/fuel-log returned {(int)response.StatusCode} after {attemptNumber} attempt(s): {body}");
                     return false;
@@ -150,7 +150,7 @@ namespace PropaneDriver.Client.Services
                         continue;
                     }
 
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.SaveFuelLogAsync",
                         $"Exception saving fuel log after {attemptNumber} attempt(s): {ex.Message}");
                     return false;
@@ -159,7 +159,7 @@ namespace PropaneDriver.Client.Services
                 {
                     // Not a known-transient failure — don't retry, just report it
                     // the way this method always has.
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "FuelLogApiService.SaveFuelLogAsync",
                         $"Exception saving fuel log: {ex.Message}");
                     return false;

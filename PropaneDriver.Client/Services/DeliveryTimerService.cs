@@ -1,6 +1,7 @@
 ﻿
+using PropaneDriver.Client.ApiConsumers;
 using PropaneDriver.Client.Authentication;
-using PropaneDriver.Client.Classes;
+using PropaneDriver.Client.HelperClasses;
 
 namespace PropaneDriver.Client.Services
 {
@@ -57,7 +58,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryTimerService", $"Persisting timer start failed: {ex.Message}");
             }
         }
@@ -94,7 +95,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryTimerService", $"Clearing persisted timer failed: {ex.Message}");
             }
         }

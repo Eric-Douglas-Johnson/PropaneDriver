@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Shared.Dtos
 {
-    public class DeliveryTimeDto
+    public class DeliveryTimeApiDto
     {
         public int Id { get; set; }
 

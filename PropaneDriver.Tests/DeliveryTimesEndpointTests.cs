@@ -46,7 +46,7 @@ public class DeliveryTimesEndpointTests
         db.Addresses.Add(address);
         await db.SaveChangesAsync();
 
-        var dto = new DeliveryTimeDto
+        var dto = new DeliveryTimeApiDto
         {
             DeliveryId = "1",
             AddressId = address.Id,

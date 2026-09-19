@@ -45,7 +45,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_WithNoRoute_ReturnsEmptySnapshot()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
 
         var snapshot = tracker.Update(BaseLatitude, BaseLongitude);
 
@@ -58,7 +58,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void SetSteps_WithNull_ClearsRouteWithoutThrowing()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
 
         tracker.SetSteps(null);
@@ -73,7 +73,7 @@ public class RouteProgressTrackerTests
         // The off-by-one guard: while driving step 0 ("Head north on Elm St")
         // the driver is approaching step 1's turn, and that is what the banner
         // must name.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
 
         var snapshot = tracker.Update(BaseLatitude, BaseLongitude);
@@ -90,7 +90,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_AsDriverAdvancesAlongStep_CountsDistanceDown()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
 
         var atStart = tracker.Update(BaseLatitude, BaseLongitude);
@@ -104,7 +104,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_OnReachingStepEnd_AdvancesToTheFollowingManeuver()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
         tracker.Update(BaseLatitude, BaseLongitude);
 
@@ -119,7 +119,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_WhenOnlyStraightStepsRemain_ReportsFinalApproach()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St"),
@@ -141,7 +141,7 @@ public class RouteProgressTrackerTests
     {
         // "Continue straight" between two turns is scaffolding, not an
         // instruction — the driver wants the turn beyond it.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St"),
@@ -159,7 +159,7 @@ public class RouteProgressTrackerTests
     {
         // The filtering must not shorten the countdown. Distance to the turn is
         // the ~111 m of step 0 plus the whole ~111 m straight step in between.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St"),
@@ -178,7 +178,7 @@ public class RouteProgressTrackerTests
         // Google leaves Maneuver blank for plain "Continue onto <road>" steps
         // where the road changes name without a turn. Those are exactly the
         // cues a driver wants, so they must survive the filter.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St"),
@@ -197,7 +197,7 @@ public class RouteProgressTrackerTests
         // Whatever the banner shows, the distance to the stop spans every
         // remaining step. Three ~111 m steps means ~333 m regardless of how
         // many are filtered out of the display.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St"),
@@ -216,7 +216,7 @@ public class RouteProgressTrackerTests
         // The out-and-back case: the driver runs up a dead-end road, turns
         // around, and passes back through a point they've already been. Nearest-
         // endpoint matching would rewind the banner to a maneuver they finished.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Turn left at the fork", "turn-left"),
@@ -242,7 +242,7 @@ public class RouteProgressTrackerTests
         // Simulates a GPS gap (dead zone, backgrounded tab): the driver
         // reappears at the end of step 1 having never reported a position at
         // the end of step 0.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
         tracker.Update(BaseLatitude, BaseLongitude);
 
@@ -254,7 +254,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_PastFinalStep_ReportsArrival()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
         tracker.Update(BaseLatitude, BaseLongitude);
 
@@ -267,7 +267,7 @@ public class RouteProgressTrackerTests
     [Fact]
     public void Update_OnSingleStepRoute_GoesStraightToFinalApproach()
     {
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(new List<NavRouteStep>
         {
             Step(BaseLatitude + 0.001, BaseLongitude, 111, "Head north on Elm St")
@@ -285,7 +285,7 @@ public class RouteProgressTrackerTests
     public void SetSteps_AfterProgress_RewindsToFirstStep()
     {
         // Re-routing mid-trip must not leave the index pointing into the old route.
-        var tracker = new RouteProgressTracker();
+        var tracker = new RouteProgressTrackerService();
         tracker.SetSteps(ThreeStepNorthboundRoute());
         tracker.Update(BaseLatitude + 0.002, BaseLongitude);
         Assert.NotEqual(0, tracker.CurrentStepIndex);

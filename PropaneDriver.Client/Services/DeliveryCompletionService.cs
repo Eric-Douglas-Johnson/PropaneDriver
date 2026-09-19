@@ -1,3 +1,6 @@
+
+using PropaneDriver.Client.ApiConsumers;
+using PropaneDriver.Client.HelperClasses;
 using PropaneDriver.Shared.Dtos;
 using PropaneDriver.Shared.Interfaces;
 
@@ -8,13 +11,13 @@ namespace PropaneDriver.Client.Services
         private const int COMPLETED_STATUS = 2;
         private const double MINIMUM_DELIVERY_SECONDS = 5 * 60;
 
-        private readonly DeliveryTimeApiService _deliveryTimeApi;
-        private readonly DeliveryApiService _deliveryApi;
+        private readonly DeliveryTimeApiConsumer _deliveryTimeApi;
+        private readonly DeliveryApiConsumer _deliveryApi;
 
         public event Action<SaveDeliveryTimeResult>? OnSaveResult;
         public event Action<IDelivery, double>? OnDeliveryCompleted;
 
-        public DeliveryCompletionService(DeliveryTimeApiService deliveryTimeApi, DeliveryApiService deliveryApi)
+        public DeliveryCompletionService(DeliveryTimeApiConsumer deliveryTimeApi, DeliveryApiConsumer deliveryApi)
         {
             _deliveryTimeApi = deliveryTimeApi;
             _deliveryApi = deliveryApi;
@@ -24,21 +27,21 @@ namespace PropaneDriver.Client.Services
         {
             if (delivery is null)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.CompleteAsync", "delivery is null");
                 return false;
             }
 
             if (delivery.Address is null)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.CompleteAsync", $"delivery.Address is null");
                 return false;
             }
 
             if (delivery.Address!.Id == Guid.Empty)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.CompleteAsync",
                     $"Delivery '{delivery.Id}' has no AddressId — cannot save time");
                 return false;
@@ -46,14 +49,14 @@ namespace PropaneDriver.Client.Services
 
             if (rawElapsedSeconds <= 0)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.CompleteAsync", "rawElapsedSeconds <= 0");
                 return false;
             }
 
             if (enforceMinimumDuration && rawElapsedSeconds < MINIMUM_DELIVERY_SECONDS)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.CompleteAsync",
                     $"Ignoring {rawElapsedSeconds:F0}s stop for delivery '{delivery.Id}' — " +
                     "under the 5-minute minimum, likely a fence blip");
@@ -73,7 +76,7 @@ namespace PropaneDriver.Client.Services
 
         private async Task SaveDeliveryTimeAsync(IDelivery delivery, double elapsedSeconds)
         {
-            var deliveryTime = new DeliveryTimeDto
+            var deliveryTimeData = new DeliveryTimeApiDto
             {
                 DeliveryId = delivery.Id,
                 AddressId = delivery.Address.Id,
@@ -82,12 +85,12 @@ namespace PropaneDriver.Client.Services
 
             try
             {
-                var saveResult = await _deliveryTimeApi.SaveDeliveryTimeAsync(deliveryTime);
+                var saveResult = await _deliveryTimeApi.SaveDeliveryTimeAsync(deliveryTimeData);
                 OnSaveResult?.Invoke(saveResult);
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.SaveDeliveryTimeAsync", $"Saving delivery time failed: {ex.Message}");
 
                 OnSaveResult?.Invoke(new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message });
@@ -104,7 +107,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryCompletionService.MarkCompleteAsync", $"Updating delivery status failed: {ex.Message}");
             }
         }

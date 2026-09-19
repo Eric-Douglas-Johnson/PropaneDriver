@@ -4,6 +4,7 @@ using PropaneDriver.Client;
 using PropaneDriver.Client.Authentication;
 using PropaneDriver.Client.Services;
 using Microsoft.AspNetCore.Components.Authorization;
+using PropaneDriver.Client.ApiConsumers;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -30,11 +31,11 @@ builder.Services.AddScoped<CustomAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
     provider.GetRequiredService<CustomAuthStateProvider>());
 
-builder.Services.AddScoped<DeliveryTimeApiService>();
-builder.Services.AddScoped<RouteApiService>();
-builder.Services.AddScoped<DeliveryApiService>();
-builder.Services.AddScoped<AddressApiService>();
-builder.Services.AddScoped<FuelLogApiService>();
+builder.Services.AddScoped<DeliveryTimeApiConsumer>();
+builder.Services.AddScoped<RouteApiConsumer>();
+builder.Services.AddScoped<DeliveryApiConsumer>();
+builder.Services.AddScoped<AddressApiConsumer>();
+builder.Services.AddScoped<FuelLogApiConsumer>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<DeliveryTimerService>();
@@ -44,6 +45,6 @@ builder.Services.AddScoped<SpeechService>();
 
 // Point the static client-side error logger at the app's own origin so its
 // relative "api/client-logs" posts resolve instead of throwing.
-ErrorLogService.Initialize(builder.HostEnvironment.BaseAddress);
+ErrorLogApiConsumer.Initialize(builder.HostEnvironment.BaseAddress);
 
 await builder.Build().RunAsync();

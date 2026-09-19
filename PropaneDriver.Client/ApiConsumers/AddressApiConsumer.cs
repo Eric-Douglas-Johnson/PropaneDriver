@@ -2,13 +2,13 @@
 using System.Net.Http.Json;
 using PropaneDriver.Shared.Dtos;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public class AddressApiService
+    public class AddressApiConsumer
     {
         private readonly HttpClient _http;
 
-        public AddressApiService(HttpClient http)
+        public AddressApiConsumer(HttpClient http)
         {
             _http = http;
         }
@@ -23,7 +23,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "AddressApiService.GetAddressAsync",
                     $"Exception fetching address {addressId}: {ex.Message}");
                 return null;
@@ -43,7 +43,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "AddressApiService.UpdateTankLocationAsync",
                         $"PUT api/addresses/{addressId}/tank-location returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -53,7 +53,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "AddressApiService.UpdateTankLocationAsync",
                     $"Exception updating tank location for {addressId}: {ex.Message}");
                 return false;
@@ -73,7 +73,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "AddressApiService.UpdateBackInAsync",
                         $"PUT api/addresses/{addressId}/back-in returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -83,7 +83,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "AddressApiService.UpdateBackInAsync",
                     $"Exception updating back-in for {addressId}: {ex.Message}");
                 return false;
@@ -103,7 +103,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "AddressApiService.UpdateCoordinatesAsync",
                         $"PUT api/addresses/{addressId}/coordinates returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -113,7 +113,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "AddressApiService.UpdateCoordinatesAsync",
                     $"Exception updating coordinates for {addressId}: {ex.Message}");
                 return false;

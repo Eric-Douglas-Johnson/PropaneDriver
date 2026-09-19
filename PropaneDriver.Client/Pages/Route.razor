@@ -1,16 +1,18 @@
 @page "/deliveries"
 @using PropaneDriver.Client.Authentication
 @using PropaneDriver.Client.Services
+@using PropaneDriver.Client.ApiConsumers
+@using PropaneDriver.Client.HelperClasses
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Interfaces
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
 @inject GeoFenceService GeoFenceService
-@inject DeliveryTimerService DeliveryTimers
-@inject DeliveryCompletionService DeliveryCompletion
-@inject RouteApiService RouteApi
-@inject DeliveryApiService DeliveryApi
-@inject AddressApiService AddressApi
+@inject DeliveryTimerService DeliveryTimerService
+@inject DeliveryCompletionService DeliveryCompletionService
+@inject RouteApiConsumer RouteApi
+@inject DeliveryApiConsumer DeliveryApi
+@inject AddressApiConsumer AddressApi
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject SpeechService SpeechService
@@ -123,9 +125,9 @@
                         {
                             var inside = _geoFenceStatus?.IsInsideFence == true;
                             <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
-                            @if (delivery.LongRunning && DeliveryTimers.IsRunningFor(delivery.Id))
+                            @if (delivery.LongRunning && DeliveryTimerService.IsRunningFor(delivery.Id))
                             {
-                                <span class="delivery-status-badge manual-timer-badge">@FormatTimer(DeliveryTimers.ElapsedSecondsFor(delivery.Id))</span>
+                                <span class="delivery-status-badge manual-timer-badge">@FormatTimer(DeliveryTimerService.ElapsedSecondsFor(delivery.Id))</span>
                             }
                         }
                         <span class="delivery-status-badge @statusClass">@GetStatusText(delivery.Status)</span>
@@ -281,10 +283,10 @@
             }
             @if (_selectedDelivery.LongRunning)
             {
-                var timerRunningForSelected = DeliveryTimers.IsRunningFor(_selectedDelivery.Id);
+                var timerRunningForSelected = DeliveryTimerService.IsRunningFor(_selectedDelivery.Id);
 
                 <div class="manual-timer-panel">
-                    <div class="manual-timer-display">@FormatTimer(DeliveryTimers.ElapsedSecondsFor(_selectedDelivery.Id))</div>
+                    <div class="manual-timer-display">@FormatTimer(DeliveryTimerService.ElapsedSecondsFor(_selectedDelivery.Id))</div>
                     <div class="manual-timer-actions">
                         <button class="btn btn-lg btn-success"
                                 @onclick="StartManualTimer"
@@ -341,9 +343,9 @@
     protected override async Task OnInitializedAsync()
     {
         GeoFenceService.OnFenceStatusChanged += HandleFenceStatusChanged;
-        DeliveryTimers.OnTick += HandleTimerTick;
-        DeliveryCompletion.OnSaveResult += HandleSaveResult;
-        DeliveryCompletion.OnDeliveryCompleted += HandleDeliveryCompleted;
+        DeliveryTimerService.OnTick += HandleTimerTick;
+        DeliveryCompletionService.OnSaveResult += HandleSaveResult;
+        DeliveryCompletionService.OnDeliveryCompleted += HandleDeliveryCompleted;
         GeolocationService.OnError += HandleGpsError;
 
         await LoadTodayRouteAsync();
@@ -492,17 +494,17 @@
     private async Task StartManualTimer()
     {
         if (_togglingManualTimer || _activeDelivery is null) return;
-        if (DeliveryTimers.IsAnyTimerRunning) return;
+        if (DeliveryTimerService.IsAnyTimerRunning) return;
 
         _togglingManualTimer = true;
 
         try
         {
-            await DeliveryTimers.StartAsync(_activeDelivery.Id);
+            await DeliveryTimerService.StartAsync(_activeDelivery.Id);
         }
         catch (ArgumentException ex)
         {
-            await ErrorLogService.LogErrorAsync(
+            await ErrorLogApiConsumer.LogErrorAsync(
                 "Route.StartManualTimer", $"Starting manual timer failed: {ex.Message}");
         }
         finally
@@ -519,13 +521,13 @@
     private async Task StopManualTimer()
     {
         if (_togglingManualTimer || _activeDelivery is null) return;
-        if (!DeliveryTimers.IsRunningFor(_activeDelivery.Id)) return;
+        if (!DeliveryTimerService.IsRunningFor(_activeDelivery.Id)) return;
 
         _togglingManualTimer = true;
 
         try
         {
-            var elapsedMinutes = DeliveryTimers.ElapsedSecondsFor(_activeDelivery.Id) / 60.0;
+            var elapsedMinutes = DeliveryTimerService.ElapsedSecondsFor(_activeDelivery.Id) / 60.0;
             var confirmed = await JS.InvokeAsync<bool>(
                 "confirm",
                 $"Stop the timer for {_activeDelivery.Address.FullAddress}?\n\n" +
@@ -534,9 +536,9 @@
             if (!confirmed) return;
 
             var completedDelivery = _activeDelivery;
-            var elapsedSeconds = await DeliveryTimers.StopAsync();
+            var elapsedSeconds = await DeliveryTimerService.StopAsync();
 
-            await DeliveryCompletion.CompleteDeliveryAsync(
+            await DeliveryCompletionService.CompleteDeliveryAsync(
                 completedDelivery, elapsedSeconds, enforceMinimumDuration: false);
         }
         finally
@@ -859,7 +861,7 @@
         StateHasChanged();
     }
 
-    private void HandleSaveResult(PropaneDriver.Client.Services.SaveDeliveryTimeResult result)
+    private void HandleSaveResult(PropaneDriver.Client.HelperClasses.SaveDeliveryTimeResult result)
     {
         _saveSuccess = result.Success;
         _saveStatus = result.Success
@@ -911,13 +913,13 @@
         // Awaited before the fence is armed so a timer persisted across a page
         // reload is back in memory first. A fire-and-forget call would race
         // with the first GPS tick and the timer would restart from zero.
-        await DeliveryTimers.RestoreAsync();
+        await DeliveryTimerService.RestoreAsync();
 
         // Drop a restored timer belonging to a different (or completed) stop so
         // it can't poison this one.
-        if (DeliveryTimers.IsAnyTimerRunning && !DeliveryTimers.IsRunningFor(delivery?.Id))
+        if (DeliveryTimerService.IsAnyTimerRunning && !DeliveryTimerService.IsRunningFor(delivery?.Id))
         {
-            await DeliveryTimers.ClearAsync();
+            await DeliveryTimerService.ClearAsync();
         }
 
         // LongRunning stops are driver-timed, so they get no fence target.
@@ -939,7 +941,7 @@
 
     private async void HandleGpsError(string error)
     {
-        await ErrorLogService.LogErrorAsync("GPS Error", error);
+        await ErrorLogApiConsumer.LogErrorAsync("GPS Error", error);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -979,9 +981,9 @@
     public async ValueTask DisposeAsync()
     {
         GeoFenceService.OnFenceStatusChanged -= HandleFenceStatusChanged;
-        DeliveryTimers.OnTick -= HandleTimerTick;
-        DeliveryCompletion.OnSaveResult -= HandleSaveResult;
-        DeliveryCompletion.OnDeliveryCompleted -= HandleDeliveryCompleted;
+        DeliveryTimerService.OnTick -= HandleTimerTick;
+        DeliveryCompletionService.OnSaveResult -= HandleSaveResult;
+        DeliveryCompletionService.OnDeliveryCompleted -= HandleDeliveryCompleted;
         GeolocationService.OnError -= HandleGpsError;
 
         // Do NOT dispose GeolocationService — it is a shared singleton.

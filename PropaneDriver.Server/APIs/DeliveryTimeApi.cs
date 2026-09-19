@@ -1,35 +1,44 @@
+
 using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Server.Endpoints
 {
-    public static class DeliveryTimeEndpoints
+    public static class DeliveryTimeApi
     {
+        private record DeliveryTimeStatsRow(
+            Guid AddressId,
+            double TimeIntervalSeconds,
+            DateTime RecordedAt,
+            string Street,
+            string City,
+            string State);
+
         public static IEndpointRouteBuilder MapDeliveryTimeEndpoints(this IEndpointRouteBuilder app)
         {
             var group = app.MapGroup("api/delivery-times");
 
             // Store a delivery time record and refresh the address average.
             group.MapPost("", async (
-                DeliveryTimeDto dto,
+                DeliveryTimeApiDto deliveryTimeData,
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
-                if (dto.AddressId == Guid.Empty)
+                if (deliveryTimeData.AddressId == Guid.Empty)
                     return Results.BadRequest(new { Message = "AddressId is required." });
 
-                var address = await db.Addresses.FindAsync(dto.AddressId);
+                var address = await db.Addresses.FindAsync(deliveryTimeData.AddressId);
                 if (address is null)
-                    return Results.BadRequest(new { Message = $"Address {dto.AddressId} not found." });
+                    return Results.BadRequest(new { Message = $"Address {deliveryTimeData.AddressId} not found." });
 
                 try
                 {
                     var entity = new DeliveryTimeDbRecord
                     {
-                        DeliveryId = dto.DeliveryId,
-                        AddressId = dto.AddressId,
-                        TimeIntervalSeconds = dto.TimeIntervalSeconds,
+                        DeliveryId = deliveryTimeData.DeliveryId,
+                        AddressId = deliveryTimeData.AddressId,
+                        TimeIntervalSeconds = deliveryTimeData.TimeIntervalSeconds,
                         RecordedAt = DateTime.UtcNow
                     };
 
@@ -38,11 +47,12 @@ namespace PropaneDriver.Server.Endpoints
 
                     // Recompute the stored average for this address.
                     var times = await db.DeliveryTimes
-                        .Where(t => t.AddressId == dto.AddressId)
+                        .Where(t => t.AddressId == deliveryTimeData.AddressId)
                         .Select(t => t.TimeIntervalSeconds)
                         .ToListAsync();
 
                     times.Sort();
+
                     if (times.Count > 4)
                     {
                         times.RemoveAt(times.Count - 1);
@@ -53,12 +63,12 @@ namespace PropaneDriver.Server.Endpoints
                     address.AvgDeliveryTimeMinutes = times.Count > 0 ? times.Average() / 60.0 : 0;
                     await db.SaveChangesAsync();
 
-                    logger.LogInformation("Saved delivery time Id={Id} for Address={AddressId}", entity.Id, dto.AddressId);
+                    logger.LogInformation("Saved delivery time Id={Id} for Address={AddressId}", entity.Id, deliveryTimeData.AddressId);
                     return Results.Ok(new { entity.Id, entity.RecordedAt });
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to save delivery time for AddressId={AddressId}", dto.AddressId);
+                    logger.LogError(ex, "Failed to save delivery time for AddressId={AddressId}", deliveryTimeData.AddressId);
                     return Results.Problem(
                         detail: ex.Message,
                         title: "Failed to save delivery time",
@@ -87,11 +97,7 @@ namespace PropaneDriver.Server.Endpoints
                 });
             });
 
-            // Aggregate stats over the whole DeliveryTime table, used by the
-            // admin Tools page. Optional `from` / `to` bound the window
-            // (RecordedAt is UTC). Everything is computed in-process; the
-            // table is small enough that an ORDER BY + pull-to-memory beats
-            // shipping a half-dozen aggregate queries to SQL.
+            // Get delivery statistics
             group.MapGet("stats", async (
                 DateTime? from,
                 DateTime? to,
@@ -110,8 +116,6 @@ namespace PropaneDriver.Server.Endpoints
                     query = query.Where(deliveryTime => deliveryTime.RecordedAt <= toUtc);
                 }
 
-                // Join to Addresses by id to pull the address columns the stats
-                // rows need (no navigation property on DeliveryTimeDbRecord).
                 var records = await query
                     .Join(db.Addresses,
                         deliveryTime => deliveryTime.AddressId,
@@ -171,10 +175,6 @@ namespace PropaneDriver.Server.Endpoints
                     });
                 }
 
-                // Group by address for the leaderboards. A driver who runs
-                // the same route weekly will hit the same handful of stops
-                // many times, so this surfaces the operationally meaningful
-                // ones rather than one-offs.
                 var perAddressStats = records
                     .GroupBy(record => record.AddressId)
                     .Select(addressGroup =>
@@ -183,7 +183,9 @@ namespace PropaneDriver.Server.Endpoints
                             .Select(record => record.TimeIntervalSeconds)
                             .OrderBy(seconds => seconds)
                             .ToArray();
+
                         var firstRowForAddress = addressGroup.First();
+
                         return new DeliveryTimeAddressStatDto
                         {
                             AddressId = addressGroup.Key,
@@ -217,14 +219,6 @@ namespace PropaneDriver.Server.Endpoints
             return app;
         }
 
-        private record DeliveryTimeStatsRow(
-            Guid AddressId,
-            double TimeIntervalSeconds,
-            DateTime RecordedAt,
-            string Street,
-            string City,
-            string State);
-
         private static double ComputeMedian(IReadOnlyList<double> sortedValues)
         {
             if (sortedValues.Count == 0) return 0;
@@ -237,12 +231,15 @@ namespace PropaneDriver.Server.Endpoints
         private static double ComputeStandardDeviation(IReadOnlyList<double> values, double mean)
         {
             if (values.Count < 2) return 0;
+
             double sumOfSquaredDeviations = 0;
+
             foreach (var value in values)
             {
                 var deviation = value - mean;
                 sumOfSquaredDeviations += deviation * deviation;
             }
+
             return Math.Sqrt(sumOfSquaredDeviations / (values.Count - 1));
         }
     }

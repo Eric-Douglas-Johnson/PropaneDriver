@@ -1,22 +1,24 @@
+
 using System.Net.Http.Json;
+using PropaneDriver.Client.HelperClasses;
 using PropaneDriver.Shared.Dtos;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public class DeliveryTimeApiService
+    public class DeliveryTimeApiConsumer
     {
         private readonly HttpClient _http;
 
-        public DeliveryTimeApiService(HttpClient http)
+        public DeliveryTimeApiConsumer(HttpClient http)
         {
             _http = http;
         }
 
-        public async Task<SaveDeliveryTimeResult> SaveDeliveryTimeAsync(DeliveryTimeDto dto)
+        public async Task<SaveDeliveryTimeResult> SaveDeliveryTimeAsync(DeliveryTimeApiDto deliveryTimeData)
         {
             try
             {
-                var response = await _http.PostAsJsonAsync("api/delivery-times", dto);
+                var response = await _http.PostAsJsonAsync("api/delivery-times", deliveryTimeData);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -24,9 +26,9 @@ namespace PropaneDriver.Client.Services
                     var msg = $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}: {body}";
                     Console.WriteLine($"Failed to save delivery time: {msg}");
 
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "DeliveryTimeApiService.SaveDeliveryTimeAsync",
-                        $"DeliveryId={dto.DeliveryId} AddressId={dto.AddressId}: {msg}");
+                        $"DeliveryId={deliveryTimeData.DeliveryId} AddressId={deliveryTimeData.AddressId}: {msg}");
 
                     return new SaveDeliveryTimeResult { Success = false, ErrorMessage = msg };
                 }
@@ -37,9 +39,9 @@ namespace PropaneDriver.Client.Services
             {
                 Console.WriteLine($"Failed to save delivery time: {ex.Message}");
 
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryTimeApiService.SaveDeliveryTimeAsync",
-                    $"Exception saving delivery time DeliveryId={dto.DeliveryId} AddressId={dto.AddressId}: {ex.Message}");
+                    $"Exception saving delivery time DeliveryId={deliveryTimeData.DeliveryId} AddressId={deliveryTimeData.AddressId}: {ex.Message}");
 
                 return new SaveDeliveryTimeResult { Success = false, ErrorMessage = ex.Message };
             }
@@ -49,8 +51,7 @@ namespace PropaneDriver.Client.Services
         {
             try
             {
-                var result = await _http.GetFromJsonAsync<DeliveryAverageResult>(
-                    $"api/delivery-times/average?addressId={addressId}");
+                var result = await _http.GetFromJsonAsync<DeliveryAverageResult>($"api/delivery-times/average?addressId={addressId}");
                 return result ?? new DeliveryAverageResult();
             }
             catch (Exception ex)
@@ -59,21 +60,5 @@ namespace PropaneDriver.Client.Services
                 return new DeliveryAverageResult();
             }
         }
-    }
-
-    public class SaveDeliveryTimeResult
-    {
-        public bool Success { get; set; }
-        public string? ErrorMessage { get; set; }
-    }
-
-    public class DeliveryAverageResult
-    {
-        public Guid AddressId { get; set; }
-        public string Street { get; set; } = string.Empty;
-        public string City { get; set; } = string.Empty;
-        public string State { get; set; } = string.Empty;
-        public string ZipCode { get; set; } = string.Empty;
-        public double AvgDeliveryTimeMinutes { get; set; }
     }
 }

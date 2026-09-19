@@ -1,13 +1,13 @@
 using System.Net.Http.Json;
 using PropaneDriver.Shared.Dtos;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public class DeliveryApiService
+    public class DeliveryApiConsumer
     {
         private readonly HttpClient _http;
 
-        public DeliveryApiService(HttpClient http)
+        public DeliveryApiConsumer(HttpClient http)
         {
             _http = http;
         }
@@ -25,7 +25,7 @@ namespace PropaneDriver.Client.Services
                 {
                     var body = await response.Content.ReadAsStringAsync();
 
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "DeliveryApiService.UpdateStatusAsync", 
                         $"PUT api/deliveries/{deliveryId}/status returned {(int)response.StatusCode}: {body}");
 
@@ -35,7 +35,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryApiService.UpdateStatusAsync",
                     $"Exception updating status for {deliveryId}: {ex.Message}");
                 return false;
@@ -54,7 +54,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "DeliveryApiService.UpdateLongRunningAsync",
                         $"PUT api/deliveries/{deliveryId}/long-running returned {(int)response.StatusCode}: {body}");
                     return false;
@@ -63,7 +63,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "DeliveryApiService.UpdateLongRunningAsync",
                     $"Exception updating long-running for {deliveryId}: {ex.Message}");
                 return false;

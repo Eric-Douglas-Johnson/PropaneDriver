@@ -1,16 +1,11 @@
-
 using System.Net.Http.Json;
 
-namespace PropaneDriver.Client.Services
+namespace PropaneDriver.Client.ApiConsumers
 {
-    public static class ErrorLogService
+    public static class ErrorLogApiConsumer
     {
         private static readonly HttpClient _http = new HttpClient();
 
-        // Must be called once at startup (see Program.cs). Without a BaseAddress
-        // the relative "api/client-logs" URL throws on every PostAsJsonAsync, so
-        // client-side errors were silently lost on all platforms — which is why
-        // the iPhone 401 storm left nothing in the server logs to diagnose.
         public static void Initialize(string baseAddress)
         {
             _http.BaseAddress = new Uri(baseAddress);
@@ -26,9 +21,6 @@ namespace PropaneDriver.Client.Services
                 Timestamp = DateTime.UtcNow
             };
 
-            // LogErrorAsync is always invoked from inside a caller's catch block,
-            // so it must never throw — a failure here (offline, base address not
-            // set) would mask the original error we're trying to record.
             try
             {
                 await _http.PostAsJsonAsync("api/client-logs", payload);

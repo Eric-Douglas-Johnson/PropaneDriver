@@ -1,6 +1,7 @@
 using Microsoft.JSInterop;
 using PropaneDriver.Client.Authentication;
 using PropaneDriver.Client.Services;
+using PropaneDriver.Client.ApiConsumers;
 using PropaneDriver.Shared.Dtos;
 using PropaneDriver.Shared.Interfaces;
 
@@ -198,8 +199,8 @@ public class GeoFenceServiceTests
             Geolocation = new GeolocationService(jsRuntime);
             DeliveryTimers = new DeliveryTimerService(new BrowserStorageService(jsRuntime));
             DeliveryCompletion = new DeliveryCompletionService(
-                new DeliveryTimeApiService(http),
-                new DeliveryApiService(http));
+                new DeliveryTimeApiConsumer(http),
+                new DeliveryApiConsumer(http));
 
             GeoFence = new GeoFenceService(Geolocation, DeliveryTimers, DeliveryCompletion);
         }

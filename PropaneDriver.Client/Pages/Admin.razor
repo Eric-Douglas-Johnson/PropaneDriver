@@ -1,14 +1,15 @@
 @page "/admin"
 @using PropaneDriver.Client.Services
+@using PropaneDriver.Client.ApiConsumers
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Interfaces
-@inject RouteApiService RouteApi
+@inject RouteApiConsumer RouteApi
 @inject GeocodingService Geocoder
 @inject HttpClient Http
 @inject SpeechService SpeechService
-@inject AddressApiService AddressApi
-@inject DeliveryApiService DeliveryApi
-@inject FuelLogApiService FuelLogApi
+@inject AddressApiConsumer AddressApi
+@inject DeliveryApiConsumer DeliveryApi
+@inject FuelLogApiConsumer FuelLogApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 

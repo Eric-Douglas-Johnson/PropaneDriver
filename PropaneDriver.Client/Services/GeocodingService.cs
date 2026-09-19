@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using PropaneDriver.Client.ApiConsumers;
 using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Client.Services
@@ -33,7 +34,7 @@ namespace PropaneDriver.Client.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
-                    await ErrorLogService.LogErrorAsync(
+                    await ErrorLogApiConsumer.LogErrorAsync(
                         "GeocodingService.GeocodeAsync",
                         $"api/geocode returned {(int)response.StatusCode}: {body}");
                     return null;
@@ -43,7 +44,7 @@ namespace PropaneDriver.Client.Services
             }
             catch (Exception ex)
             {
-                await ErrorLogService.LogErrorAsync(
+                await ErrorLogApiConsumer.LogErrorAsync(
                     "GeocodingService.GeocodeAsync",
                     $"Exception geocoding address: {ex.Message}");
                 return null;

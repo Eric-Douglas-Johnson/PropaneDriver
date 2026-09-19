@@ -1,9 +1,10 @@
 @page "/fuel-log"
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Client.Authentication
+@using PropaneDriver.Client.ApiConsumers
 @using PropaneDriver.Shared.Dtos
 @using Microsoft.AspNetCore.Components.Authorization
-@inject FuelLogApiService FuelLogApi
+@inject FuelLogApiConsumer FuelLogApi
 @inject SpeechService SpeechService
 @inject BrowserStorageService BrowserStorage
 @inject AuthenticationStateProvider AuthStateProvider

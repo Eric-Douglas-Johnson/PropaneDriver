@@ -60,7 +60,7 @@ namespace PropaneDriver.Client.Services
     // Deliberately a plain class: no DI registration, no JS interop, no HTTP. All
     // it does is arithmetic over a step list and a coordinate, which keeps it
     // unit-testable (see PropaneDriver.Tests/RouteProgressTrackerTests.cs).
-    public class RouteProgressTracker
+    public class RouteProgressTrackerService
     {
         // How close the driver must get to a step's end point before we treat
         // that leg as done. Loose enough to absorb consumer-GPS error and the
