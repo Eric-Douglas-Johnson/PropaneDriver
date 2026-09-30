@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Server.Endpoints;
 using PropaneDriver.Server.Services;
+using PropaneDriver.Shared.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -99,7 +100,8 @@ builder.Services
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(UserRoles.Admin));
+    options.AddPolicy("SupervisorOrAdmin", policy => policy.RequireRole(UserRoles.Supervisor, UserRoles.Admin));
     options.AddPolicy("AuthenticatedDriver", policy => policy.RequireAuthenticatedUser());
 });
 

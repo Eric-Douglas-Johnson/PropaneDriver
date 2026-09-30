@@ -81,7 +81,7 @@ namespace PropaneDriver.Server.Endpoints
 
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Admin: delete every route (and their deliveries) for a driver
+            // Supervisor/admin: delete every route (and their deliveries) for a driver
             group.MapDelete("driver/{driverId:guid}", async (
                 Guid driverId,
                 PropaneDriverDbContext db) =>
@@ -96,7 +96,7 @@ namespace PropaneDriver.Server.Endpoints
                 await db.SaveChangesAsync();
                 return Results.Ok(new { Deleted = routes.Count });
 
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("SupervisorOrAdmin");
 
             // Get today's route (with deliveries + alerts) for a driver.
             group.MapGet("today/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>

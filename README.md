@@ -19,7 +19,7 @@ The domain is not a toy. The author is currently a propane driver. Every UI deci
 ### Login & registration
 ![Login screen](docs/screenshots/login.png)
 
-Role-based auth (driver and admin roles) backed by BCrypt-hashed passwords stored in Azure SQL and a JWT issued at sign-in. Includes register, forgot-password, and reset-password flows; reset emails are sent through Azure Communication Services with single-use tokens. Pages are gated by `[Authorize(Roles = "driver")]` / `"admin"`, and the same role claims are enforced server-side on the matching endpoints.
+Role-based auth (driver, supervisor, and admin roles) backed by BCrypt-hashed passwords stored in Azure SQL and a JWT issued at sign-in. Includes register, forgot-password, and reset-password flows; reset emails are sent through Azure Communication Services with single-use tokens. Pages are gated by `[Authorize(Roles = ...)]` using the names in `UserRoles`, and the same role claims are enforced server-side on the matching endpoints. Supervisors share the Route admin page for managing every driver's routes; fuel logs, Tools, and role changes stay admin-only. Admins assign roles from the Route admin page.
 
 ### Route overview
 ![Route list with active delivery and progress](docs/screenshots/route.png)
@@ -44,7 +44,7 @@ Drivers receive their stops as screenshots from a third-party dispatch app. The 
 ### Self-service dispatch
 ![Driver-owned dispatch page for building a route](docs/screenshots/dispatch.png)
 
-A driver-facing companion to the admin route page: drivers can pick a date, load whatever route already exists for that day, and build or edit it themselves without waiting on an admin. The endpoints behind this page enforce a "self or admin" ownership rule server-side — a signed-in driver can only see and mutate routes tied to their own driver id, while an admin can act on any driver's route through the same API.
+A driver-facing companion to the admin route page: drivers can pick a date, load whatever route already exists for that day, and build or edit it themselves without waiting on an admin. The endpoints behind this page enforce a "self or supervisor" ownership rule server-side — a signed-in driver can only see and mutate routes tied to their own driver id, while a supervisor or admin can act on any driver's route through the same API.
 
 ### Route admin
 ![Route admin page: per-driver, per-date](docs/screenshots/admin.png)
@@ -88,7 +88,7 @@ These are the kinds of calls a reviewer would want to see explained on a take-ho
 - **Managed-identity auth to Azure SQL.** No connection-string passwords in config. The server requests a token from `DefaultAzureCredential` and attaches it to the SQL connection at request time.
 - **Hand-tuned regexes for dispatch-screenshot OCR.** The dispatch app the company uses produces two different address layouts depending on screen width. The parser handles both with documented regexes plus a fallback line walker. This is the kind of glue work that pays off only if you know the domain — and breaks badly if you do not.
 - **Tests live against a real test database fixture (`TestDb`) plus a live-DB harness for time-sensitive queries.** Mocks were rejected for the persistence layer; the relevant bugs only surface against the real engine.
-- **Roles are enforced in two places, not one.** `[Authorize(Roles = "...")]` on the Razor pages keeps the UI honest, but the same role claims are re-checked on every endpoint that mutates someone else's data. Driver-owned endpoints additionally apply a "self or admin" rule so an authenticated driver cannot read or mutate another driver's route by guessing an id.
+- **Roles are enforced in two places, not one.** `[Authorize(Roles = "...")]` on the Razor pages keeps the UI honest, but the same role claims are re-checked on every endpoint that mutates someone else's data. Driver-owned endpoints additionally apply a "self or supervisor" rule (supervisors and admins pass) so an authenticated driver cannot read or mutate another driver's route by guessing an id.
 - **Document Intelligence scans are explicitly button-triggered.** The admin Tools page does not auto-scan on file selection — every call to Azure costs money and produces a 24-hour retention window on Azure's side, so the user opts in per batch. The model used for each call is passed from the client via an enum so adding a new prebuilt model is a one-line change in `AzureDocumentIntelligenceModel`.
 
 ## Running it

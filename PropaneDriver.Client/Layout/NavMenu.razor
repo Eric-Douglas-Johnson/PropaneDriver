@@ -1,6 +1,7 @@
 @using System.Security.Claims;
 @using PropaneDriver.Client.Authentication;
 @using Microsoft.AspNetCore.Components.Authorization
+@using PropaneDriver.Shared.Constants
 @inject NavigationManager Navigation;
 @inject CustomAuthStateProvider AuthStateProvider;
 
@@ -52,7 +53,7 @@
             </AuthorizeView>
         </div>
         <div class="nav-item px-3">
-            <AuthorizeView Roles="admin">
+            <AuthorizeView Roles="@UserRoles.SupervisorOrAdmin">
                 <Authorized>
                     <NavLink class="nav-link" href="admin">
                         <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Admin

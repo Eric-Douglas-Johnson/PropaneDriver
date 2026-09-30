@@ -1,5 +1,8 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using PropaneDriver.Server.Authorization;
 using PropaneDriver.Server.Data;
+using PropaneDriver.Shared.Constants;
 using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Server.Endpoints
@@ -8,8 +11,8 @@ namespace PropaneDriver.Server.Endpoints
     {
         public static IEndpointRouteBuilder MapDriverEndpoints(this IEndpointRouteBuilder app)
         {
-            // List all drivers (for admin route-builder). Admin-only — the
-            // driver picker on the Admin page is the sole consumer.
+            // List all drivers (for the Admin page route-builder). Supervisors
+            // and admins only — the driver picker on that page is the sole consumer.
             app.MapGet("api/drivers", async (PropaneDriverDbContext db) =>
             {
                 var drivers = await db.Drivers
@@ -28,6 +31,32 @@ namespace PropaneDriver.Server.Endpoints
                     })
                     .ToListAsync();
                 return Results.Ok(drivers);
+            }).RequireAuthorization("SupervisorOrAdmin");
+
+            // Change an account's role. Admin-only. The new role reaches the
+            // user's JWT at their next sign-in.
+            app.MapPut("api/drivers/{id:guid}/role", async (
+                Guid id,
+                DriverRoleUpdateDto dto,
+                ClaimsPrincipal user,
+                PropaneDriverDbContext db) =>
+            {
+                var newRole = dto.Role?.Trim().ToLowerInvariant() ?? string.Empty;
+                if (!UserRoles.All.Contains(newRole))
+                    return Results.BadRequest(new { Message = $"Role must be one of: {string.Join(", ", UserRoles.All)}." });
+
+                // Blocks an admin from demoting themselves out of the only screen that can undo it.
+                if (user.GetDriverId() == id)
+                    return Results.BadRequest(new { Message = "You can't change your own role." });
+
+                var driver = await db.Drivers.FindAsync(id);
+                if (driver is null)
+                    return Results.NotFound();
+
+                driver.Role = newRole;
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new { driver.Id, driver.Role });
             }).RequireAuthorization("AdminOnly");
 
             // Get driver by ID. Note: non-api prefix retained for backward compat

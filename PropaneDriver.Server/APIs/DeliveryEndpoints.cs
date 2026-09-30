@@ -129,8 +129,8 @@ namespace PropaneDriver.Server.Endpoints
 
             // Toggle the LongRunning flag on a single delivery. When true, the
             // driver client uses manual Start/Stop buttons instead of the
-            // GPS-geofence auto-timer for this stop. Admin-only (per-row toggle
-            // on the Admin page); ownership is still validated through the route.
+            // GPS-geofence auto-timer for this stop. Supervisor/admin only (per-row
+            // toggle on the Admin page); ownership is still validated through the route.
             group.MapPut("{id:guid}/long-running", async (
                 Guid id,
                 DeliveryLongRunningUpdateDto dto,
@@ -163,7 +163,7 @@ namespace PropaneDriver.Server.Endpoints
                     logger.LogError(ex, "Failed to update long-running for delivery {Id}", id);
                     return Results.Problem(detail: ex.Message, title: "Failed to update delivery long-running", statusCode: 500);
                 }
-            }).RequireAuthorization("AdminOnly");
+            }).RequireAuthorization("SupervisorOrAdmin");
 
             return app;
         }

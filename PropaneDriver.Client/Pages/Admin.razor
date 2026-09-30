@@ -1,6 +1,9 @@
 @page "/admin"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Client.ApiConsumers
+@using PropaneDriver.Shared.Constants
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Enums
 @using PropaneDriver.Shared.Interfaces
@@ -11,8 +14,9 @@
 @inject AddressApiConsumer AddressApi
 @inject DeliveryApiConsumer DeliveryApi
 @inject FuelLogApiConsumer FuelLogApi
+@inject DriverApiConsumer DriverApi
 @inject IJSRuntime JS
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = UserRoles.SupervisorOrAdmin)]
 
 <PageTitle>Route Admin</PageTitle>
 
@@ -273,8 +277,8 @@
         </div>
     }
 
-    <!-- Fuel log for selected driver -->
-    @if (!string.IsNullOrEmpty(_selectedDriverId))
+    <!-- Fuel log for selected driver (admin only) -->
+    @if (_currentUserIsAdmin && !string.IsNullOrEmpty(_selectedDriverId))
     {
         <div class="admin-card">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -332,6 +336,47 @@
             {
                 <div class="@(_fuelLogStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
                     @_fuelLogStatus
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Account role for selected driver (admin only) -->
+    @if (_currentUserIsAdmin && SelectedDriver is not null)
+    {
+        <div class="admin-card">
+            <h5>Account Role</h5>
+
+            <div class="admin-row">
+                <div class="admin-field" style="max-width:180px;">
+                    <label>Role</label>
+                    <select class="form-select form-select-sm" @bind="_selectedRoleForDriver"
+                            disabled="@(_savingRole || SelectedDriverIsCurrentUser)">
+                        @foreach (var roleOption in UserRoles.All)
+                        {
+                            <option value="@roleOption">@roleOption</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="admin-field" style="align-self:flex-end;">
+                    <button class="btn btn-sm btn-primary" @onclick="SaveDriverRole"
+                            disabled="@(_savingRole || SelectedDriverIsCurrentUser || _selectedRoleForDriver == SelectedDriver.Role)">
+                        @(_savingRole ? "Saving…" : "Save Role")
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-2" style="font-size:0.8rem; color:#8892b0;">
+                @(SelectedDriverIsCurrentUser
+                    ? "You can't change your own role."
+                    : "A role change takes effect the next time they sign in.")
+            </div>
+
+            @if (!string.IsNullOrEmpty(_roleStatus))
+            {
+                <div class="@(_roleStatusSuccess ? "text-success" : "text-danger") mt-2" style="font-size:0.85rem;">
+                    @_roleStatus
                 </div>
             }
         </div>
@@ -548,8 +593,24 @@
 </div>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    // Supervisors share this page for route management; fuel logs and role
+    // changes stay admin-only (the server enforces the same split).
+    private bool _currentUserIsAdmin;
+    private string _currentUserId = string.Empty;
+
     private List<DriverDto> _drivers = new();
     private string _selectedDriverId = string.Empty;
+
+    private DriverDto? SelectedDriver => _drivers.FirstOrDefault(d => d.Id == _selectedDriverId);
+    private bool SelectedDriverIsCurrentUser => _selectedDriverId == _currentUserId;
+
+    private string _selectedRoleForDriver = UserRoles.Driver;
+    private bool _savingRole;
+    private string? _roleStatus;
+    private bool _roleStatusSuccess;
     private DateTime _selectedDate = DateTime.Today;
 
     private RouteDto? _loadedRoute;
@@ -621,6 +682,10 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthenticationStateTask;
+        _currentUserIsAdmin = authState.User.IsInRole(UserRoles.Admin);
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
         try
         {
             _drivers = await Http.GetFromJsonAsync<List<DriverDto>>("api/drivers") ?? new();
@@ -636,12 +701,42 @@
         _driverRoutesStatus = null;
         _driverFuelLog.Clear();
         _fuelLogStatus = null;
+        _selectedRoleForDriver = SelectedDriver?.Role ?? UserRoles.Driver;
+        _roleStatus = null;
 
         if (!string.IsNullOrEmpty(_selectedDriverId))
         {
             await LoadDriverRoutes();
-            await LoadDriverFuelLog();
+
+            if (_currentUserIsAdmin)
+                await LoadDriverFuelLog();
         }
+    }
+
+    private async Task SaveDriverRole()
+    {
+        var selectedDriver = SelectedDriver;
+        if (selectedDriver is null || SelectedDriverIsCurrentUser) return;
+
+        _savingRole = true;
+        _roleStatus = null;
+        StateHasChanged();
+
+        var success = await DriverApi.UpdateRoleAsync(selectedDriver.Id, _selectedRoleForDriver);
+
+        if (success)
+        {
+            selectedDriver.Role = _selectedRoleForDriver;
+            _roleStatus = $"Role changed to {_selectedRoleForDriver}.";
+            _roleStatusSuccess = true;
+        }
+        else
+        {
+            _roleStatus = "Failed to change role — check error logs.";
+            _roleStatusSuccess = false;
+        }
+
+        _savingRole = false;
     }
 
     private async Task LoadDriverRoutes()

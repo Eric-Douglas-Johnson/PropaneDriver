@@ -12,8 +12,9 @@ namespace PropaneDriver.Tests.Integration;
 //   * driver acting on someone else's data → 403
 //   * driver acting on their own data → 200 (or downstream 4xx that proves
 //     the auth filter let the request through)
-//   * AdminOnly endpoints (drivers list, address long-running) keep the
-//     stricter "driver → 403" expectation.
+//   * SupervisorOrAdmin endpoints (drivers list, long-running) keep the
+//     stricter "driver → 403" expectation; AdminOnly ones also reject
+//     supervisors.
 public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
 {
     private readonly PropaneDriverWebAppFactory _factory;
@@ -23,7 +24,7 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         _factory = factory;
     }
 
-    // ---------- /api/drivers (AdminOnly — stays admin-only) ----------
+    // ---------- /api/drivers (SupervisorOrAdmin) ----------
 
     [Fact]
     public async Task ListDrivers_Anonymous_Returns401()
@@ -49,6 +50,127 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         using var client = _factory.CreateClientForDriver(admin);
         var response = await client.GetAsync("/api/drivers");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListDrivers_SupervisorRole_Returns200()
+    {
+        var supervisor = _factory.SeedDriver("listdrivers-supervisor", role: "supervisor");
+        using var client = _factory.CreateClientForDriver(supervisor);
+        var response = await client.GetAsync("/api/drivers");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // ---------- PUT /api/drivers/{id}/role (AdminOnly) ----------
+
+    [Fact]
+    public async Task UpdateRole_Anonymous_Returns401()
+    {
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{Guid.NewGuid()}/role", new DriverRoleUpdateDto { Role = "supervisor" });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("driver")]
+    [InlineData("supervisor")]
+    public async Task UpdateRole_NonAdminRole_Returns403(string callerRole)
+    {
+        var caller = _factory.SeedDriver($"role-change-{callerRole}-caller", role: callerRole);
+        var target = _factory.SeedDriver($"role-change-{callerRole}-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(caller);
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "admin" });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateRole_AdminRole_ChangesTargetRole()
+    {
+        var admin = _factory.SeedDriver("role-change-admin", role: "admin");
+        var target = _factory.SeedDriver("role-change-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(admin);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "Supervisor" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var reloaded = await client.GetFromJsonAsync<DriverDto>($"/driver/{target.Id}");
+        Assert.Equal("supervisor", reloaded!.Role);
+    }
+
+    [Fact]
+    public async Task UpdateRole_UnknownRole_Returns400()
+    {
+        var admin = _factory.SeedDriver("role-change-bad-role-admin", role: "admin");
+        var target = _factory.SeedDriver("role-change-bad-role-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "superuser" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateRole_AdminChangingOwnRole_Returns400()
+    {
+        var admin = _factory.SeedDriver("role-change-self-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{admin.Id}/role", new DriverRoleUpdateDto { Role = "driver" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateRole_UnknownDriver_Returns404()
+    {
+        var admin = _factory.SeedDriver("role-change-missing-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync(
+            $"/api/drivers/{Guid.NewGuid()}/role", new DriverRoleUpdateDto { Role = "supervisor" });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ---------- Supervisor reaches route management, not admin-only data ----------
+
+    [Fact]
+    public async Task ListRoutesForDriver_SupervisorRole_CanReadAnyDriver()
+    {
+        var supervisor = _factory.SeedDriver("route-list-supervisor", role: "supervisor");
+        var someDriver = _factory.SeedDriver("route-list-supervisor-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(supervisor);
+        var response = await client.GetAsync($"/api/routes/driver/{someDriver.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAllRoutesForDriver_DriverRole_Returns403()
+    {
+        var driver = _factory.SeedDriver("route-delete-all-driver", role: "driver");
+        using var client = _factory.CreateClientForDriver(driver);
+        var response = await client.DeleteAsync($"/api/routes/driver/{driver.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAllRoutesForDriver_SupervisorRole_DeletesRoutes()
+    {
+        var supervisor = _factory.SeedDriver("route-delete-all-supervisor", role: "supervisor");
+        var someDriver = _factory.SeedDriver("route-delete-all-target", role: "driver");
+        _factory.SeedRoute(someDriver.Id);
+        using var client = _factory.CreateClientForDriver(supervisor);
+        var response = await client.DeleteAsync($"/api/routes/driver/{someDriver.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FuelLogForDriver_SupervisorRole_Returns403()
+    {
+        var supervisor = _factory.SeedDriver("fuel-log-supervisor", role: "supervisor");
+        var someDriver = _factory.SeedDriver("fuel-log-supervisor-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(supervisor);
+        var response = await client.GetAsync($"/api/fuel-log/{someDriver.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     // ---------- /driver/{id} (AuthenticatedDriver) ----------
@@ -465,7 +587,7 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    // ---------- PUT /api/deliveries/{id}/long-running (AdminOnly — stays admin-only) ----------
+    // ---------- PUT /api/deliveries/{id}/long-running (SupervisorOrAdmin) ----------
 
     [Fact]
     public async Task UpdateLongRunning_DriverRole_Returns403()
@@ -483,6 +605,17 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
     {
         var admin = _factory.SeedDriver("longrun-admin", role: "admin");
         using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync(
+            $"/api/deliveries/{Guid.NewGuid()}/long-running",
+            new DeliveryLongRunningUpdateDto { LongRunning = true });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateLongRunning_SupervisorRole_PassesAuthFilter()
+    {
+        var supervisor = _factory.SeedDriver("longrun-supervisor", role: "supervisor");
+        using var client = _factory.CreateClientForDriver(supervisor);
         var response = await client.PutAsJsonAsync(
             $"/api/deliveries/{Guid.NewGuid()}/long-running",
             new DeliveryLongRunningUpdateDto { LongRunning = true });
