@@ -65,7 +65,7 @@
         <div class="admin-card">
 
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="m-0">Current Route — @_loadedRoute.Deliveries.Count deliveries</h5>
+                <h5 class="m-0">Current Route — @_loadedRoute.ProductType.ToDisplayName() — @_loadedRoute.Deliveries.Count deliveries</h5>
                 <button class="btn btn-sm btn-outline-danger" @onclick="DeleteRoute">Delete Route</button>
             </div>
 
@@ -228,6 +228,7 @@
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Product</th>
                             <th>Deliveries</th>
                             <th>Completed</th>
                             <th></th>
@@ -241,6 +242,7 @@
                             var routeDate = r.Date;
                             <tr>
                                 <td>@r.Date.ToString("yyyy-MM-dd")</td>
+                                <td>@r.ProductType.ToDisplayName()</td>
                                 <td>@r.DeliveryCount</td>
                                 <td>@r.CompletedCount</td>
                                 <td>

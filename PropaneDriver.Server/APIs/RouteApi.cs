@@ -52,6 +52,7 @@ namespace PropaneDriver.Server.Endpoints
                     {
                         Id = r.Id.ToString(),
                         Date = r.Date,
+                        ProductType = r.ProductType,
                         DeliveryCount = db.Deliveries.Count(d => d.RouteId == r.Id),
                         CompletedCount = db.Deliveries.Count(d => d.RouteId == r.Id && d.Status == 2)
                     })
