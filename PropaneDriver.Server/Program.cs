@@ -153,6 +153,7 @@ app.MapDeliveryEndpoints();
 app.MapAddressEndpoints();
 app.MapAlertEndpoints();
 app.MapDeliveryTimeEndpoints();
+app.MapDeliveryTimeStatsEndpoints();
 app.MapGeocodingEndpoints();
 app.MapConfigEndpoints();
 app.MapClientLogEndpoints();

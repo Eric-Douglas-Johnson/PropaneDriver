@@ -32,6 +32,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
     provider.GetRequiredService<CustomAuthStateProvider>());
 
 builder.Services.AddScoped<DeliveryTimeApiConsumer>();
+builder.Services.AddScoped<DeliveryTimeStatsApiConsumer>();
 builder.Services.AddScoped<RouteApiConsumer>();
 builder.Services.AddScoped<DeliveryApiConsumer>();
 builder.Services.AddScoped<AddressApiConsumer>();

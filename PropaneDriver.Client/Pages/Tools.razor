@@ -1,7 +1,9 @@
 @page "/tools"
+@using PropaneDriver.Client.ApiConsumers
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Enums
 @inject HttpClient Http
+@inject DeliveryTimeStatsApiConsumer DeliveryTimeStatsApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 
@@ -916,14 +918,7 @@
 
         try
         {
-            var queryParameters = new List<string>();
-            if (_statsFrom.HasValue)
-                queryParameters.Add($"from={Uri.EscapeDataString(DateTime.SpecifyKind(_statsFrom.Value.Date, DateTimeKind.Utc).ToString("O"))}");
-            if (_statsTo.HasValue)
-                queryParameters.Add($"to={Uri.EscapeDataString(DateTime.SpecifyKind(_statsTo.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc).ToString("O"))}");
-
-            var queryString = queryParameters.Count == 0 ? string.Empty : "?" + string.Join("&", queryParameters);
-            _stats = await Http.GetFromJsonAsync<DeliveryTimeStatsApiDto>($"api/delivery-times/stats{queryString}");
+            _stats = await DeliveryTimeStatsApi.GetDeliveryTimeStatsAsync(_statsFrom, _statsTo);
         }
         catch (Exception ex)
         {
