@@ -4,6 +4,7 @@
 @using PropaneDriver.Client.ApiConsumers
 @using PropaneDriver.Client.HelperClasses
 @using PropaneDriver.Shared.Dtos
+@using PropaneDriver.Shared.Enums
 @using PropaneDriver.Shared.Interfaces
 @inject CustomAuthStateProvider AuthStateProvider
 @inject GeolocationService GeolocationService
@@ -33,6 +34,10 @@
         <h6>Driver</h6>
         <span class="summary-value">@_routeSummary.Driver?.FirstName @_routeSummary.Driver?.LastName</span>
         <span class="summary-detail">@_routeSummary.Driver?.UserName</span>
+    </div>
+    <div class="summary-section product-info">
+        <h6>Product</h6>
+        <span class="summary-value">@_routeSummary.ProductType?.ToDisplayName()</span>
     </div>
     <div class="summary-section progress-info">
         <h6>Route Progress</h6>
@@ -401,6 +406,7 @@
             {
                 Date = route.Date,
                 Driver = driver,
+                ProductType = route.ProductType,
                 TotalStops = _deliveries.Count,
                 CompletedStops = _deliveries.Count(d => d.Status == 2),
                 EstimatedCompletionTime = route.EstimatedRouteTime > 0

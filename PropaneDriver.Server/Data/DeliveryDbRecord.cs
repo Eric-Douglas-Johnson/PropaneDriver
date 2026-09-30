@@ -22,9 +22,7 @@ namespace PropaneDriver.Server.Data
 
         public int SortOrder { get; set; }
 
-        // This stop skips the GPS-geofence delivery-time logic. The driver
-        // taps Start/Stop buttons in the UI and the elapsed time is saved
-        // when they stop. Per-delivery (not shared across an address).
+        // when true, skips the GPS-geofence delivery-time logic--uses manual timer
         public bool LongRunning { get; set; }
 
         public DateTime CreatedAt { get; set; }

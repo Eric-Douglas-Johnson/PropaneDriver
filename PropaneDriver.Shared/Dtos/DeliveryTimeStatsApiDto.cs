@@ -1,9 +1,10 @@
+
 namespace PropaneDriver.Shared.Dtos
 {
-    // Aggregate statistics over the DeliveryTime table for the admin
-    // Tools page. All durations are seconds; the client formats them
-    // for display.
-    public class DeliveryTimeStatsDto
+    /// <summary>
+    /// Delivery time statistics API -- data contract across the network boundary
+    /// </summary>
+    public class DeliveryTimeStatsApiDto
     {
         public int SampleCount { get; set; }
 

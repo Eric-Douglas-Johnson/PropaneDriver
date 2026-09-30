@@ -5,8 +5,10 @@
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Client.ApiConsumers
 @using PropaneDriver.Shared.Dtos
+@using PropaneDriver.Shared.Enums
+@using PropaneDriver.Shared.Enums
 @using PropaneDriver.Shared.Interfaces
-@inject RouteApiConsumer RouteApi
+@inject RouteApiConsumer RouteApiClient
 @inject GeocodingService Geocoder
 @inject HttpClient Http
 @inject SpeechService SpeechService
@@ -502,10 +504,24 @@
                 </tbody>
             </table>
 
-            <button class="btn btn-primary mt-2" @onclick="CreateRoute"
-                    disabled="@(string.IsNullOrEmpty(_currentDriverId) || _creating)">
-                @(_creating ? "Creating…" : "Create Route")
-            </button>
+            <div class="admin-row mt-2">
+                <div class="admin-field" style="max-width:160px;">
+                    <label>Product Type</label>
+                    <select class="form-select form-select-sm" @bind="_selectedProductType" disabled="@_creating">
+                        @foreach (var productTypeOption in Enum.GetValues<ProductType>())
+                        {
+                            <option value="@productTypeOption">@productTypeOption.ToDisplayName()</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="admin-field" style="align-self:flex-end;">
+                    <button class="btn btn-primary" @onclick="CreateRoute"
+                            disabled="@(string.IsNullOrEmpty(_currentDriverId) || _creating)">
+                        @(_creating ? "Creating…" : "Create Route")
+                    </button>
+                </div>
+            </div>
         }
 
         @if (!string.IsNullOrEmpty(_createStatus))
@@ -588,6 +604,7 @@
     private string? _createStatus;
     private bool _createSuccess;
     private bool _creating;
+    private ProductType _selectedProductType = ProductType.Propane;
     private bool _appendingToRoute;
 
     // Screenshot-import (OCR) state
@@ -632,7 +649,7 @@
 
         try
         {
-            _driverRoutes = await RouteApi.GetRoutesForDriverAsync(_currentDriverId);
+            _driverRoutes = await RouteApiClient.GetRoutesForDriverAsync(_currentDriverId);
             _hasLoadedDriverRoutes = true;
         }
         catch (Exception ex)
@@ -660,7 +677,7 @@
         _driverRoutesStatus = null;
         StateHasChanged();
 
-        var success = await RouteApi.DeleteRouteAsync(routeId);
+        var success = await RouteApiClient.DeleteRouteAsync(routeId);
 
         if (success)
         {
@@ -875,7 +892,7 @@
         _appendingToRoute = true;
         StateHasChanged();
 
-        var ok = await RouteApi.AddDeliveryToRouteAsync(_loadedRoute.Id, dto);
+        var ok = await RouteApiClient.AddDeliveryToRouteAsync(_loadedRoute.Id, dto);
 
         if (ok)
         {
@@ -1116,10 +1133,11 @@
         {
             DriverId = _currentDriverId,
             Date = DateOnly.FromDateTime(_selectedDate),
+            ProductType = _selectedProductType,
             Deliveries = _pendingDeliveries
         };
 
-        var success = await RouteApi.CreateRouteAsync(dto);
+        var success = await RouteApiClient.CreateRouteAsync(dto);
 
         if (success)
         {

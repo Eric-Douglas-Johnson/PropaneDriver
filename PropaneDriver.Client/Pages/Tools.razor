@@ -531,7 +531,7 @@
     // Delivery-time analytics section state. Default window is "last 30 days"
     // so the page lands with something interesting to look at without
     // pulling the entire history on first load.
-    private DeliveryTimeStatsDto? _stats;
+    private DeliveryTimeStatsApiDto? _stats;
     private bool _statsLoading;
     private string? _statsError;
     private DateTime? _statsFrom = DateTime.UtcNow.Date.AddDays(-30);
@@ -923,7 +923,7 @@
                 queryParameters.Add($"to={Uri.EscapeDataString(DateTime.SpecifyKind(_statsTo.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc).ToString("O"))}");
 
             var queryString = queryParameters.Count == 0 ? string.Empty : "?" + string.Join("&", queryParameters);
-            _stats = await Http.GetFromJsonAsync<DeliveryTimeStatsDto>($"api/delivery-times/stats{queryString}");
+            _stats = await Http.GetFromJsonAsync<DeliveryTimeStatsApiDto>($"api/delivery-times/stats{queryString}");
         }
         catch (Exception ex)
         {

@@ -1,4 +1,6 @@
+
 using System.ComponentModel.DataAnnotations;
+using PropaneDriver.Shared.Enums;
 
 namespace PropaneDriver.Server.Data
 {
@@ -12,10 +14,12 @@ namespace PropaneDriver.Server.Data
 
         public DateOnly Date { get; set; }
 
-        // Expected total route duration in minutes. Populated when the route is
-        // planned; stays 0 until set.
+        // Expected total route duration in minutes.
         public double EstimatedRouteTime { get; set; }
 
         public DateTime CreatedAt { get; set; }
+
+        // Propane, Fuel Oil, etc
+        public ProductType ProductType { get; set; }
     }
 }

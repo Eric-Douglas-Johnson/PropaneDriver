@@ -20,15 +20,18 @@ namespace PropaneDriver.Client.ApiConsumers
             try
             {
                 var response = await _http.GetAsync($"api/routes/today/{driverId}");
+
                 if (response.StatusCode == HttpStatusCode.NotFound)
                     return null;
 
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
+
                     await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.GetTodayRouteAsync",
                         $"GET api/routes/today/{driverId} returned {(int)response.StatusCode}: {body}");
+
                     return null;
                 }
 
@@ -127,14 +130,18 @@ namespace PropaneDriver.Client.ApiConsumers
             try
             {
                 var response = await _http.PostAsJsonAsync("api/routes", dto);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
+
                     await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.CreateRouteAsync",
                         $"POST api/routes returned {(int)response.StatusCode}: {body}");
+
                     return false;
                 }
+
                 return true;
             }
             catch (Exception ex)
@@ -153,12 +160,15 @@ namespace PropaneDriver.Client.ApiConsumers
             try
             {
                 var response = await _http.PostAsJsonAsync($"api/routes/{routeId}/deliveries", dto);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     var body = await response.Content.ReadAsStringAsync();
+
                     await ErrorLogApiConsumer.LogErrorAsync(
                         "RouteApiService.AddDeliveryToRouteAsync",
                         $"POST api/routes/{routeId}/deliveries returned {(int)response.StatusCode}: {body}");
+
                     return false;
                 }
                 return true;

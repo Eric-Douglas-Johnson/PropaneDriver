@@ -129,7 +129,7 @@ namespace PropaneDriver.Server.Endpoints
                             address.State))
                     .ToListAsync();
 
-                var stats = new DeliveryTimeStatsDto { SampleCount = records.Count };
+                var stats = new DeliveryTimeStatsApiDto { SampleCount = records.Count };
 
                 if (records.Count == 0)
                     return Results.Ok(stats);

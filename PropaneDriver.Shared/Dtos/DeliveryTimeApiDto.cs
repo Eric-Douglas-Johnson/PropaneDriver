@@ -1,7 +1,11 @@
+
 using System.ComponentModel.DataAnnotations;
 
 namespace PropaneDriver.Shared.Dtos
 {
+    /// <summary>
+    /// Delivery time API -- data contract across the network boundary
+    /// </summary>
     public class DeliveryTimeApiDto
     {
         public int Id { get; set; }

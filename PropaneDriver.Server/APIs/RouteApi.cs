@@ -8,7 +8,7 @@ using PropaneDriver.Shared.Interfaces;
 
 namespace PropaneDriver.Server.Endpoints
 {
-    public static class RouteEndpoints
+    public static class RouteApi
     {
         public static IEndpointRouteBuilder MapRouteEndpoints(this IEndpointRouteBuilder app)
         {
@@ -30,7 +30,9 @@ namespace PropaneDriver.Server.Endpoints
                 if (route is null) return Results.NotFound();
 
                 var routeDto = await BuildRouteDtoAsync(route, db);
+
                 return Results.Ok(routeDto);
+
             }).RequireAuthorization("AuthenticatedDriver");
 
             // List all routes for a driver
@@ -56,6 +58,7 @@ namespace PropaneDriver.Server.Endpoints
                     .ToListAsync();
 
                 return Results.Ok(routes);
+
             }).RequireAuthorization("AuthenticatedDriver");
 
             // Delete a route and its deliveries
@@ -72,13 +75,12 @@ namespace PropaneDriver.Server.Endpoints
 
                 db.Routes.Remove(route); // cascade deletes deliveries
                 await db.SaveChangesAsync();
+
                 return Results.Ok(new { Deleted = true, RouteId = id });
+
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Admin: delete every route (and their deliveries) for a driver in
-            // one shot, mirroring the bulk fuel-log delete on the Admin page.
-            // Returns 404 when the driver has no routes so the client can report
-            // there was nothing to delete rather than a phantom success.
+            // Admin: delete every route (and their deliveries) for a driver
             group.MapDelete("driver/{driverId:guid}", async (
                 Guid driverId,
                 PropaneDriverDbContext db) =>
@@ -92,15 +94,10 @@ namespace PropaneDriver.Server.Endpoints
                 db.Routes.RemoveRange(routes); // cascade deletes deliveries
                 await db.SaveChangesAsync();
                 return Results.Ok(new { Deleted = routes.Count });
+
             }).RequireAuthorization("AdminOnly");
 
             // Get today's route (with deliveries + alerts) for a driver.
-            // "Today" is computed in Central time because that's the driver's
-            // local timezone and it's also what the Admin page uses when
-            // saving Route.Date (DateTime.Today in the browser). Azure App
-            // Service has no timezone set, so a bare DateTime.Today here
-            // evaluates to UTC and silently misses the route for ~5 hours
-            // every evening around the UTC day rollover.
             group.MapGet("today/{driverId:guid}", async (Guid driverId, PropaneDriverDbContext db) =>
             {
                 var centralTz = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
@@ -138,6 +135,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
 
                 return Results.Ok(routeDto);
+
             }).RequireAuthorization("AuthenticatedDriver");
 
             // Create a route with deliveries
@@ -160,7 +158,9 @@ namespace PropaneDriver.Server.Endpoints
                     string.IsNullOrWhiteSpace(d.ZipCode));
 
                 if (invalidDelivery is not null)
-                    return Results.BadRequest(new { Message = $"All address fields are required for every delivery. Missing field on: {invalidDelivery.CustomerName}" });
+                    return Results.BadRequest(new { 
+                        Message = $"All address fields are required for every delivery. Missing field on: {invalidDelivery.CustomerName}" 
+                    });
 
                 try
                 {
@@ -176,9 +176,6 @@ namespace PropaneDriver.Server.Endpoints
                         var state = d.State.Trim();
                         var zip = d.ZipCode.Trim();
 
-                        // Case-fold the cache key so "Main St" and "main st" in the
-                        // same batch resolve to the same Address row. The DB
-                        // lookup below is already case-insensitive via collation.
                         var key = $"{street}|{city}|{state}|{zip}".ToLowerInvariant();
 
                         if (addressCache.ContainsKey(key)) continue;
@@ -255,6 +252,7 @@ namespace PropaneDriver.Server.Endpoints
                         DriverId = driverId,
                         Date = dto.Date,
                         CreatedAt = DateTime.UtcNow,
+                        ProductType = dto.ProductType,
                         EstimatedRouteTime = estimatedRouteTime
                     };
 
@@ -409,6 +407,7 @@ namespace PropaneDriver.Server.Endpoints
                 DriverId = route.DriverId.ToString(),
                 Date = route.Date,
                 EstimatedRouteTime = route.EstimatedRouteTime,
+                ProductType = route.ProductType,
                 Deliveries = deliveriesWithAddress
                     .Select(x => (IDelivery)new PropaneDeliveryDto
                     {
