@@ -1,3 +1,5 @@
+using PropaneDriver.Shared.Enums;
+
 namespace PropaneDriver.Shared.Dtos
 {
     public class RouteSummaryDto
@@ -8,5 +10,6 @@ namespace PropaneDriver.Shared.Dtos
         public string EstimatedCompletionTime { get; set; } = string.Empty;
         public List<string> Alerts { get; set; } = [];
         public DriverDto? Driver { get; set; }
+        public ProductType? ProductType { get; set; }
     }
 }
