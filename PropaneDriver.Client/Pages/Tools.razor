@@ -7,7 +7,7 @@
 @using PropaneDriver.Shared.Enums
 @inject HttpClient Http
 @inject DeliveryTimeStatsApiConsumer DeliveryTimeStatsApi
-@inject DriverApiConsumer DriverApi
+@inject UserApiConsumer UserApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 
@@ -90,16 +90,21 @@
                         <input type="password" class="form-control form-control-sm" autocomplete="new-password"
                                @bind="_userFormConfirmPassword" />
                     </div>
-                    <div class="admin-field" style="max-width: 160px;">
-                        <label>Role</label>
-                        <select class="form-select form-select-sm" @bind="_userForm.Role"
-                                disabled="@EditingCurrentUser"
-                                title="@(EditingCurrentUser ? "You can't change your own role." : null)">
+                    <div class="admin-field">
+                        <label>Roles</label>
+                        <div class="d-flex gap-3" title="@(EditingCurrentUser ? "You can't change your own roles." : null)">
                             @foreach (var roleOption in UserRoles.All)
                             {
-                                <option value="@roleOption">@roleOption</option>
+                                var capturedRole = roleOption;
+                                <label class="d-flex align-items-center gap-1 m-0">
+                                    <input type="checkbox" class="form-check-input m-0"
+                                           checked="@_userForm.Roles.Contains(capturedRole)"
+                                           disabled="@EditingCurrentUser"
+                                           @onchange="changeEvent => ToggleFormRole(capturedRole, changeEvent)" />
+                                    @capturedRole
+                                </label>
                             }
-                        </select>
+                        </div>
                     </div>
                 </div>
 
@@ -131,7 +136,7 @@
                         <tr>
                             <th>Name</th>
                             <th>User Name</th>
-                            <th>Role</th>
+                            <th>Roles</th>
                             <th>Email</th>
                             <th>Phone</th>
                             <th></th>
@@ -151,7 +156,7 @@
                                     }
                                 </td>
                                 <td>@userRow.UserName</td>
-                                <td>@userRow.Role</td>
+                                <td>@string.Join(", ", userRow.Roles)</td>
                                 <td>@userRow.Email</td>
                                 <td>@userRow.PhoneNumber</td>
                                 <td class="tools-users-actions">
@@ -717,13 +722,13 @@
     private DateTime? _statsTo;
 
     // User management section state. _editingUser is null while adding a new user;
-    // the form reuses CreateDriverDto, whose Password doubles as "new password" on edit.
-    private List<DriverDto> _users = new();
+    // the form reuses CreateUserDto, whose Password doubles as "new password" on edit.
+    private List<UserDto> _users = new();
     private bool _loadingUsers;
     private string _currentUserId = string.Empty;
     private bool _userFormOpen;
-    private DriverDto? _editingUser;
-    private CreateDriverDto _userForm = new() { Role = UserRoles.Driver };
+    private UserDto? _editingUser;
+    private CreateUserDto _userForm = new() { Roles = [UserRoles.Driver] };
     private string _userFormConfirmPassword = string.Empty;
     private string? _userFormError;
     private bool _savingUser;
@@ -1218,7 +1223,7 @@
         _usersStatus = null;
         StateHasChanged();
 
-        var loadedUsers = await DriverApi.GetDriversAsync();
+        var loadedUsers = await UserApi.GetUsersAsync();
         if (loadedUsers is null)
         {
             _usersStatus = "Couldn't load users — check error logs.";
@@ -1235,14 +1240,14 @@
     private void StartAddingUser()
     {
         _editingUser = null;
-        _userForm = new CreateDriverDto { Role = UserRoles.Driver };
+        _userForm = new CreateUserDto { Roles = [UserRoles.Driver] };
         OpenUserForm();
     }
 
-    private void StartEditingUser(DriverDto userToEdit)
+    private void StartEditingUser(UserDto userToEdit)
     {
         _editingUser = userToEdit;
-        _userForm = new CreateDriverDto
+        _userForm = new CreateUserDto
         {
             UserName = userToEdit.UserName,
             FirstName = userToEdit.FirstName,
@@ -1250,10 +1255,17 @@
             LastName = userToEdit.LastName,
             Email = userToEdit.Email,
             PhoneNumber = userToEdit.PhoneNumber,
-            // Sign-in treats a blank role as driver; lowercase so the select matches an option.
-            Role = string.IsNullOrWhiteSpace(userToEdit.Role) ? UserRoles.Driver : userToEdit.Role.ToLowerInvariant()
+            // A copy, so unchecking a box doesn't change the listed row before saving.
+            Roles = userToEdit.Roles.ToList()
         };
         OpenUserForm();
+    }
+
+    private void ToggleFormRole(string role, ChangeEventArgs changeEvent)
+    {
+        _userForm.Roles.Remove(role);
+        if (changeEvent.Value is true)
+            _userForm.Roles.Add(role);
     }
 
     private void OpenUserForm()
@@ -1280,16 +1292,16 @@
         StateHasChanged();
 
         var isNewUser = _editingUser is null;
-        DriverDto? savedUser;
+        UserDto? savedUser;
         string? errorMessage;
 
         if (_editingUser is null)
         {
-            (savedUser, errorMessage) = await DriverApi.CreateDriverAsync(_userForm);
+            (savedUser, errorMessage) = await UserApi.CreateUserAsync(_userForm);
         }
         else
         {
-            (savedUser, errorMessage) = await DriverApi.UpdateDriverAsync(_editingUser.Id, new DriverUpdateDto
+            (savedUser, errorMessage) = await UserApi.UpdateUserAsync(_editingUser.Id, new UserUpdateDto
             {
                 UserName = _userForm.UserName,
                 FirstName = _userForm.FirstName,
@@ -1297,7 +1309,7 @@
                 LastName = _userForm.LastName,
                 Email = _userForm.Email,
                 PhoneNumber = _userForm.PhoneNumber,
-                Role = _userForm.Role,
+                Roles = _userForm.Roles,
                 NewPassword = _userForm.Password
             });
         }
@@ -1310,13 +1322,13 @@
             return;
         }
 
-        // Same ordering as GET api/drivers.
+        // Same ordering as GET api/users.
         _users = _users.Where(existingUser => existingUser.Id != savedUser.Id)
             .Append(savedUser)
             .OrderBy(listedUser => listedUser.LastName).ThenBy(listedUser => listedUser.FirstName)
             .ToList();
         _usersStatus = isNewUser
-            ? $"Created {savedUser.UserName} as {savedUser.Role}."
+            ? $"Created {savedUser.UserName} as {string.Join(", ", savedUser.Roles)}."
             : $"Saved changes to {savedUser.UserName}.";
         _usersStatusSuccess = true;
         CloseUserForm();
@@ -1332,6 +1344,8 @@
             return "First and last name are required.";
         if (string.IsNullOrWhiteSpace(_userForm.UserName))
             return "User name is required.";
+        if (_userForm.Roles.Count == 0)
+            return "Choose at least one role.";
 
         if (isNewUser || _userForm.Password.Length > 0)
         {
@@ -1344,7 +1358,7 @@
         return null;
     }
 
-    private async Task DeleteUser(DriverDto userToDelete)
+    private async Task DeleteUser(UserDto userToDelete)
     {
         if (userToDelete.Id == _currentUserId) return;
 
@@ -1358,7 +1372,7 @@
         _usersStatus = null;
         StateHasChanged();
 
-        var (deleted, errorMessage) = await DriverApi.DeleteDriverAsync(userToDelete.Id);
+        var (deleted, errorMessage) = await UserApi.DeleteUserAsync(userToDelete.Id);
 
         if (deleted)
         {

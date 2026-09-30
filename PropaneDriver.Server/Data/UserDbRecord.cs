@@ -1,0 +1,36 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace PropaneDriver.Server.Data
+{
+    // Login and profile shared by every account. Role membership lives in the
+    // Drivers, Supervisors and Administrators tables, keyed by this Id.
+    public class UserDbRecord
+    {
+        [Key]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        [Required]
+        [MaxLength(100)]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required]
+        public string PasswordHash { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string LastName { get; set; } = string.Empty;
+
+        [MaxLength(255)]
+        public string Email { get; set; } = string.Empty;
+
+        [MaxLength(30)]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+}

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
 using PropaneDriver.Server.Services;
+using PropaneDriver.Shared.Constants;
 using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Server.Endpoints
@@ -10,75 +11,56 @@ namespace PropaneDriver.Server.Endpoints
     {
         public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
         {
-            // Authenticate a driver. Route name casing preserved for existing clients.
-            // On success returns a JWT bearer token + the full driver profile, so
-            // the client doesn't need a second GET /driver/{id} round-trip and
-            // can populate role-aware claims (admin vs driver) immediately.
+            // Authenticate any account. Route name casing preserved for existing clients.
+            // On success returns a JWT bearer token + the profile and roles, so the
+            // client can populate role-aware claims immediately.
             app.MapPost("api/Authenticate", async (
                 CredsDto creds,
                 PropaneDriverDbContext db,
+                UserRoleService userRoleService,
                 JwtTokenService jwtTokenService) =>
             {
-                var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == creds.UserName);
+                var user = await db.Users.FirstOrDefaultAsync(u => u.UserName == creds.UserName);
 
-                if (driver is null)
-                {
-                    return Results.Ok(new AuthResponseDto
-                    {
-                        IsAuthenticated = false,
-                        UserId = Guid.Empty,
-                        StatusMessage = $"No driver found with user name '{creds.UserName}'."
-                    });
-                }
+                if (user is null)
+                    return Results.Ok(FailedSignIn($"No user found with user name '{creds.UserName}'."));
 
-                if (!BCrypt.Net.BCrypt.Verify(creds.Password, driver.PasswordHash))
-                {
-                    return Results.Ok(new AuthResponseDto
-                    {
-                        IsAuthenticated = false,
-                        UserId = Guid.Empty,
-                        StatusMessage = "Invalid password."
-                    });
-                }
+                if (!BCrypt.Net.BCrypt.Verify(creds.Password, user.PasswordHash))
+                    return Results.Ok(FailedSignIn("Invalid password."));
 
-                var bearerToken = jwtTokenService.CreateTokenForDriver(driver);
+                // A role-less account would land on a menu with nothing in it.
+                var roles = await userRoleService.GetRolesAsync(user.Id);
+                if (roles.Count == 0)
+                    return Results.Ok(FailedSignIn("This account has no role assigned. Ask an administrator to assign one."));
 
                 return Results.Ok(new AuthResponseDto
                 {
                     IsAuthenticated = true,
-                    UserId = driver.Id,
+                    UserId = user.Id,
                     StatusMessage = "Authenticated",
-                    Token = bearerToken,
-                    Driver = new DriverDto
-                    {
-                        Id = driver.Id.ToString(),
-                        UserName = driver.UserName,
-                        Role = string.IsNullOrWhiteSpace(driver.Role) ? "driver" : driver.Role,
-                        FirstName = driver.FirstName,
-                        MiddleName = driver.MiddleName,
-                        LastName = driver.LastName,
-                        Email = driver.Email,
-                        PhoneNumber = driver.PhoneNumber
-                    }
+                    Token = jwtTokenService.CreateTokenForUser(user, roles),
+                    User = UserEndpoints.ToUserDto(user, roles)
                 });
             });
 
-            // Register a new driver
-            app.MapPost("api/Register", async (RegisterDriverDto registration, PropaneDriverDbContext db) =>
+            // Public self-registration, which only ever creates drivers.
+            app.MapPost("api/Register", async (
+                RegisterDriverDto registration,
+                PropaneDriverDbContext db,
+                UserRoleService userRoleService) =>
             {
                 if (string.IsNullOrWhiteSpace(registration.UserName) || string.IsNullOrWhiteSpace(registration.Password))
                     return Results.BadRequest(new { Message = "UserName and Password are required." });
 
-                var exists = await db.Drivers.AnyAsync(d => d.UserName == registration.UserName);
+                var exists = await db.Users.AnyAsync(u => u.UserName == registration.UserName);
                 if (exists)
-                    return Results.Conflict(new { Message = "A driver with that user name already exists." });
+                    return Results.Conflict(new { Message = "A user with that user name already exists." });
 
-                var driver = new DriverDbRecord
+                var newUser = new UserDbRecord
                 {
                     Id = Guid.NewGuid(),
                     UserName = registration.UserName,
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(registration.Password),
-                    Role = "driver",
                     FirstName = registration.FirstName,
                     MiddleName = registration.MiddleName,
                     LastName = registration.LastName,
@@ -87,10 +69,11 @@ namespace PropaneDriver.Server.Endpoints
                     CreatedAt = DateTime.UtcNow
                 };
 
-                db.Drivers.Add(driver);
+                db.Users.Add(newUser);
+                userRoleService.AddRoles(newUser.Id, [UserRoles.Driver]);
                 await db.SaveChangesAsync();
 
-                return Results.Ok(new { driver.Id, Message = "Driver registered successfully." });
+                return Results.Ok(new { newUser.Id, Message = "Driver registered successfully." });
             });
 
             // Request a password reset email. Always returns success to avoid
@@ -101,8 +84,8 @@ namespace PropaneDriver.Server.Endpoints
                 EmailService emailService,
                 IConfiguration config) =>
             {
-                var driver = await db.Drivers.FirstOrDefaultAsync(d => d.Email == dto.Email);
-                if (driver is null)
+                var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+                if (user is null)
                     return Results.Ok(new { Message = "If that email is registered, a reset link has been sent." });
 
                 // Generate a cryptographically random token
@@ -110,16 +93,16 @@ namespace PropaneDriver.Server.Endpoints
                 var rawToken = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
                 var tokenHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawToken)));
 
-                // Invalidate any unused tokens for this driver
+                // Invalidate any unused tokens for this user
                 var existing = await db.PasswordResetTokens
-                    .Where(t => t.DriverId == driver.Id && t.UsedAt == null)
+                    .Where(t => t.UserId == user.Id && t.UsedAt == null)
                     .ToListAsync();
                 foreach (var t in existing)
                     t.UsedAt = DateTime.UtcNow;
 
                 db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
                 {
-                    DriverId = driver.Id,
+                    UserId = user.Id,
                     TokenHash = tokenHash,
                     CreatedAt = DateTime.UtcNow,
                     ExpiresAt = DateTime.UtcNow.AddHours(1)
@@ -129,7 +112,7 @@ namespace PropaneDriver.Server.Endpoints
                 var baseUrl = config["AppBaseUrl"] ?? "https://propane-driver.azurewebsites.net";
                 var resetUrl = $"{baseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
 
-                await emailService.SendPasswordResetAsync(driver.Email, $"{driver.FirstName} {driver.LastName}".Trim(), resetUrl);
+                await emailService.SendPasswordResetAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), resetUrl);
 
                 return Results.Ok(new { Message = "If that email is registered, a reset link has been sent." });
             });
@@ -151,11 +134,11 @@ namespace PropaneDriver.Server.Endpoints
                 if (resetToken is null || resetToken.UsedAt != null || resetToken.ExpiresAt < DateTime.UtcNow)
                     return Results.BadRequest(new { Message = "This reset link is invalid or has expired." });
 
-                var driver = await db.Drivers.FindAsync(resetToken.DriverId);
-                if (driver is null)
-                    return Results.BadRequest(new { Message = "Driver not found." });
+                var user = await db.Users.FindAsync(resetToken.UserId);
+                if (user is null)
+                    return Results.BadRequest(new { Message = "User not found." });
 
-                driver.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
                 resetToken.UsedAt = DateTime.UtcNow;
 
                 await db.SaveChangesAsync();
@@ -165,5 +148,12 @@ namespace PropaneDriver.Server.Endpoints
 
             return app;
         }
+
+        private static AuthResponseDto FailedSignIn(string statusMessage) => new()
+        {
+            IsAuthenticated = false,
+            UserId = Guid.Empty,
+            StatusMessage = statusMessage
+        };
     }
 }

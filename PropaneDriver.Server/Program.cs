@@ -65,6 +65,8 @@ builder.Services.AddSingleton(serviceProvider =>
 builder.Services.AddSingleton<DocumentIntelligenceService>();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton<EiaFuelPriceService>();
+builder.Services.AddScoped<DriverHistoryService>();
+builder.Services.AddScoped<UserRoleService>();
 builder.Services.AddHttpClient();
 
 // JWT bearer auth. The signing key, issuer, and audience all come from the
@@ -148,6 +150,7 @@ app.MapControllers();
 
 // Minimal-API endpoint modules. Each file under Endpoints/ owns one resource's
 // routes via an IEndpointRouteBuilder extension method.
+app.MapUserEndpoints();
 app.MapDriverEndpoints();
 app.MapRouteEndpoints();
 app.MapAuthEndpoints();

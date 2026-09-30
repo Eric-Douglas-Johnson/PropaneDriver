@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PropaneDriver.Server.Data;
+using PropaneDriver.Server.Services;
 
 namespace PropaneDriver.Tests;
 
@@ -49,6 +50,40 @@ public class AdminAccountSeederTests
             ["AdminSeed:LastName"] = lastName,
         };
 
+    // An account as it stands before the seeder runs.
+    private static void AddExistingUser(
+        IServiceProvider services,
+        string userName,
+        string password,
+        string firstName,
+        IEnumerable<string> roles,
+        DateTime? createdAt = null)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+
+        var user = new UserDbRecord
+        {
+            Id = Guid.NewGuid(),
+            UserName = userName,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            FirstName = firstName,
+            MiddleName = string.Empty,
+            LastName = "Existing",
+            Email = $"{userName}@test.local",
+            PhoneNumber = "555-9999",
+            CreatedAt = createdAt ?? DateTime.UtcNow.AddDays(-30),
+        };
+        db.Users.Add(user);
+        RoleService(db).AddRoles(user.Id, roles);
+        db.SaveChanges();
+    }
+
+    private static UserRoleService RoleService(PropaneDriverDbContext db) => new(db, new DriverHistoryService(db));
+
+    private static List<string> RolesOf(PropaneDriverDbContext db, UserDbRecord user) =>
+        RoleService(db).GetRolesAsync(user.Id).GetAwaiter().GetResult();
+
     [Fact]
     public void EnsureAdminSeeded_NoExistingRow_CreatesAdminWithHashedPassword()
     {
@@ -59,9 +94,9 @@ public class AdminAccountSeederTests
 
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-        var seeded = db.Drivers.Single(d => d.UserName == "admin");
+        var seeded = db.Users.Single(u => u.UserName == "admin");
 
-        Assert.Equal("admin", seeded.Role);
+        Assert.Equal(["admin"], RolesOf(db, seeded));
         Assert.NotEqual("Initial!Pw", seeded.PasswordHash); // hashed, not plaintext
         Assert.True(BCrypt.Net.BCrypt.Verify("Initial!Pw", seeded.PasswordHash));
         Assert.Equal("admin@test.local", seeded.Email);
@@ -77,106 +112,53 @@ public class AdminAccountSeederTests
         // overwrite a password the operator has since rotated.
         var dbName = $"seeder-preserve-pw-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig(password: "OriginalSeedPw"));
-
-        using (var scope = services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-            db.Drivers.Add(new DriverDbRecord
-            {
-                Id = Guid.NewGuid(),
-                UserName = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("rotated-by-operator"),
-                Role = "admin",
-                FirstName = "Existing",
-                MiddleName = string.Empty,
-                LastName = "Admin",
-                Email = "existing@test.local",
-                PhoneNumber = "555-9999",
-                CreatedAt = DateTime.UtcNow.AddDays(-30),
-            });
-            db.SaveChanges();
-        }
+        AddExistingUser(services, "admin", "rotated-by-operator", "Existing", ["admin"]);
 
         AdminAccountSeeder.EnsureAdminSeeded(services, NullLogger.Instance);
 
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-        var existing = verifyDb.Drivers.Single(d => d.UserName == "admin");
+        var existing = verifyDb.Users.Single(u => u.UserName == "admin");
 
         Assert.True(BCrypt.Net.BCrypt.Verify("rotated-by-operator", existing.PasswordHash));
         Assert.False(BCrypt.Net.BCrypt.Verify("OriginalSeedPw", existing.PasswordHash));
         Assert.Equal("Existing", existing.FirstName); // other fields preserved
+        Assert.Equal(1, verifyDb.Administrators.Count(a => a.UserId == existing.Id));
     }
 
     [Fact]
-    public void EnsureAdminSeeded_ExistingNonAdminWithMatchingUserName_PromotedToAdmin()
+    public void EnsureAdminSeeded_ExistingNonAdminWithMatchingUserName_GainsAdminAndKeepsOtherRoles()
     {
         var dbName = $"seeder-promote-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig());
-
-        using (var scope = services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-            db.Drivers.Add(new DriverDbRecord
-            {
-                Id = Guid.NewGuid(),
-                UserName = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("legacy-pw"),
-                Role = "driver", // wrong role — promotion target
-                FirstName = "Legacy",
-                MiddleName = string.Empty,
-                LastName = "User",
-                Email = "legacy@test.local",
-                PhoneNumber = "555-1111",
-                CreatedAt = DateTime.UtcNow.AddDays(-7),
-            });
-            db.SaveChanges();
-        }
+        AddExistingUser(services, "admin", "legacy-pw", "Legacy", ["driver"]);
 
         AdminAccountSeeder.EnsureAdminSeeded(services, NullLogger.Instance);
 
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-        var promoted = verifyDb.Drivers.Single(d => d.UserName == "admin");
+        var promoted = verifyDb.Users.Single(u => u.UserName == "admin");
 
-        Assert.Equal("admin", promoted.Role);
+        Assert.Equal(["driver", "admin"], RolesOf(verifyDb, promoted));
         // Password and other fields should remain untouched.
         Assert.True(BCrypt.Net.BCrypt.Verify("legacy-pw", promoted.PasswordHash));
         Assert.Equal("Legacy", promoted.FirstName);
     }
 
     [Fact]
-    public void EnsureAdminSeeded_TestDriverWithAdminRole_DemotedBackToDriver()
+    public void EnsureAdminSeeded_TestDriverWithElevatedRoles_ResetToDriverOnly()
     {
         var dbName = $"seeder-demote-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig());
-
-        using (var scope = services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-            db.Drivers.Add(new DriverDbRecord
-            {
-                Id = Guid.NewGuid(),
-                UserName = "test_driver",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("ignored"),
-                Role = "admin", // accidentally elevated
-                FirstName = "Test",
-                MiddleName = string.Empty,
-                LastName = "Driver",
-                Email = "test@test.local",
-                PhoneNumber = "555-2222",
-                CreatedAt = DateTime.UtcNow.AddDays(-1),
-            });
-            db.SaveChanges();
-        }
+        AddExistingUser(services, "test_driver", "ignored", "Test", ["supervisor", "admin"]);
 
         AdminAccountSeeder.EnsureAdminSeeded(services, NullLogger.Instance);
 
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-        var resetDriver = verifyDb.Drivers.Single(d => d.UserName == "test_driver");
+        var resetUser = verifyDb.Users.Single(u => u.UserName == "test_driver");
 
-        Assert.Equal("driver", resetDriver.Role);
+        Assert.Equal(["driver"], RolesOf(verifyDb, resetUser));
     }
 
     [Fact]
@@ -184,34 +166,16 @@ public class AdminAccountSeederTests
     {
         var dbName = $"seeder-noop-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig());
-
         var originalCreatedAt = DateTime.UtcNow.AddDays(-2);
-        using (var scope = services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-            db.Drivers.Add(new DriverDbRecord
-            {
-                Id = Guid.NewGuid(),
-                UserName = "test_driver",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("ignored"),
-                Role = "driver",
-                FirstName = "Test",
-                MiddleName = string.Empty,
-                LastName = "Driver",
-                Email = "test@test.local",
-                PhoneNumber = "555-2222",
-                CreatedAt = originalCreatedAt,
-            });
-            db.SaveChanges();
-        }
+        AddExistingUser(services, "test_driver", "ignored", "Test", ["driver"], originalCreatedAt);
 
         AdminAccountSeeder.EnsureAdminSeeded(services, NullLogger.Instance);
 
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-        var unchanged = verifyDb.Drivers.Single(d => d.UserName == "test_driver");
+        var unchanged = verifyDb.Users.Single(u => u.UserName == "test_driver");
 
-        Assert.Equal("driver", unchanged.Role);
+        Assert.Equal(["driver"], RolesOf(verifyDb, unchanged));
         Assert.Equal(originalCreatedAt, unchanged.CreatedAt);
     }
 
@@ -223,32 +187,15 @@ public class AdminAccountSeederTests
         // test_driver demotion must still run.
         var dbName = $"seeder-skip-create-{Guid.NewGuid()}";
         var services = BuildServicesWithSharedDb(dbName, AdminSeedConfig(password: ""));
-
-        using (var scope = services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
-            db.Drivers.Add(new DriverDbRecord
-            {
-                Id = Guid.NewGuid(),
-                UserName = "test_driver",
-                PasswordHash = "irrelevant",
-                Role = "admin",
-                FirstName = "Test",
-                LastName = "Driver",
-                Email = "test@test.local",
-                PhoneNumber = "555",
-                CreatedAt = DateTime.UtcNow,
-            });
-            db.SaveChanges();
-        }
+        AddExistingUser(services, "test_driver", "irrelevant", "Test", ["admin"]);
 
         AdminAccountSeeder.EnsureAdminSeeded(services, NullLogger.Instance);
 
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
 
-        Assert.False(verifyDb.Drivers.Any(d => d.UserName == "admin"));
-        Assert.Equal("driver", verifyDb.Drivers.Single(d => d.UserName == "test_driver").Role);
+        Assert.False(verifyDb.Users.Any(u => u.UserName == "admin"));
+        Assert.Equal(["driver"], RolesOf(verifyDb, verifyDb.Users.Single(u => u.UserName == "test_driver")));
     }
 
     [Fact]
@@ -263,7 +210,8 @@ public class AdminAccountSeederTests
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
 
-        Assert.Equal(1, verifyDb.Drivers.Count(d => d.UserName == "admin"));
+        Assert.Equal(1, verifyDb.Users.Count(u => u.UserName == "admin"));
+        Assert.Equal(1, verifyDb.Administrators.Count());
     }
 
     [Fact]
@@ -279,8 +227,8 @@ public class AdminAccountSeederTests
         using var verifyScope = services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
 
-        Assert.False(verifyDb.Drivers.Any(d => d.UserName == "admin"));
-        var customAdmin = verifyDb.Drivers.Single(d => d.UserName == "ops-bootstrap");
-        Assert.Equal("admin", customAdmin.Role);
+        Assert.False(verifyDb.Users.Any(u => u.UserName == "admin"));
+        var customAdmin = verifyDb.Users.Single(u => u.UserName == "ops-bootstrap");
+        Assert.Equal(["admin"], RolesOf(verifyDb, customAdmin));
     }
 }

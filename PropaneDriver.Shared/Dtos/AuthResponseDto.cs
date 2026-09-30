@@ -10,9 +10,8 @@ namespace PropaneDriver.Shared.Dtos
         // Empty when IsAuthenticated is false.
         public string Token { get; set; } = string.Empty;
 
-        // Full driver profile + role string (see UserRoles). Avoids the
-        // historical second GET /driver/{id} round-trip on login. Null when
-        // authentication failed.
-        public DriverDto? Driver { get; set; }
+        // The signed-in account's profile and roles, so the client can build
+        // its claims without a second round-trip. Null when authentication failed.
+        public UserDto? User { get; set; }
     }
 }

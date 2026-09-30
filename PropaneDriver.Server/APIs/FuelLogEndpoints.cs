@@ -21,7 +21,7 @@ namespace PropaneDriver.Server.Endpoints
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
-                var driverId = user.GetDriverId();
+                var driverId = user.GetUserId();
                 if (driverId is null) return Results.Forbid();
 
                 try
@@ -60,7 +60,7 @@ namespace PropaneDriver.Server.Endpoints
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
             {
-                var driverId = user.GetDriverId();
+                var driverId = user.GetUserId();
                 if (driverId is null) return Results.Forbid();
 
                 try

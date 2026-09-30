@@ -1,6 +1,7 @@
 namespace PropaneDriver.Shared.Constants
 {
-    // Role names stored in Drivers.Role and issued as the JWT role claim.
+    // Role names issued as JWT role claims, one per role table (Drivers,
+    // Supervisors, Administrators) the user has a row in.
     public static class UserRoles
     {
         public const string Driver = "driver";

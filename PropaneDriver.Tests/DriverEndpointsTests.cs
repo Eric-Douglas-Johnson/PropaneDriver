@@ -1,21 +1,20 @@
 using Microsoft.EntityFrameworkCore;
 using PropaneDriver.Server.Data;
-using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Tests;
 
-// Covers the two endpoints in DriverEndpoints.cs:
-//   GET /api/drivers  — ordered by LastName then FirstName, projected to DTO
-//   GET /driver/{id}  — single driver lookup by Id
+// Covers the queries behind the two endpoints in DriverEndpoints.cs:
+//   GET /api/drivers  — drivers only, ordered by LastName then FirstName
+//   GET /driver/{id}  — single driver lookup by user Id
 public class DriverEndpointsTests
 {
-    private static DriverDbRecord MakeDriver(string first, string last, string userName)
-        => new DriverDbRecord
+    private static UserDbRecord AddUser(PropaneDriverDbContext db, string first, string last, string userName, bool isDriver = true)
+    {
+        var user = new UserDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = userName,
             PasswordHash = "hash",
-            Role = "driver",
             FirstName = first,
             MiddleName = "",
             LastName = last,
@@ -23,38 +22,43 @@ public class DriverEndpointsTests
             PhoneNumber = "555-0100",
             CreatedAt = DateTime.UtcNow
         };
+        db.Users.Add(user);
+        if (isDriver)
+            db.Drivers.Add(new DriverDbRecord { UserId = user.Id });
+        return user;
+    }
+
+    // The join the endpoints run: a driver's profile lives on its Users row.
+    private static IQueryable<UserDbRecord> DriverUsers(PropaneDriverDbContext db) =>
+        db.Drivers.AsNoTracking().Join(db.Users, d => d.UserId, u => u.Id, (d, u) => u);
 
     [Fact]
     public async Task ListDrivers_OrdersByLastNameThenFirstName()
     {
         using var db = TestDb.Create();
-        db.Drivers.AddRange(
-            MakeDriver("Bob", "Zephyr", "bob-z"),
-            MakeDriver("Alice", "Anderson", "alice-a"),
-            MakeDriver("Carl", "Anderson", "carl-a")
-        );
+        AddUser(db, "Bob", "Zephyr", "bob-z");
+        AddUser(db, "Alice", "Anderson", "alice-a");
+        AddUser(db, "Carl", "Anderson", "carl-a");
         await db.SaveChangesAsync();
 
-        var drivers = await db.Drivers
-            .AsNoTracking()
-            .OrderBy(d => d.LastName).ThenBy(d => d.FirstName)
-            .Select(d => new DriverDto
-            {
-                Id = d.Id.ToString(),
-                UserName = d.UserName,
-                FirstName = d.FirstName,
-                MiddleName = d.MiddleName,
-                LastName = d.LastName,
-                Email = d.Email,
-                PhoneNumber = d.PhoneNumber,
-                Role = d.Role
-            })
+        var drivers = await DriverUsers(db)
+            .OrderBy(u => u.LastName).ThenBy(u => u.FirstName)
             .ToListAsync();
 
-        Assert.Equal(3, drivers.Count);
-        Assert.Equal("alice-a", drivers[0].UserName); // Anderson, Alice
-        Assert.Equal("carl-a", drivers[1].UserName);  // Anderson, Carl
-        Assert.Equal("bob-z", drivers[2].UserName);   // Zephyr, Bob
+        Assert.Equal(["alice-a", "carl-a", "bob-z"], drivers.Select(d => d.UserName));
+    }
+
+    [Fact]
+    public async Task ListDrivers_ExcludesUsersWithoutTheDriverRole()
+    {
+        using var db = TestDb.Create();
+        AddUser(db, "Dana", "Driver", "dana-driver");
+        AddUser(db, "Sam", "Supervisor", "sam-supervisor", isDriver: false);
+        await db.SaveChangesAsync();
+
+        var drivers = await DriverUsers(db).ToListAsync();
+
+        Assert.Equal(["dana-driver"], drivers.Select(d => d.UserName));
     }
 
     [Fact]
@@ -62,48 +66,39 @@ public class DriverEndpointsTests
     {
         using var db = TestDb.Create();
 
-        var drivers = await db.Drivers.AsNoTracking().ToListAsync();
-        Assert.Empty(drivers);
+        Assert.Empty(await DriverUsers(db).ToListAsync());
     }
 
     [Fact]
-    public async Task GetDriverById_ExistingId_ProjectsCompleteDto()
+    public async Task GetDriverById_ExistingDriver_ReturnsProfile()
     {
         using var db = TestDb.Create();
-        var driver = MakeDriver("Grace", "Hopper", "grace");
-        driver.Role = "admin";
-        db.Drivers.Add(driver);
+        var driver = AddUser(db, "Grace", "Hopper", "grace");
         await db.SaveChangesAsync();
 
-        var found = await db.Drivers.FindAsync(driver.Id);
+        var found = await DriverUsers(db).FirstOrDefaultAsync(u => u.Id == driver.Id);
+
         Assert.NotNull(found);
-
-        // Projection identical to the endpoint body.
-        var dto = new DriverDto
-        {
-            Id = found!.Id.ToString(),
-            UserName = found.UserName,
-            Role = found.Role,
-            FirstName = found.FirstName,
-            MiddleName = found.MiddleName,
-            LastName = found.LastName,
-            Email = found.Email,
-            PhoneNumber = found.PhoneNumber
-        };
-
-        Assert.Equal(driver.Id.ToString(), dto.Id);
-        Assert.Equal("grace", dto.UserName);
-        Assert.Equal("admin", dto.Role);
-        Assert.Equal("Grace", dto.FirstName);
-        Assert.Equal("Hopper", dto.LastName);
+        Assert.Equal("grace", found!.UserName);
+        Assert.Equal("Grace", found.FirstName);
+        Assert.Equal("Hopper", found.LastName);
     }
 
     [Fact]
-    public async Task GetDriverById_MissingId_FindReturnsNull()
+    public async Task GetDriverById_UserWithoutDriverRole_ReturnsNull()
+    {
+        using var db = TestDb.Create();
+        var supervisor = AddUser(db, "Sam", "Supervisor", "sam", isDriver: false);
+        await db.SaveChangesAsync();
+
+        Assert.Null(await DriverUsers(db).FirstOrDefaultAsync(u => u.Id == supervisor.Id));
+    }
+
+    [Fact]
+    public async Task GetDriverById_MissingId_ReturnsNull()
     {
         using var db = TestDb.Create();
 
-        var found = await db.Drivers.FindAsync(Guid.NewGuid());
-        Assert.Null(found);
+        Assert.Null(await DriverUsers(db).FirstOrDefaultAsync(u => u.Id == Guid.NewGuid()));
     }
 }

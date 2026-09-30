@@ -152,6 +152,9 @@ namespace PropaneDriver.Server.Endpoints
                 if (!user.CanAccessDriverData(driverId))
                     return Results.Forbid();
 
+                if (!await db.Drivers.AnyAsync(d => d.UserId == driverId))
+                    return Results.BadRequest(new { Message = "Routes can only be assigned to a driver." });
+
                 var invalidDelivery = dto.Deliveries.FirstOrDefault(d =>
                     string.IsNullOrWhiteSpace(d.Street) ||
                     string.IsNullOrWhiteSpace(d.City) ||

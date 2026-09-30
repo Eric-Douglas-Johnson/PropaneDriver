@@ -10,23 +10,23 @@ namespace PropaneDriver.Tests;
 // token invalidation, and SHA-256 token hashing for password reset.
 public class AuthEndpointsTests
 {
-    private static DriverDbRecord SeedDriver(PropaneDriverDbContext db, string userName, string password, string email = "driver@example.com")
+    private static UserDbRecord SeedUser(PropaneDriverDbContext db, string userName, string password, string email = "driver@example.com")
     {
-        var driver = new DriverDbRecord
+        var user = new UserDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = userName,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = "driver",
             FirstName = "Test",
             LastName = "Driver",
             Email = email,
             PhoneNumber = "555-0100",
             CreatedAt = DateTime.UtcNow
         };
-        db.Drivers.Add(driver);
+        db.Users.Add(user);
+        db.Drivers.Add(new DriverDbRecord { UserId = user.Id });
         db.SaveChanges();
-        return driver;
+        return user;
     }
 
     private static string HashToken(string rawToken)
@@ -36,9 +36,9 @@ public class AuthEndpointsTests
     public async Task Authenticate_ValidCredentials_Verifies()
     {
         using var db = TestDb.Create();
-        SeedDriver(db, "driver1", "hunter2");
+        SeedUser(db, "driver1", "hunter2");
 
-        var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == "driver1");
+        var driver = await db.Users.FirstOrDefaultAsync(d => d.UserName == "driver1");
         Assert.NotNull(driver);
         Assert.True(BCrypt.Net.BCrypt.Verify("hunter2", driver!.PasswordHash));
     }
@@ -47,9 +47,9 @@ public class AuthEndpointsTests
     public async Task Authenticate_WrongPassword_FailsVerify()
     {
         using var db = TestDb.Create();
-        SeedDriver(db, "driver1", "hunter2");
+        SeedUser(db, "driver1", "hunter2");
 
-        var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == "driver1");
+        var driver = await db.Users.FirstOrDefaultAsync(d => d.UserName == "driver1");
         Assert.NotNull(driver);
         Assert.False(BCrypt.Net.BCrypt.Verify("wrong-password", driver!.PasswordHash));
     }
@@ -59,38 +59,40 @@ public class AuthEndpointsTests
     {
         using var db = TestDb.Create();
 
-        var driver = await db.Drivers.FirstOrDefaultAsync(d => d.UserName == "nobody");
+        var driver = await db.Users.FirstOrDefaultAsync(d => d.UserName == "nobody");
         Assert.Null(driver);
     }
 
     [Fact]
-    public async Task Register_NewUserName_InsertsDriver()
+    public async Task Register_NewUserName_InsertsUserWithDriverRole()
     {
         using var db = TestDb.Create();
 
-        Assert.False(await db.Drivers.AnyAsync(d => d.UserName == "new-driver"));
+        Assert.False(await db.Users.AnyAsync(u => u.UserName == "new-driver"));
 
-        db.Drivers.Add(new DriverDbRecord
+        var newUser = new UserDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = "new-driver",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("pw123456"),
-            Role = "driver",
             CreatedAt = DateTime.UtcNow
-        });
+        };
+        db.Users.Add(newUser);
+        db.Drivers.Add(new DriverDbRecord { UserId = newUser.Id });
         await db.SaveChangesAsync();
 
-        Assert.True(await db.Drivers.AnyAsync(d => d.UserName == "new-driver"));
+        Assert.True(await db.Users.AnyAsync(u => u.UserName == "new-driver"));
+        Assert.True(await db.Drivers.AnyAsync(d => d.UserId == newUser.Id));
     }
 
     [Fact]
     public async Task Register_DuplicateUserName_DetectedByAnyAsync()
     {
         using var db = TestDb.Create();
-        SeedDriver(db, "taken", "pw");
+        SeedUser(db, "taken", "pw");
 
-        // Endpoint guards with: var exists = await db.Drivers.AnyAsync(...);
-        var exists = await db.Drivers.AnyAsync(d => d.UserName == "taken");
+        // Endpoint guards with: var exists = await db.Users.AnyAsync(...);
+        var exists = await db.Users.AnyAsync(d => d.UserName == "taken");
         Assert.True(exists);
     }
 
@@ -98,12 +100,12 @@ public class AuthEndpointsTests
     public async Task ForgotPassword_CreatesHashedTokenRow_AndInvalidatesExisting()
     {
         using var db = TestDb.Create();
-        var driver = SeedDriver(db, "driver1", "pw", email: "reset@example.com");
+        var driver = SeedUser(db, "driver1", "pw", email: "reset@example.com");
 
         // Seed an existing unused token — ForgotPassword invalidates these.
         var existing = new PasswordResetTokenDbRecord
         {
-            DriverId = driver.Id,
+            UserId = driver.Id,
             TokenHash = HashToken("stale-token"),
             CreatedAt = DateTime.UtcNow.AddMinutes(-30),
             ExpiresAt = DateTime.UtcNow.AddMinutes(30)
@@ -113,7 +115,7 @@ public class AuthEndpointsTests
 
         // Mirror the endpoint's body.
         var stale = await db.PasswordResetTokens
-            .Where(t => t.DriverId == driver.Id && t.UsedAt == null)
+            .Where(t => t.UserId == driver.Id && t.UsedAt == null)
             .ToListAsync();
         foreach (var t in stale) t.UsedAt = DateTime.UtcNow;
 
@@ -123,7 +125,7 @@ public class AuthEndpointsTests
 
         db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
-            DriverId = driver.Id,
+            UserId = driver.Id,
             TokenHash = tokenHash,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddHours(1)
@@ -146,11 +148,11 @@ public class AuthEndpointsTests
     public async Task ForgotPassword_UnknownEmail_NoTokenCreated()
     {
         using var db = TestDb.Create();
-        SeedDriver(db, "driver1", "pw", email: "real@example.com");
+        SeedUser(db, "driver1", "pw", email: "real@example.com");
 
         // Endpoint early-returns when the email doesn't match; so no tokens
         // should appear in the table afterwards.
-        var driver = await db.Drivers.FirstOrDefaultAsync(d => d.Email == "ghost@example.com");
+        var driver = await db.Users.FirstOrDefaultAsync(d => d.Email == "ghost@example.com");
         Assert.Null(driver);
         Assert.Equal(0, await db.PasswordResetTokens.CountAsync());
     }
@@ -159,12 +161,12 @@ public class AuthEndpointsTests
     public async Task ResetPassword_ValidToken_UpdatesHashAndMarksUsed()
     {
         using var db = TestDb.Create();
-        var driver = SeedDriver(db, "driver1", "old-pw");
+        var driver = SeedUser(db, "driver1", "old-pw");
         var rawToken = "plain-token-abc";
         var tokenHash = HashToken(rawToken);
         var resetToken = new PasswordResetTokenDbRecord
         {
-            DriverId = driver.Id,
+            UserId = driver.Id,
             TokenHash = tokenHash,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddHours(1)
@@ -183,7 +185,7 @@ public class AuthEndpointsTests
         found.UsedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var updated = await db.Drivers.FirstAsync(d => d.Id == driver.Id);
+        var updated = await db.Users.FirstAsync(d => d.Id == driver.Id);
         Assert.True(BCrypt.Net.BCrypt.Verify("new-password", updated.PasswordHash));
         Assert.False(BCrypt.Net.BCrypt.Verify("old-pw", updated.PasswordHash));
         Assert.NotNull((await db.PasswordResetTokens.FirstAsync(t => t.Id == resetToken.Id)).UsedAt);
@@ -193,11 +195,11 @@ public class AuthEndpointsTests
     public async Task ResetPassword_ExpiredToken_RejectedByGuard()
     {
         using var db = TestDb.Create();
-        var driver = SeedDriver(db, "driver1", "pw");
+        var driver = SeedUser(db, "driver1", "pw");
         var rawToken = "expired-token";
         db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
-            DriverId = driver.Id,
+            UserId = driver.Id,
             TokenHash = HashToken(rawToken),
             CreatedAt = DateTime.UtcNow.AddHours(-2),
             ExpiresAt = DateTime.UtcNow.AddMinutes(-5) // already expired
@@ -214,11 +216,11 @@ public class AuthEndpointsTests
     public async Task ResetPassword_UsedToken_RejectedByGuard()
     {
         using var db = TestDb.Create();
-        var driver = SeedDriver(db, "driver1", "pw");
+        var driver = SeedUser(db, "driver1", "pw");
         var rawToken = "consumed-token";
         db.PasswordResetTokens.Add(new PasswordResetTokenDbRecord
         {
-            DriverId = driver.Id,
+            UserId = driver.Id,
             TokenHash = HashToken(rawToken),
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddHours(1),

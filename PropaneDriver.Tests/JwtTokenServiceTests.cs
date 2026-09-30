@@ -34,13 +34,12 @@ public class JwtTokenServiceTests
         return new ConfigurationBuilder().AddInMemoryCollection(pairs).Build();
     }
 
-    private static DriverDbRecord MakeDriver(string userName = "unit-driver", string role = "driver")
+    private static UserDbRecord MakeUser(string userName = "unit-driver")
         => new()
         {
             Id = Guid.NewGuid(),
             UserName = userName,
             PasswordHash = "irrelevant-for-jwt-tests",
-            Role = role,
             FirstName = "Unit",
             LastName = "Tester",
             Email = $"{userName}@test.local",
@@ -71,56 +70,50 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
-    public void CreateToken_EmbedsSubAndNameIdentifierAsDriverId()
+    public void CreateToken_EmbedsSubAndNameIdentifierAsUserId()
     {
-        var driver = MakeDriver(role: "driver");
+        var user = MakeUser();
         var jwtTokenService = new JwtTokenService(BuildConfig());
 
-        var tokenString = jwtTokenService.CreateTokenForDriver(driver);
+        var tokenString = jwtTokenService.CreateTokenForUser(user, ["driver"]);
         var decoded = DecodeAndValidate(tokenString);
 
-        Assert.Equal(driver.Id.ToString(), decoded.Subject);
-        Assert.Equal(driver.Id.ToString(),
+        Assert.Equal(user.Id.ToString(), decoded.Subject);
+        Assert.Equal(user.Id.ToString(),
             decoded.Claims.Single(c => c.Type == ClaimTypes.NameIdentifier).Value);
     }
 
     [Fact]
     public void CreateToken_EmbedsUserNameClaim()
     {
-        var driver = MakeDriver(userName: "claim-check-user");
+        var user = MakeUser(userName: "claim-check-user");
         var jwtTokenService = new JwtTokenService(BuildConfig());
 
-        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(driver));
+        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForUser(user, ["driver"]));
 
         Assert.Equal("claim-check-user",
             decoded.Claims.Single(c => c.Type == ClaimTypes.Name).Value);
     }
 
     [Fact]
-    public void CreateToken_EmbedsRoleClaimMatchingDbRecord()
+    public void CreateToken_EmbedsOneRoleClaimPerRole()
     {
         var jwtTokenService = new JwtTokenService(BuildConfig());
 
-        var driverToken = jwtTokenService.CreateTokenForDriver(MakeDriver(role: "driver"));
-        var adminToken = jwtTokenService.CreateTokenForDriver(MakeDriver(role: "admin"));
+        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), ["driver", "supervisor"]));
 
-        Assert.Equal("driver",
-            DecodeAndValidate(driverToken).Claims.Single(c => c.Type == ClaimTypes.Role).Value);
-        Assert.Equal("admin",
-            DecodeAndValidate(adminToken).Claims.Single(c => c.Type == ClaimTypes.Role).Value);
+        Assert.Equal(["driver", "supervisor"],
+            decoded.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value));
     }
 
     [Fact]
-    public void CreateToken_EmptyOrWhitespaceRole_DefaultsToDriver()
+    public void CreateToken_NoRoles_EmbedsNoRoleClaim()
     {
-        var driver = MakeDriver();
-        driver.Role = "   ";
         var jwtTokenService = new JwtTokenService(BuildConfig());
 
-        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(driver));
+        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), []));
 
-        Assert.Equal("driver",
-            decoded.Claims.Single(c => c.Type == ClaimTypes.Role).Value);
+        Assert.DoesNotContain(decoded.Claims, c => c.Type == ClaimTypes.Role);
     }
 
     [Fact]
@@ -130,7 +123,7 @@ public class JwtTokenServiceTests
             issuer: "CustomIssuer", audience: "CustomAudience"));
 
         var decoded = DecodeAndValidate(
-            jwtTokenService.CreateTokenForDriver(MakeDriver()),
+            jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]),
             expectedIssuer: "CustomIssuer",
             expectedAudience: "CustomAudience");
 
@@ -146,7 +139,7 @@ public class JwtTokenServiceTests
         var jwtTokenService = new JwtTokenService(BuildConfig(issuer: null, audience: null));
 
         var decoded = DecodeAndValidate(
-            jwtTokenService.CreateTokenForDriver(MakeDriver()),
+            jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]),
             expectedIssuer: "PropaneDriver",
             expectedAudience: "PropaneDriverClient");
 
@@ -160,7 +153,7 @@ public class JwtTokenServiceTests
         var jwtTokenService = new JwtTokenService(BuildConfig(expirationHours: "3"));
         var beforeUtc = DateTime.UtcNow;
 
-        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(MakeDriver()));
+        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]));
 
         // Allow 1 minute slack for slow runners. Expected validity ~3h.
         var expectedExpiry = beforeUtc.AddHours(3);
@@ -173,7 +166,7 @@ public class JwtTokenServiceTests
         var jwtTokenService = new JwtTokenService(BuildConfig(expirationHours: null));
         var beforeUtc = DateTime.UtcNow;
 
-        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(MakeDriver()));
+        var decoded = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]));
 
         var expectedExpiry = beforeUtc.AddHours(12);
         Assert.InRange(decoded.ValidTo, expectedExpiry.AddMinutes(-1), expectedExpiry.AddMinutes(1));
@@ -183,7 +176,7 @@ public class JwtTokenServiceTests
     public void CreateToken_NotValidatableWithDifferentSigningKey()
     {
         var jwtTokenService = new JwtTokenService(BuildConfig());
-        var tokenString = jwtTokenService.CreateTokenForDriver(MakeDriver());
+        var tokenString = jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]);
 
         // Swapping the verifier's key should reject the signature.
         Assert.Throws<SecurityTokenSignatureKeyNotFoundException>(() =>
@@ -197,7 +190,7 @@ public class JwtTokenServiceTests
     public void CreateToken_NotValidatableWithDifferentIssuer()
     {
         var jwtTokenService = new JwtTokenService(BuildConfig());
-        var tokenString = jwtTokenService.CreateTokenForDriver(MakeDriver());
+        var tokenString = jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]);
 
         Assert.Throws<SecurityTokenInvalidIssuerException>(() =>
             DecodeAndValidate(tokenString, expectedIssuer: "SomeOtherIssuer"));
@@ -209,7 +202,7 @@ public class JwtTokenServiceTests
         var jwtTokenService = new JwtTokenService(BuildConfig(key: null));
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            jwtTokenService.CreateTokenForDriver(MakeDriver()));
+            jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]));
         Assert.Contains("Jwt:Key", ex.Message);
     }
 
@@ -220,8 +213,8 @@ public class JwtTokenServiceTests
         // means future revocation/replay-prevention work can rely on it.
         var jwtTokenService = new JwtTokenService(BuildConfig());
 
-        var first = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(MakeDriver()));
-        var second = DecodeAndValidate(jwtTokenService.CreateTokenForDriver(MakeDriver()));
+        var first = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]));
+        var second = DecodeAndValidate(jwtTokenService.CreateTokenForUser(MakeUser(), ["driver"]));
 
         var jtiFirst = first.Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
         var jtiSecond = second.Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;

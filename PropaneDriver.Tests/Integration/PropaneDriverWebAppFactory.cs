@@ -15,14 +15,14 @@ namespace PropaneDriver.Tests.Integration;
 
 // In-process WebApplicationFactory for the real Program. Swaps the Azure
 // SQL DbContext for InMemory, drops in deterministic Jwt config, and
-// disables admin seeding so each fixture starts with an empty Drivers
+// disables admin seeding so each fixture starts with an empty Users
 // table. The DocumentIntelligence/Email services are AddSingleton and
 // constructed lazily, so they aren't built unless a test hits an endpoint
 // that needs them — auth-gated calls reject before the handler runs.
 public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
 {
     // Each factory instance gets its own InMemory database so tests in
-    // different fixtures can't see each other's drivers.
+    // different fixtures can't see each other's users.
     public string DatabaseName { get; } = $"PropaneDriverTestDb_{Guid.NewGuid()}";
 
     public const string JwtKey = "integration-test-signing-key-min-32-chars-long-abcdef";
@@ -136,19 +136,19 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         });
     }
 
-    // Insert a driver row directly through the same InMemory context the
-    // app sees, so tokens issued for it satisfy real DB lookups too.
-    public DriverDbRecord SeedDriver(string userName, string role, string password = "test-password")
+    // Insert a user and its role row directly through the same InMemory context
+    // the app sees, so tokens issued for it satisfy real DB lookups too.
+    // A null role seeds an account with no role at all.
+    public UserDbRecord SeedUser(string userName, string? role, string password = "test-password")
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
 
-        var driver = new DriverDbRecord
+        var user = new UserDbRecord
         {
             Id = Guid.NewGuid(),
             UserName = userName,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = role,
             FirstName = "Test",
             MiddleName = string.Empty,
             LastName = userName,
@@ -157,9 +157,11 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
             CreatedAt = DateTime.UtcNow,
         };
 
-        db.Drivers.Add(driver);
+        db.Users.Add(user);
+        if (role is not null)
+            scope.ServiceProvider.GetRequiredService<UserRoleService>().AddRoles(user.Id, [role]);
         db.SaveChanges();
-        return driver;
+        return user;
     }
 
     // Seed a route owned by the given driver. Used by ownership-enforcement
@@ -254,11 +256,13 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
     }
 
     // Issues a JWT signed with the same key the test app validates against.
-    public string IssueToken(DriverDbRecord driver)
+    // Carries the roles currently stored for the user, as sign-in would.
+    public string IssueToken(UserDbRecord user)
     {
         using var scope = Services.CreateScope();
         var jwtTokenService = scope.ServiceProvider.GetRequiredService<JwtTokenService>();
-        return jwtTokenService.CreateTokenForDriver(driver);
+        var roles = scope.ServiceProvider.GetRequiredService<UserRoleService>().GetRolesAsync(user.Id).GetAwaiter().GetResult();
+        return jwtTokenService.CreateTokenForUser(user, roles);
     }
 
     // CreateClient default is http://localhost, which the
@@ -271,11 +275,11 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
             AllowAutoRedirect = false,
         });
 
-    public HttpClient CreateClientForDriver(DriverDbRecord driver)
+    public HttpClient CreateClientForUser(UserDbRecord user)
     {
         var client = CreateAnonymousClient();
         client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", IssueToken(driver));
+            new AuthenticationHeaderValue("Bearer", IssueToken(user));
         return client;
     }
 }

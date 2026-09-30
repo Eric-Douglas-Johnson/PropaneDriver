@@ -10,10 +10,10 @@ namespace PropaneDriver.Server.Authorization
     // re-implementing it.
     public static class ClaimsPrincipalExtensions
     {
-        // The driver's row id, parsed from the JWT NameIdentifier claim.
-        // Returns null if the claim is missing or unparseable — callers
-        // should treat that as "no signed-in driver" and reject.
-        public static Guid? GetDriverId(this ClaimsPrincipal user)
+        // The signed-in user's id, parsed from the JWT NameIdentifier claim. For a
+        // driver it is also their DriverId. Returns null if the claim is missing
+        // or unparseable — callers should treat that as "not signed in" and reject.
+        public static Guid? GetUserId(this ClaimsPrincipal user)
         {
             var raw = user.FindFirstValue(ClaimTypes.NameIdentifier);
             return Guid.TryParse(raw, out var id) ? id : null;
@@ -30,7 +30,7 @@ namespace PropaneDriver.Server.Authorization
         public static bool CanAccessDriverData(this ClaimsPrincipal user, Guid targetDriverId)
         {
             if (user.IsSupervisorOrAdmin()) return true;
-            var callerId = user.GetDriverId();
+            var callerId = user.GetUserId();
             return callerId.HasValue && callerId.Value == targetDriverId;
         }
     }

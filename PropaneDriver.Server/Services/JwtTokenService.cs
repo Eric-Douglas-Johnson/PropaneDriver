@@ -6,7 +6,7 @@ using PropaneDriver.Server.Data;
 
 namespace PropaneDriver.Server.Services
 {
-    // Issues short-lived JWTs for authenticated drivers. The signing key,
+    // Issues short-lived JWTs for authenticated users. The signing key,
     // issuer, audience, and lifetime all come from the "Jwt" config block so
     // a deployment can rotate the secret without a code change.
     public class JwtTokenService
@@ -18,7 +18,8 @@ namespace PropaneDriver.Server.Services
             _configuration = configuration;
         }
 
-        public string CreateTokenForDriver(DriverDbRecord driver)
+        // One role claim per role the user holds.
+        public string CreateTokenForUser(UserDbRecord user, IEnumerable<string> roles)
         {
             var jwtSection = _configuration.GetSection("Jwt");
             var signingKey = jwtSection["Key"]
@@ -31,12 +32,12 @@ namespace PropaneDriver.Server.Services
 
             var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.Sub, driver.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.NameIdentifier, driver.Id.ToString()),
-                new Claim(ClaimTypes.Name, driver.UserName),
-                new Claim(ClaimTypes.Role, string.IsNullOrWhiteSpace(driver.Role) ? "driver" : driver.Role),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.UserName),
             };
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
             var keyBytes = Encoding.UTF8.GetBytes(signingKey);
             var credentials = new SigningCredentials(

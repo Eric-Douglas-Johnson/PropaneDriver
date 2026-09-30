@@ -1,15 +1,15 @@
 namespace PropaneDriver.Shared.Dtos
 {
-    // Request body for the admin-only PUT api/drivers/{id}. A blank NewPassword keeps the current one.
-    public class DriverUpdateDto
+    // Request body for the admin-only POST api/users. Roles must be a non-empty subset of UserRoles.All.
+    public class CreateUserDto
     {
         public string UserName { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
         public string FirstName { get; set; } = string.Empty;
         public string MiddleName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
-        public string Role { get; set; } = string.Empty;
-        public string NewPassword { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = [];
     }
 }

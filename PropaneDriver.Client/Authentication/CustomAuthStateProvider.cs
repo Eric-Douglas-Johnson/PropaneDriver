@@ -39,7 +39,9 @@ namespace PropaneDriver.Client.Authentication
             // back to anonymous so the route guard sends the driver to login,
             // instead of rendering data pages whose every request silently
             // 401s. (That desync is what forced a manual log out / log back in.)
-            if (user is null || string.IsNullOrWhiteSpace(bearerToken))
+            // A profile cached before roles became a list has none, so it
+            // also falls back to anonymous and prompts a fresh sign-in.
+            if (user is null || user.Roles is not { Count: > 0 } || string.IsNullOrWhiteSpace(bearerToken))
             {
                 return EmptyAuthState;
             }
@@ -59,7 +61,7 @@ namespace PropaneDriver.Client.Authentication
                 var requestResultStr = await SendAuthRequest(creds);
                 var authResponseDto = Deserialize<AuthResponseDto>(requestResultStr);
 
-                if (!authResponseDto.IsAuthenticated || authResponseDto.Driver is null)
+                if (!authResponseDto.IsAuthenticated || authResponseDto.User is null)
                 {
                     return new LoginStatus
                     {
@@ -71,15 +73,15 @@ namespace PropaneDriver.Client.Authentication
                 }
 
                 // Persist both the JWT (used by BearerTokenHandler on every
-                // subsequent request) and the driver profile (used to rebuild
+                // subsequent request) and the user profile (used to rebuild
                 // claims on a page refresh without an extra round-trip).
                 await _browserStorageService.SaveToStorageAsync(
                     BearerTokenHandler.TokenStorageKey, authResponseDto.Token);
-                await _browserStorageService.SaveToStorageAsync(UserStorageKey, authResponseDto.Driver);
+                await _browserStorageService.SaveToStorageAsync(UserStorageKey, authResponseDto.User);
 
-                CurrentUser = authResponseDto.Driver;
+                CurrentUser = authResponseDto.User;
 
-                var identity = new ClaimsIdentity(BuildClaims(authResponseDto.Driver), _authType);
+                var identity = new ClaimsIdentity(BuildClaims(authResponseDto.User), _authType);
                 var principal = new ClaimsPrincipal(identity);
                 var authState = new AuthenticationState(principal);
 
@@ -142,14 +144,15 @@ namespace PropaneDriver.Client.Authentication
             CurrentUser = new UserDto();
         }
 
-        private static List<Claim> BuildClaims(UserDto user) => new()
-        {
+        // One role claim per role, matching the server-issued JWT.
+        private static List<Claim> BuildClaims(UserDto user) =>
+        [
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Name, user.UserName),
             new Claim(ClaimTypes.GivenName, user.FirstName),
             new Claim(ClaimTypes.Surname, user.LastName),
-            new Claim(ClaimTypes.Role, string.IsNullOrWhiteSpace(user.Role) ? "driver" : user.Role)
-        };
+            .. user.Roles.Select(role => new Claim(ClaimTypes.Role, role))
+        ];
 
         private async Task<string> SendAuthRequest(CredsDto creds)
         {

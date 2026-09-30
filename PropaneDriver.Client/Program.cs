@@ -37,7 +37,7 @@ builder.Services.AddScoped<RouteApiConsumer>();
 builder.Services.AddScoped<DeliveryApiConsumer>();
 builder.Services.AddScoped<AddressApiConsumer>();
 builder.Services.AddScoped<FuelLogApiConsumer>();
-builder.Services.AddScoped<DriverApiConsumer>();
+builder.Services.AddScoped<UserApiConsumer>();
 builder.Services.AddScoped<GeolocationService>();
 builder.Services.AddScoped<GeocodingService>();
 builder.Services.AddScoped<DeliveryTimerService>();

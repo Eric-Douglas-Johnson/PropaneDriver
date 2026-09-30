@@ -8,7 +8,7 @@ namespace PropaneDriver.Server.Data
         public Guid Id { get; set; } = Guid.NewGuid();
 
         [Required]
-        public Guid DriverId { get; set; }
+        public Guid UserId { get; set; }
 
         [Required]
         [MaxLength(128)]
