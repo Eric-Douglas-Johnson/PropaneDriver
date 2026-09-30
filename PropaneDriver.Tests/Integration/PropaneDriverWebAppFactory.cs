@@ -181,6 +181,25 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         return route;
     }
 
+    // Seed one fuel-log row owned by the given driver.
+    public FuelLogEntryDbRecord SeedFuelLogEntry(Guid driverId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+
+        var entry = new FuelLogEntryDbRecord
+        {
+            Id = Guid.NewGuid(),
+            DriverId = driverId,
+            EquipmentNumber = "T-100",
+            MeterValue = 1000m,
+            RecordedAt = DateTime.UtcNow,
+        };
+        db.FuelLogEntries.Add(entry);
+        db.SaveChanges();
+        return entry;
+    }
+
     // Seed a delivery (and a backing address) on the given route. Address
     // fields are unique-per-call so the unique-key constraint on Addresses
     // doesn't clash across tests.

@@ -5,9 +5,9 @@
     padding-bottom: 2rem;
 }
 
-/* Drawn between the Document Scanner stack and the Analytics card so
-   the page reads as two distinct concerns under one Tools roof. The
-   label sits centered on the rule. */
+/* Labels each section of the Tools page (Users, Documents, Analytics)
+   so the concerns read as distinct under one Tools roof. The label
+   sits centered on the rule. */
 .tools-section-divider {
     position: relative;
     display: flex;
@@ -325,14 +325,16 @@
     padding: 0.5rem 0.65rem;
 }
 
-.tools-stats-table {
+.tools-stats-table,
+.tools-users-table {
     width: 100%;
     color: whitesmoke;
     font-size: 0.78rem;
     border-collapse: collapse;
 }
 
-.tools-stats-table th {
+.tools-stats-table th,
+.tools-users-table th {
     color: #8892b0;
     font-weight: 600;
     text-transform: uppercase;
@@ -343,12 +345,14 @@
     border-bottom: 1px solid #2a2a4a;
 }
 
-.tools-stats-table td {
+.tools-stats-table td,
+.tools-users-table td {
     padding: 0.3rem 0.4rem;
     border-bottom: 1px solid #1c1c33;
 }
 
-.tools-stats-table tr:last-child td {
+.tools-stats-table tr:last-child td,
+.tools-users-table tr:last-child td {
     border-bottom: none;
 }
 
@@ -374,4 +378,37 @@
     background: rgba(94, 179, 196, 0.15);
     color: #5eb3c4;
     border: 1px solid rgba(94, 179, 196, 0.4);
+}
+
+/* Users card — same colored-top-edge treatment as the stats card. */
+.tools-card--users {
+    border-top: 3px solid #c792ea;
+}
+
+/* Add/edit form sits above the user table while it's open. */
+.tools-user-form {
+    border: 1px dashed #2a2a4a;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Six columns don't fit a phone; scroll the table rather than the page. */
+.tools-users-table-wrap {
+    overflow-x: auto;
+}
+
+.tools-users-table .tools-users-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.tools-users-row--editing td {
+    background: rgba(199, 146, 234, 0.08);
+}
+
+.tools-tag--you {
+    background: rgba(199, 146, 234, 0.15);
+    color: #c792ea;
+    border: 1px solid rgba(199, 146, 234, 0.4);
 }

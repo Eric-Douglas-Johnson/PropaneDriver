@@ -1,9 +1,13 @@
 @page "/tools"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using PropaneDriver.Client.ApiConsumers
+@using PropaneDriver.Shared.Constants
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Enums
 @inject HttpClient Http
 @inject DeliveryTimeStatsApiConsumer DeliveryTimeStatsApi
+@inject DriverApiConsumer DriverApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 
@@ -11,6 +15,176 @@
 
 <div class="tools-page">
     <h4 class="tools-title">Tools</h4>
+
+    <div class="tools-section-divider">
+        <span class="tools-section-divider-label">Users</span>
+    </div>
+
+    <div class="tools-card tools-card--users">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="m-0">Users (@_users.Count)</h5>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                        @onclick="LoadUsers" disabled="@_loadingUsers">
+                    @(_loadingUsers ? "Loading…" : "Refresh")
+                </button>
+                <button class="btn btn-sm btn-primary py-0 px-2"
+                        @onclick="StartAddingUser" disabled="@_savingUser">
+                    Add User
+                </button>
+            </div>
+        </div>
+        <p class="tools-hint">
+            Add, edit, or remove accounts. Role and password changes take effect
+            the next time that user signs in.
+        </p>
+
+        @if (_userFormOpen)
+        {
+            <div class="tools-user-form">
+                <h6 class="tools-subhead mt-0">
+                    @(_editingUser is null ? "New user" : $"Edit {_editingUser.UserName}")
+                </h6>
+
+                <div class="admin-row">
+                    <div class="admin-field">
+                        <label>First Name</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_userForm.FirstName" />
+                    </div>
+                    <div class="admin-field">
+                        <label>Middle Name</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_userForm.MiddleName" />
+                    </div>
+                    <div class="admin-field">
+                        <label>Last Name</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_userForm.LastName" />
+                    </div>
+                </div>
+
+                <div class="admin-row mt-2">
+                    <div class="admin-field">
+                        <label>Email</label>
+                        <input type="email" class="form-control form-control-sm" @bind="_userForm.Email" />
+                    </div>
+                    <div class="admin-field">
+                        <label>Phone</label>
+                        <input type="tel" class="form-control form-control-sm" @bind="_userForm.PhoneNumber" />
+                    </div>
+                </div>
+
+                <!-- autocomplete off so the browser doesn't fill in the admin's own saved login. -->
+                <div class="admin-row mt-2">
+                    <div class="admin-field">
+                        <label>User Name</label>
+                        <input type="text" class="form-control form-control-sm" autocomplete="off"
+                               @bind="_userForm.UserName" />
+                    </div>
+                    <div class="admin-field">
+                        <label>@(_editingUser is null ? "Password" : "New Password")</label>
+                        <input type="password" class="form-control form-control-sm" autocomplete="new-password"
+                               placeholder="@(_editingUser is null ? null : "Leave blank to keep")"
+                               @bind="_userForm.Password" />
+                    </div>
+                    <div class="admin-field">
+                        <label>Confirm Password</label>
+                        <input type="password" class="form-control form-control-sm" autocomplete="new-password"
+                               @bind="_userFormConfirmPassword" />
+                    </div>
+                    <div class="admin-field" style="max-width: 160px;">
+                        <label>Role</label>
+                        <select class="form-select form-select-sm" @bind="_userForm.Role"
+                                disabled="@EditingCurrentUser"
+                                title="@(EditingCurrentUser ? "You can't change your own role." : null)">
+                            @foreach (var roleOption in UserRoles.All)
+                            {
+                                <option value="@roleOption">@roleOption</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-sm btn-primary" @onclick="SaveUser" disabled="@_savingUser">
+                        @(_savingUser ? "Saving…" : _editingUser is null ? "Create User" : "Save Changes")
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CloseUserForm" disabled="@_savingUser">
+                        Cancel
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_userFormError))
+                {
+                    <div class="text-danger mt-2" style="font-size:0.85rem;">@_userFormError</div>
+                }
+            </div>
+        }
+
+        @if (_users.Count == 0 && !_loadingUsers)
+        {
+            <div class="tools-empty">No users loaded.</div>
+        }
+        else if (_users.Count > 0)
+        {
+            <div class="tools-users-table-wrap">
+                <table class="tools-users-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>User Name</th>
+                            <th>Role</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var userRow in _users)
+                        {
+                            var capturedUser = userRow;
+                            var isCurrentUser = userRow.Id == _currentUserId;
+                            <tr class="@(userRow.Id == _editingUser?.Id ? "tools-users-row--editing" : null)">
+                                <td>
+                                    @userRow.FirstName @userRow.LastName
+                                    @if (isCurrentUser)
+                                    {
+                                        <span class="tools-tag tools-tag--you">You</span>
+                                    }
+                                </td>
+                                <td>@userRow.UserName</td>
+                                <td>@userRow.Role</td>
+                                <td>@userRow.Email</td>
+                                <td>@userRow.PhoneNumber</td>
+                                <td class="tools-users-actions">
+                                    <button class="btn btn-sm btn-outline-info py-0 px-2"
+                                            @onclick="() => StartEditingUser(capturedUser)"
+                                            disabled="@(_savingUser || _deletingUserId is not null)">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                            @onclick="() => DeleteUser(capturedUser)"
+                                            disabled="@(isCurrentUser || _savingUser || _deletingUserId is not null)"
+                                            title="@(isCurrentUser ? "You can't delete your own account." : null)">
+                                        @(_deletingUserId == userRow.Id ? "Deleting…" : "Delete")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_usersStatus))
+        {
+            <div class="@(_usersStatusSuccess ? "text-success" : "text-warning") mt-2" style="font-size:0.85rem;">
+                @_usersStatus
+            </div>
+        }
+    </div>
+
+    <div class="tools-section-divider">
+        <span class="tools-section-divider-label">Documents</span>
+    </div>
 
     <div class="tools-card">
         <h5>Document Scanner</h5>
@@ -485,6 +659,9 @@
 </div>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
     private bool _scanning;
     private string? _scanStatus;
     private bool _scanStatusSuccess;
@@ -538,6 +715,30 @@
     private string? _statsError;
     private DateTime? _statsFrom = DateTime.UtcNow.Date.AddDays(-30);
     private DateTime? _statsTo;
+
+    // User management section state. _editingUser is null while adding a new user;
+    // the form reuses CreateDriverDto, whose Password doubles as "new password" on edit.
+    private List<DriverDto> _users = new();
+    private bool _loadingUsers;
+    private string _currentUserId = string.Empty;
+    private bool _userFormOpen;
+    private DriverDto? _editingUser;
+    private CreateDriverDto _userForm = new() { Role = UserRoles.Driver };
+    private string _userFormConfirmPassword = string.Empty;
+    private string? _userFormError;
+    private bool _savingUser;
+    private string? _deletingUserId;
+    private string? _usersStatus;
+    private bool _usersStatusSuccess;
+
+    private bool EditingCurrentUser => _editingUser is not null && _editingUser.Id == _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateTask;
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        await LoadUsers();
+    }
 
     // Mirrors the shape returned by readAllDispatchFilesAsBase64. The JS
     // helper is fully generic (input id → base64 file list), not
@@ -1009,5 +1210,170 @@
         return oldestLocal.Date == newestLocal.Date
             ? oldestLocal.ToString("yyyy-MM-dd")
             : $"{oldestLocal:yyyy-MM-dd} → {newestLocal:yyyy-MM-dd}";
+    }
+
+    private async Task LoadUsers()
+    {
+        _loadingUsers = true;
+        _usersStatus = null;
+        StateHasChanged();
+
+        var loadedUsers = await DriverApi.GetDriversAsync();
+        if (loadedUsers is null)
+        {
+            _usersStatus = "Couldn't load users — check error logs.";
+            _usersStatusSuccess = false;
+        }
+        else
+        {
+            _users = loadedUsers;
+        }
+
+        _loadingUsers = false;
+    }
+
+    private void StartAddingUser()
+    {
+        _editingUser = null;
+        _userForm = new CreateDriverDto { Role = UserRoles.Driver };
+        OpenUserForm();
+    }
+
+    private void StartEditingUser(DriverDto userToEdit)
+    {
+        _editingUser = userToEdit;
+        _userForm = new CreateDriverDto
+        {
+            UserName = userToEdit.UserName,
+            FirstName = userToEdit.FirstName,
+            MiddleName = userToEdit.MiddleName,
+            LastName = userToEdit.LastName,
+            Email = userToEdit.Email,
+            PhoneNumber = userToEdit.PhoneNumber,
+            // Sign-in treats a blank role as driver; lowercase so the select matches an option.
+            Role = string.IsNullOrWhiteSpace(userToEdit.Role) ? UserRoles.Driver : userToEdit.Role.ToLowerInvariant()
+        };
+        OpenUserForm();
+    }
+
+    private void OpenUserForm()
+    {
+        _userFormConfirmPassword = string.Empty;
+        _userFormError = null;
+        _usersStatus = null;
+        _userFormOpen = true;
+    }
+
+    private void CloseUserForm()
+    {
+        _userFormOpen = false;
+        _editingUser = null;
+        _userFormError = null;
+    }
+
+    private async Task SaveUser()
+    {
+        _userFormError = ValidateUserForm();
+        if (_userFormError is not null) return;
+
+        _savingUser = true;
+        StateHasChanged();
+
+        var isNewUser = _editingUser is null;
+        DriverDto? savedUser;
+        string? errorMessage;
+
+        if (_editingUser is null)
+        {
+            (savedUser, errorMessage) = await DriverApi.CreateDriverAsync(_userForm);
+        }
+        else
+        {
+            (savedUser, errorMessage) = await DriverApi.UpdateDriverAsync(_editingUser.Id, new DriverUpdateDto
+            {
+                UserName = _userForm.UserName,
+                FirstName = _userForm.FirstName,
+                MiddleName = _userForm.MiddleName,
+                LastName = _userForm.LastName,
+                Email = _userForm.Email,
+                PhoneNumber = _userForm.PhoneNumber,
+                Role = _userForm.Role,
+                NewPassword = _userForm.Password
+            });
+        }
+
+        _savingUser = false;
+
+        if (savedUser is null)
+        {
+            _userFormError = errorMessage ?? "Failed to save user — check error logs.";
+            return;
+        }
+
+        // Same ordering as GET api/drivers.
+        _users = _users.Where(existingUser => existingUser.Id != savedUser.Id)
+            .Append(savedUser)
+            .OrderBy(listedUser => listedUser.LastName).ThenBy(listedUser => listedUser.FirstName)
+            .ToList();
+        _usersStatus = isNewUser
+            ? $"Created {savedUser.UserName} as {savedUser.Role}."
+            : $"Saved changes to {savedUser.UserName}.";
+        _usersStatusSuccess = true;
+        CloseUserForm();
+    }
+
+    // Names are only required for new users, mirroring the Register page; a blank
+    // password on edit keeps the current one. The server re-checks the rest.
+    private string? ValidateUserForm()
+    {
+        var isNewUser = _editingUser is null;
+
+        if (isNewUser && (string.IsNullOrWhiteSpace(_userForm.FirstName) || string.IsNullOrWhiteSpace(_userForm.LastName)))
+            return "First and last name are required.";
+        if (string.IsNullOrWhiteSpace(_userForm.UserName))
+            return "User name is required.";
+
+        if (isNewUser || _userForm.Password.Length > 0)
+        {
+            if (_userForm.Password.Length < 6)
+                return "Password must be at least 6 characters.";
+            if (_userForm.Password != _userFormConfirmPassword)
+                return "Passwords do not match.";
+        }
+
+        return null;
+    }
+
+    private async Task DeleteUser(DriverDto userToDelete)
+    {
+        if (userToDelete.Id == _currentUserId) return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Delete {userToDelete.UserName}?\n\n" +
+            "This also deletes their routes, deliveries, and fuel log, and can't be undone.");
+        if (!confirmed) return;
+
+        _deletingUserId = userToDelete.Id;
+        _usersStatus = null;
+        StateHasChanged();
+
+        var (deleted, errorMessage) = await DriverApi.DeleteDriverAsync(userToDelete.Id);
+
+        if (deleted)
+        {
+            _users.RemoveAll(listedUser => listedUser.Id == userToDelete.Id);
+            if (_editingUser?.Id == userToDelete.Id)
+                CloseUserForm();
+            _usersStatus = $"Deleted {userToDelete.UserName}.";
+            _usersStatusSuccess = true;
+        }
+        else
+        {
+            _usersStatus = errorMessage ?? "Failed to delete user — check error logs.";
+            _usersStatusSuccess = false;
+        }
+
+        _deletingUserId = null;
     }
 }

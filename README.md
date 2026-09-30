@@ -19,7 +19,7 @@ The domain is not a toy. The author is currently a propane driver. Every UI deci
 ### Login & registration
 ![Login screen](docs/screenshots/login.png)
 
-Role-based auth (driver, supervisor, and admin roles) backed by BCrypt-hashed passwords stored in Azure SQL and a JWT issued at sign-in. Includes register, forgot-password, and reset-password flows; reset emails are sent through Azure Communication Services with single-use tokens. Pages are gated by `[Authorize(Roles = ...)]` using the names in `UserRoles`, and the same role claims are enforced server-side on the matching endpoints. Supervisors share the Route admin page for managing every driver's routes; fuel logs, Tools, and role changes stay admin-only. Admins assign roles from the Route admin page.
+Role-based auth (driver, supervisor, and admin roles) backed by BCrypt-hashed passwords stored in Azure SQL and a JWT issued at sign-in. Includes register, forgot-password, and reset-password flows; reset emails are sent through Azure Communication Services with single-use tokens. Pages are gated by `[Authorize(Roles = ...)]` using the names in `UserRoles`, and the same role claims are enforced server-side on the matching endpoints. Supervisors share the Route admin page for managing every driver's routes; fuel logs, Tools, and role changes stay admin-only. Admins add, edit, and remove accounts (including their role) from the Tools page.
 
 ### Route overview
 ![Route list with active delivery and progress](docs/screenshots/route.png)
@@ -55,6 +55,8 @@ Pick a driver and a date, edit the route. Addresses are normalized through Googl
 ![Admin Tools page with the Document Intelligence file scanner](docs/screenshots/tools.png)
 
 An admin-only Tools page (`/tools`, gated by `[Authorize(Roles = "admin")]`) that exposes the Azure Document Intelligence pipeline directly: pick one or more image files, choose a prebuilt model (`prebuilt-read`, `prebuilt-layout`, `prebuilt-document`, `prebuilt-invoice`, `prebuilt-receipt`, `prebuilt-idDocument`, `prebuilt-businessCard`) from a `AzureDocumentIntelligenceModel` enum, then press **Scan** to run them. Scanning is deliberately button-gated rather than firing on file selection so the admin doesn't burn calls every time they reach for a file picker, and a quick summary of what Azure does with the uploaded bytes lives alongside the source in `azure-doc-intelligence-security.txt` at the repo root.
+
+The same page has a **Users** section for adding, editing (profile, role, and password), and removing accounts. Deleting a user also deletes their routes and fuel log, and an admin can't delete their own account or change their own role.
 
 ---
 

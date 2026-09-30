@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using PropaneDriver.Server.Data;
 using PropaneDriver.Shared.Dtos;
 
 namespace PropaneDriver.Tests.Integration;
@@ -61,73 +63,258 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    // ---------- PUT /api/drivers/{id}/role (AdminOnly) ----------
+    // ---------- POST /api/drivers (AdminOnly) ----------
+
+    private static CreateDriverDto NewUserRequest(string userName, string role = "driver") => new()
+    {
+        UserName = userName,
+        Password = "new-user-password",
+        FirstName = "New",
+        LastName = "User",
+        Role = role
+    };
 
     [Fact]
-    public async Task UpdateRole_Anonymous_Returns401()
+    public async Task CreateDriver_Anonymous_Returns401()
     {
         using var client = _factory.CreateAnonymousClient();
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{Guid.NewGuid()}/role", new DriverRoleUpdateDto { Role = "supervisor" });
+        var response = await client.PostAsJsonAsync("/api/drivers", NewUserRequest("create-user-anonymous"));
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Theory]
     [InlineData("driver")]
     [InlineData("supervisor")]
-    public async Task UpdateRole_NonAdminRole_Returns403(string callerRole)
+    public async Task CreateDriver_NonAdminRole_Returns403(string callerRole)
     {
-        var caller = _factory.SeedDriver($"role-change-{callerRole}-caller", role: callerRole);
-        var target = _factory.SeedDriver($"role-change-{callerRole}-target", role: "driver");
+        var caller = _factory.SeedDriver($"create-user-{callerRole}-caller", role: callerRole);
         using var client = _factory.CreateClientForDriver(caller);
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "admin" });
+        var response = await client.PostAsJsonAsync(
+            "/api/drivers", NewUserRequest($"create-user-by-{callerRole}", role: "admin"));
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateRole_AdminRole_ChangesTargetRole()
+    public async Task CreateDriver_AdminRole_CreatesUserWhoCanSignIn()
     {
-        var admin = _factory.SeedDriver("role-change-admin", role: "admin");
-        var target = _factory.SeedDriver("role-change-target", role: "driver");
+        var admin = _factory.SeedDriver("create-user-admin", role: "admin");
         using var client = _factory.CreateClientForDriver(admin);
 
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "Supervisor" });
+        var response = await client.PostAsJsonAsync(
+            "/api/drivers", NewUserRequest("create-user-new-supervisor", role: "Supervisor"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var reloaded = await client.GetFromJsonAsync<DriverDto>($"/driver/{target.Id}");
-        Assert.Equal("supervisor", reloaded!.Role);
+        var created = await response.Content.ReadFromJsonAsync<DriverDto>();
+        Assert.Equal("supervisor", created!.Role);
+
+        var signInResult = await SignInAsync("create-user-new-supervisor", "new-user-password");
+        Assert.True(signInResult.IsAuthenticated);
+        Assert.Equal("supervisor", signInResult.Driver!.Role);
+    }
+
+    private async Task<AuthResponseDto> SignInAsync(string userName, string password)
+    {
+        using var anonymousClient = _factory.CreateAnonymousClient();
+        var response = await anonymousClient.PostAsJsonAsync(
+            "/api/Authenticate", new CredsDto { UserName = userName, Password = password });
+        return (await response.Content.ReadFromJsonAsync<AuthResponseDto>())!;
     }
 
     [Fact]
-    public async Task UpdateRole_UnknownRole_Returns400()
+    public async Task CreateDriver_DuplicateUserName_Returns409()
     {
-        var admin = _factory.SeedDriver("role-change-bad-role-admin", role: "admin");
-        var target = _factory.SeedDriver("role-change-bad-role-target", role: "driver");
+        var admin = _factory.SeedDriver("create-user-dupe-admin", role: "admin");
+        _factory.SeedDriver("create-user-existing", role: "driver");
         using var client = _factory.CreateClientForDriver(admin);
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{target.Id}/role", new DriverRoleUpdateDto { Role = "superuser" });
+        var response = await client.PostAsJsonAsync("/api/drivers", NewUserRequest("create-user-existing"));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("create-user-bad-role", "new-user-password", "superuser")]
+    [InlineData("create-user-short-password", "short", "driver")]
+    [InlineData("", "new-user-password", "driver")]
+    public async Task CreateDriver_InvalidRequest_Returns400(string userName, string password, string role)
+    {
+        var admin = _factory.SeedDriver($"create-user-invalid-admin-{Guid.NewGuid():N}", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var request = NewUserRequest(userName, role);
+        request.Password = password;
+        var response = await client.PostAsJsonAsync("/api/drivers", request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ---------- PUT /api/drivers/{id} (AdminOnly) ----------
+
+    private static DriverUpdateDto EditRequest(DriverDbRecord target, string? userName = null, string role = "driver", string newPassword = "") => new()
+    {
+        UserName = userName ?? target.UserName,
+        FirstName = "Edited",
+        LastName = target.LastName,
+        Email = target.Email,
+        PhoneNumber = target.PhoneNumber,
+        Role = role,
+        NewPassword = newPassword
+    };
+
+    [Fact]
+    public async Task UpdateDriver_Anonymous_Returns401()
+    {
+        var target = _factory.SeedDriver("edit-user-anonymous-target", role: "driver");
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}", EditRequest(target));
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("driver")]
+    [InlineData("supervisor")]
+    public async Task UpdateDriver_NonAdminRole_Returns403(string callerRole)
+    {
+        var caller = _factory.SeedDriver($"edit-user-{callerRole}-caller", role: callerRole);
+        var target = _factory.SeedDriver($"edit-user-{callerRole}-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(caller);
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}", EditRequest(target, role: "admin"));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateDriver_AdminRole_UpdatesProfileRoleAndPassword()
+    {
+        var admin = _factory.SeedDriver("edit-user-admin", role: "admin");
+        var target = _factory.SeedDriver("edit-user-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(admin);
+
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}",
+            EditRequest(target, userName: "edit-user-renamed", role: "supervisor", newPassword: "changed-password"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var signInResult = await SignInAsync("edit-user-renamed", "changed-password");
+        Assert.True(signInResult.IsAuthenticated);
+        Assert.Equal("supervisor", signInResult.Driver!.Role);
+        Assert.Equal("Edited", signInResult.Driver.FirstName);
+    }
+
+    [Fact]
+    public async Task UpdateDriver_BlankNewPassword_KeepsCurrentPassword()
+    {
+        var admin = _factory.SeedDriver("edit-user-keep-password-admin", role: "admin");
+        var target = _factory.SeedDriver("edit-user-keep-password-target", role: "driver", password: "original-password");
+        using var client = _factory.CreateClientForDriver(admin);
+
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}", EditRequest(target));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var signInResult = await SignInAsync(target.UserName, "original-password");
+        Assert.True(signInResult.IsAuthenticated);
+    }
+
+    [Fact]
+    public async Task UpdateDriver_AdminEditingOwnProfile_Returns200()
+    {
+        var admin = _factory.SeedDriver("edit-user-self-profile-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync($"/api/drivers/{admin.Id}", EditRequest(admin, role: "admin"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateDriver_AdminChangingOwnRole_Returns400()
+    {
+        var admin = _factory.SeedDriver("edit-user-self-role-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync($"/api/drivers/{admin.Id}", EditRequest(admin, role: "driver"));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateRole_AdminChangingOwnRole_Returns400()
+    public async Task UpdateDriver_UnknownRole_Returns400()
     {
-        var admin = _factory.SeedDriver("role-change-self-admin", role: "admin");
+        var admin = _factory.SeedDriver("edit-user-bad-role-admin", role: "admin");
+        var target = _factory.SeedDriver("edit-user-bad-role-target", role: "driver");
         using var client = _factory.CreateClientForDriver(admin);
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{admin.Id}/role", new DriverRoleUpdateDto { Role = "driver" });
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}", EditRequest(target, role: "superuser"));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task UpdateRole_UnknownDriver_Returns404()
+    public async Task UpdateDriver_UserNameTakenByAnotherUser_Returns409()
     {
-        var admin = _factory.SeedDriver("role-change-missing-admin", role: "admin");
+        var admin = _factory.SeedDriver("edit-user-dupe-admin", role: "admin");
+        var target = _factory.SeedDriver("edit-user-dupe-target", role: "driver");
+        _factory.SeedDriver("edit-user-dupe-existing", role: "driver");
         using var client = _factory.CreateClientForDriver(admin);
-        var response = await client.PutAsJsonAsync(
-            $"/api/drivers/{Guid.NewGuid()}/role", new DriverRoleUpdateDto { Role = "supervisor" });
+        var response = await client.PutAsJsonAsync($"/api/drivers/{target.Id}",
+            EditRequest(target, userName: "edit-user-dupe-existing"));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateDriver_UnknownDriver_Returns404()
+    {
+        var admin = _factory.SeedDriver("edit-user-missing-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.PutAsJsonAsync($"/api/drivers/{Guid.NewGuid()}", EditRequest(admin));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ---------- DELETE /api/drivers/{id} (AdminOnly) ----------
+
+    [Fact]
+    public async Task DeleteDriver_Anonymous_Returns401()
+    {
+        var target = _factory.SeedDriver("delete-user-anonymous-target", role: "driver");
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.DeleteAsync($"/api/drivers/{target.Id}");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("driver")]
+    [InlineData("supervisor")]
+    public async Task DeleteDriver_NonAdminRole_Returns403(string callerRole)
+    {
+        var caller = _factory.SeedDriver($"delete-user-{callerRole}-caller", role: callerRole);
+        var target = _factory.SeedDriver($"delete-user-{callerRole}-target", role: "driver");
+        using var client = _factory.CreateClientForDriver(caller);
+        var response = await client.DeleteAsync($"/api/drivers/{target.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteDriver_AdminRole_RemovesDriverRoutesAndFuelLog()
+    {
+        var admin = _factory.SeedDriver("delete-user-admin", role: "admin");
+        var target = _factory.SeedDriver("delete-user-target", role: "driver");
+        _factory.SeedRoute(target.Id);
+        _factory.SeedFuelLogEntry(target.Id);
+        using var client = _factory.CreateClientForDriver(admin);
+
+        var response = await client.DeleteAsync($"/api/drivers/{target.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+        Assert.False(db.Drivers.Any(d => d.Id == target.Id));
+        Assert.False(db.Routes.Any(r => r.DriverId == target.Id));
+        Assert.False(db.FuelLogEntries.Any(f => f.DriverId == target.Id));
+    }
+
+    [Fact]
+    public async Task DeleteDriver_AdminDeletingSelf_Returns400()
+    {
+        var admin = _factory.SeedDriver("delete-user-self-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.DeleteAsync($"/api/drivers/{admin.Id}");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteDriver_UnknownDriver_Returns404()
+    {
+        var admin = _factory.SeedDriver("delete-user-missing-admin", role: "admin");
+        using var client = _factory.CreateClientForDriver(admin);
+        var response = await client.DeleteAsync($"/api/drivers/{Guid.NewGuid()}");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
