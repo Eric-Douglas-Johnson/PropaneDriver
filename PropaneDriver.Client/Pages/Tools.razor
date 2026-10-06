@@ -8,6 +8,7 @@
 @inject HttpClient Http
 @inject DeliveryTimeStatsApiConsumer DeliveryTimeStatsApi
 @inject UserApiConsumer UserApi
+@inject ErrorLogViewerApiConsumer ErrorLogViewerApi
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "admin")]
 
@@ -661,6 +662,83 @@
             </div>
         }
     </div>
+
+    <div class="tools-section-divider">
+        <span class="tools-section-divider-label">Diagnostics</span>
+    </div>
+
+    <div class="tools-card tools-card--errors">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="m-0">Error Log (@_errorLogs.Count)</h5>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    @onclick="LoadErrorLogs" disabled="@_loadingErrorLogs">
+                @(_loadingErrorLogs ? "Loading…" : "Refresh")
+            </button>
+        </div>
+        <p class="tools-hint">
+            Errors reported by the app, newest first, in your local time. Tap an
+            entry to show its full message.
+        </p>
+
+        <div class="tools-stats-filters">
+            <div class="admin-field" style="max-width: 110px;">
+                <label>Show</label>
+                <select class="form-select form-select-sm"
+                        @bind="_errorLogCount" @bind:after="LoadErrorLogs" disabled="@_loadingErrorLogs">
+                    @foreach (var countOption in ErrorLogCountOptions)
+                    {
+                        <option value="@countOption">@countOption</option>
+                    }
+                </select>
+            </div>
+            <div class="admin-field">
+                <label>Filter</label>
+                <input type="text" class="form-control form-control-sm"
+                       placeholder="Source, level, or message"
+                       @bind="_errorLogFilter" @bind:event="oninput" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorLogsError))
+        {
+            <div class="text-warning mt-2" style="font-size:0.8rem;">@_errorLogsError</div>
+        }
+
+        @{
+            var filteredErrorLogs = FilteredErrorLogs.ToList();
+        }
+        @if (_errorLogs.Count == 0 && !_loadingErrorLogs && _errorLogsError is null)
+        {
+            <div class="tools-empty mt-2">No errors logged.</div>
+        }
+        else if (_errorLogs.Count > 0 && filteredErrorLogs.Count == 0)
+        {
+            <div class="tools-empty mt-2">No entries match "@_errorLogFilter".</div>
+        }
+        else if (filteredErrorLogs.Count > 0)
+        {
+            @if (filteredErrorLogs.Count != _errorLogs.Count)
+            {
+                <div class="tools-stats-range">Showing @filteredErrorLogs.Count of @_errorLogs.Count</div>
+            }
+            <div class="tools-error-log">
+                @foreach (var errorLogEntry in filteredErrorLogs)
+                {
+                    var capturedEntryId = errorLogEntry.Id;
+                    var isExpanded = _expandedErrorLogIds.Contains(errorLogEntry.Id);
+                    <div class="tools-error-entry @(isExpanded ? "tools-error-entry--expanded" : null)"
+                         @onclick="() => ToggleErrorLogExpanded(capturedEntryId)">
+                        <div class="tools-error-entry-header">
+                            <span class="tools-tag @ErrorLogLevelTagClass(errorLogEntry.Level)">@errorLogEntry.Level</span>
+                            <span class="tools-error-entry-source">@errorLogEntry.Source</span>
+                            <span class="tools-error-entry-time">@FormatErrorLogTimestamp(errorLogEntry.Timestamp)</span>
+                        </div>
+                        <div class="tools-error-entry-message">@errorLogEntry.Message</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
@@ -738,11 +816,35 @@
 
     private bool EditingCurrentUser => _editingUser is not null && _editingUser.Id == _currentUserId;
 
+    // Error log section state. The filter applies to the loaded entries only.
+    private static readonly int[] ErrorLogCountOptions = [50, 100, 250, 500];
+    private List<ErrorLogEntryDto> _errorLogs = new();
+    private bool _loadingErrorLogs = true; // first load starts in OnInitializedAsync
+    private string? _errorLogsError;
+    private int _errorLogCount = 100;
+    private string _errorLogFilter = string.Empty;
+    private readonly HashSet<Guid> _expandedErrorLogIds = new();
+
+    private IEnumerable<ErrorLogEntryDto> FilteredErrorLogs
+    {
+        get
+        {
+            var filterText = _errorLogFilter.Trim();
+            if (filterText.Length == 0)
+                return _errorLogs;
+
+            return _errorLogs.Where(errorLogEntry =>
+                errorLogEntry.Source.Contains(filterText, StringComparison.OrdinalIgnoreCase)
+                || errorLogEntry.Level.Contains(filterText, StringComparison.OrdinalIgnoreCase)
+                || errorLogEntry.Message.Contains(filterText, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateTask;
         _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
-        await LoadUsers();
+        await Task.WhenAll(LoadUsers(), LoadErrorLogs());
     }
 
     // Mirrors the shape returned by readAllDispatchFilesAsBase64. The JS
@@ -1390,4 +1492,42 @@
 
         _deletingUserId = null;
     }
+
+    private async Task LoadErrorLogs()
+    {
+        _loadingErrorLogs = true;
+        _errorLogsError = null;
+        StateHasChanged();
+
+        try
+        {
+            _errorLogs = await ErrorLogViewerApi.GetErrorLogsAsync(_errorLogCount);
+            _expandedErrorLogIds.Clear();
+        }
+        catch (Exception ex)
+        {
+            _errorLogsError = $"Failed to load error log: {ex.Message}";
+        }
+        finally
+        {
+            _loadingErrorLogs = false;
+        }
+    }
+
+    private void ToggleErrorLogExpanded(Guid errorLogId)
+    {
+        if (!_expandedErrorLogIds.Remove(errorLogId))
+            _expandedErrorLogIds.Add(errorLogId);
+    }
+
+    private static string ErrorLogLevelTagClass(string level) => level.ToLowerInvariant() switch
+    {
+        "error" or "critical" or "fatal" => "tools-tag--level-error",
+        "warning" or "warn" => "tools-tag--level-warning",
+        _ => "tools-tag--level-info"
+    };
+
+    // Stored as UTC; SQL hands it back with an unspecified kind.
+    private static string FormatErrorLogTimestamp(DateTime timestamp) =>
+        DateTime.SpecifyKind(timestamp, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
 }

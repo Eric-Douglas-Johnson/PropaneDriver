@@ -7,17 +7,31 @@ namespace PropaneDriver.Server.Endpoints
 {
     public static class ClientLogEndpoints
     {
+        private const int DefaultErrorLogCount = 100;
+        private const int MaximumErrorLogCount = 500;
+
         public static IEndpointRouteBuilder MapClientLogEndpoints(this IEndpointRouteBuilder app)
         {
-            // Read recent error logs (diagnostic)
-            app.MapGet("api/client-logs", async (PropaneDriverDbContext db) =>
+            // Newest error logs first, for the admin Tools page.
+            app.MapGet("api/client-logs", async (int? count, PropaneDriverDbContext db) =>
             {
+                var requestedCount = Math.Clamp(count ?? DefaultErrorLogCount, 1, MaximumErrorLogCount);
+
                 var logs = await db.ErrorLogs
+                    .AsNoTracking()
                     .OrderByDescending(e => e.Timestamp)
-                    .Take(50)
+                    .Take(requestedCount)
+                    .Select(e => new ErrorLogEntryDto
+                    {
+                        Id = e.Id,
+                        Source = e.Source,
+                        Level = e.Level,
+                        Message = e.Message,
+                        Timestamp = e.Timestamp
+                    })
                     .ToListAsync();
                 return Results.Ok(logs);
-            });
+            }).RequireAuthorization("AdminOnly");
 
             // Return columns for key tables so we can diagnose live schema state
             app.MapGet("api/admin/schema", async (PropaneDriverDbContext db) =>
@@ -39,9 +53,9 @@ namespace PropaneDriver.Server.Endpoints
                     rows.Add(new { Table = reader.GetString(0), Column = reader.GetString(1), Type = reader.GetString(2), Nullable = reader.GetBoolean(3) });
 
                 return Results.Ok(rows);
-            });
+            }).RequireAuthorization("AdminOnly");
 
-            // Log a client-side error
+            // Log a client-side error. Anonymous so errors raised before sign-in still get recorded.
             app.MapPost("api/client-logs", async (
                 ClientLogDto log,
                 PropaneDriverDbContext db,

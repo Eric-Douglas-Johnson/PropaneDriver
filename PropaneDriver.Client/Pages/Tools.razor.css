@@ -5,7 +5,7 @@
     padding-bottom: 2rem;
 }
 
-/* Labels each section of the Tools page (Users, Documents, Analytics)
+/* Labels each section of the Tools page (Users, Documents, Analytics, Diagnostics)
    so the concerns read as distinct under one Tools roof. The label
    sits centered on the rule. */
 .tools-section-divider {
@@ -411,4 +411,94 @@
     background: rgba(199, 146, 234, 0.15);
     color: #c792ea;
     border: 1px solid rgba(199, 146, 234, 0.4);
+}
+
+/* Error log card — same colored-top-edge treatment as the stats card. */
+.tools-card--errors {
+    border-top: 3px solid #f07178;
+}
+
+/* Scrolls on its own so a long log doesn't stretch the whole page. */
+.tools-error-log {
+    max-height: 480px;
+    overflow-y: auto;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+}
+
+.tools-error-entry {
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid #1c1c33;
+    cursor: pointer;
+}
+
+.tools-error-entry:last-child {
+    border-bottom: none;
+}
+
+.tools-error-entry:hover,
+.tools-error-entry--expanded {
+    background: rgba(240, 113, 120, 0.06);
+}
+
+.tools-error-entry-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.5rem;
+    font-size: 0.72rem;
+}
+
+.tools-error-entry-header .tools-tag {
+    margin-left: 0;
+}
+
+.tools-error-entry-source {
+    color: #5eb3c4;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.tools-error-entry-time {
+    color: #8892b0;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Two lines while collapsed; the full message once tapped. */
+.tools-error-entry-message {
+    color: whitesmoke;
+    font-size: 0.78rem;
+    margin-top: 0.2rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tools-error-entry--expanded .tools-error-entry-message {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+
+.tools-tag--level-error {
+    background: rgba(240, 113, 120, 0.15);
+    color: #f07178;
+    border: 1px solid rgba(240, 113, 120, 0.4);
+}
+
+.tools-tag--level-warning {
+    background: rgba(255, 203, 107, 0.15);
+    color: #ffcb6b;
+    border: 1px solid rgba(255, 203, 107, 0.4);
+}
+
+.tools-tag--level-info {
+    background: rgba(136, 146, 176, 0.15);
+    color: #8892b0;
+    border: 1px solid rgba(136, 146, 176, 0.4);
 }

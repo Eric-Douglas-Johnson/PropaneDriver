@@ -1013,6 +1013,88 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.Null(auth.User);
     }
 
+    // ---------- GET /api/client-logs (AdminOnly) ----------
+
+    [Fact]
+    public async Task ListErrorLogs_Anonymous_Returns401()
+    {
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.GetAsync("/api/client-logs");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("driver")]
+    [InlineData("supervisor")]
+    public async Task ListErrorLogs_NonAdminRole_Returns403(string callerRole)
+    {
+        var caller = _factory.SeedUser($"list-error-logs-{callerRole}", role: callerRole);
+        using var client = _factory.CreateClientForUser(caller);
+        var response = await client.GetAsync("/api/client-logs");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListErrorLogs_AdminRole_ReturnsNewestFirstUpToCount()
+    {
+        // Far-future timestamps keep these two at the top of the shared test database's log.
+        var newestTimestamp = new DateTime(2099, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
+            db.ErrorLogs.AddRange(
+                new ErrorLogDbRecord { Id = Guid.NewGuid(), Source = "list-error-logs-older", Level = "Error", Message = "older", Timestamp = newestTimestamp.AddDays(-1) },
+                new ErrorLogDbRecord { Id = Guid.NewGuid(), Source = "list-error-logs-newer", Level = "Warning", Message = "newer", Timestamp = newestTimestamp });
+            await db.SaveChangesAsync();
+        }
+
+        var admin = _factory.SeedUser("list-error-logs-admin", role: "admin");
+        using var client = _factory.CreateClientForUser(admin);
+
+        var topTwoLogs = await client.GetFromJsonAsync<List<ErrorLogEntryDto>>("/api/client-logs?count=2");
+        Assert.Equal(["list-error-logs-newer", "list-error-logs-older"], topTwoLogs!.Select(log => log.Source));
+        Assert.Equal("Warning", topTwoLogs![0].Level);
+        Assert.Equal("newer", topTwoLogs![0].Message);
+
+        var topLog = await client.GetFromJsonAsync<List<ErrorLogEntryDto>>("/api/client-logs?count=1");
+        Assert.Equal("list-error-logs-newer", Assert.Single(topLog!).Source);
+    }
+
+    [Fact]
+    public async Task PostClientLog_Anonymous_IsStillAccepted()
+    {
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.PostAsJsonAsync("/api/client-logs", new ClientLogDto
+        {
+            Source = "post-client-log-anonymous",
+            Level = "Error",
+            Message = "raised before sign-in"
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // ---------- GET /api/admin/schema (AdminOnly) ----------
+    // No admin-passes case: the handler queries sys.columns, which the in-memory provider can't run.
+
+    [Fact]
+    public async Task SchemaDiagnostics_Anonymous_Returns401()
+    {
+        using var client = _factory.CreateAnonymousClient();
+        var response = await client.GetAsync("/api/admin/schema");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("driver")]
+    [InlineData("supervisor")]
+    public async Task SchemaDiagnostics_NonAdminRole_Returns403(string callerRole)
+    {
+        var caller = _factory.SeedUser($"schema-diagnostics-{callerRole}", role: callerRole);
+        using var client = _factory.CreateClientForUser(caller);
+        var response = await client.GetAsync("/api/admin/schema");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     // ---------- malformed token ----------
 
     [Fact]
