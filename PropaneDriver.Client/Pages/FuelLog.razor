@@ -707,11 +707,15 @@
 
     // Clear the grid back to a fresh log (Start baseline + one empty entry)
     // and persist that blank log immediately so it's the canonical state on the
-    // server, not just in the browser. If there are unsaved changes, give the
-    // driver the chance to save them first so a stray click can't wipe out
-    // un-persisted work.
+    // server, not just in the browser. Confirm first so a stray tap can't wipe
+    // the log, then, if there are unsaved changes, offer to save them first.
     private async Task StartNewLogAsync()
     {
+        var confirmedStartNewLog = await JS.InvokeAsync<bool>(
+            "confirm",
+            "Start a new fuel log?\n\nThis clears every entry in the current log.");
+        if (!confirmedStartNewLog) return;
+
         if (IsDirty)
         {
             var saveFirst = await JS.InvokeAsync<bool>(
