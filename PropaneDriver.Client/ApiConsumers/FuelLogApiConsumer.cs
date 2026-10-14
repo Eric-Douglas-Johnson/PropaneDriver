@@ -65,9 +65,75 @@ namespace PropaneDriver.Client.ApiConsumers
             }
         }
 
-        // Admin: delete a driver's entire fuel log. True only when the server
-        // confirms the delete (2xx); a 404 means there was nothing to delete and
-        // is reported as a failure so the caller doesn't claim a phantom success.
+        // The signed-in driver's completed logs, newest first. Null on failure,
+        // so the page can tell "couldn't load" apart from "no past logs".
+        public Task<List<FuelLogSummaryDto>?> GetFuelLogHistoryAsync() =>
+            GetListOrNullAsync<FuelLogSummaryDto>(
+                "api/fuel-log/history", "FuelLogApiService.GetFuelLogHistoryAsync");
+
+        // Supervisor/admin: every driver's logs (open ones with fill rows, then
+        // completed ones newest first). Null on failure.
+        public Task<List<FuelLogSummaryDto>?> GetAllFuelLogsAsync() =>
+            GetListOrNullAsync<FuelLogSummaryDto>(
+                "api/fuel-log/all", "FuelLogApiService.GetAllFuelLogsAsync");
+
+        // One log's rows, in saved order. Null on failure.
+        public Task<List<FuelLogEntryDto>?> GetFuelLogEntriesAsync(string fuelLogId) =>
+            GetListOrNullAsync<FuelLogEntryDto>(
+                $"api/fuel-log/logs/{fuelLogId}", "FuelLogApiService.GetFuelLogEntriesAsync");
+
+        private async Task<List<T>?> GetListOrNullAsync<T>(string requestPath, string source)
+        {
+            try
+            {
+                var response = await _http.GetAsync(requestPath);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogApiConsumer.LogErrorAsync(
+                        source, $"GET {requestPath} returned {(int)response.StatusCode}: {body}");
+                    return null;
+                }
+
+                return await response.Content.ReadFromJsonAsync<List<T>>() ?? new();
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogApiConsumer.LogErrorAsync(source, $"Exception on GET {requestPath}: {ex.Message}");
+                return null;
+            }
+        }
+
+        // Complete the signed-in driver's open log so it moves to their past
+        // logs. Safe to repeat; true only on a 2xx.
+        public async Task<bool> StartNewFuelLogAsync()
+        {
+            try
+            {
+                var response = await _http.PostAsync("api/fuel-log/start-new", content: null);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    await ErrorLogApiConsumer.LogErrorAsync(
+                        "FuelLogApiService.StartNewFuelLogAsync",
+                        $"POST api/fuel-log/start-new returned {(int)response.StatusCode}: {body}");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await ErrorLogApiConsumer.LogErrorAsync(
+                    "FuelLogApiService.StartNewFuelLogAsync",
+                    $"Exception starting a new fuel log: {ex.Message}");
+                return false;
+            }
+        }
+
+        // Admin: delete a driver's open fuel log (past logs are kept). True only
+        // when the server confirms the delete (2xx); a 404 means there was nothing
+        // to delete and is reported as a failure so the caller doesn't claim a
+        // phantom success.
         public async Task<bool> DeleteFuelLogForDriverAsync(string driverId)
         {
             try

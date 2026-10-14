@@ -21,6 +21,7 @@ namespace PropaneDriver.Server.Data
         public DbSet<RouteDbRecord> Routes => Set<RouteDbRecord>();
         public DbSet<DeliveryDbRecord> Deliveries => Set<DeliveryDbRecord>();
         public DbSet<AlertDbRecord> Alerts => Set<AlertDbRecord>();
+        public DbSet<FuelLogDbRecord> FuelLogs => Set<FuelLogDbRecord>();
         public DbSet<FuelLogEntryDbRecord> FuelLogEntries => Set<FuelLogEntryDbRecord>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -134,13 +135,34 @@ namespace PropaneDriver.Server.Data
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<FuelLogDbRecord>(entity =>
+            {
+                entity.ToTable("FuelLogs");
+                entity.HasIndex(e => new { e.DriverId, e.CompletedAt });
+                // At most one open log per driver.
+                entity.HasIndex(e => e.DriverId, "IX_FuelLogs_DriverId_Open")
+                      .IsUnique()
+                      .HasFilter("[CompletedAt] IS NULL");
+
+                entity.HasOne<DriverDbRecord>()
+                      .WithMany()
+                      .HasForeignKey(e => e.DriverId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
             modelBuilder.Entity<FuelLogEntryDbRecord>(entity =>
             {
                 entity.ToTable("FuelLogEntries");
                 entity.HasIndex(e => e.DriverId);
                 entity.HasIndex(e => new { e.DriverId, e.SortOrder });
+                entity.HasIndex(e => new { e.FuelLogId, e.SortOrder });
                 entity.Property(e => e.MeterValue).HasPrecision(18, 2);
                 entity.Property(e => e.GallonsPumped).HasPrecision(18, 2);
+
+                entity.HasOne<FuelLogDbRecord>()
+                      .WithMany()
+                      .HasForeignKey(e => e.FuelLogId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne<DriverDbRecord>()
                       .WithMany()

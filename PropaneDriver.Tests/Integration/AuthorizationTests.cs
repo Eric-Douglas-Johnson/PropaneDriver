@@ -383,7 +383,8 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         var admin = _factory.SeedUser("delete-user-admin", role: "admin");
         var target = _factory.SeedUser("delete-user-target", role: "driver");
         _factory.SeedRoute(target.Id);
-        _factory.SeedFuelLogEntry(target.Id);
+        _factory.SeedFuelLog(target.Id, completed: true);
+        _factory.SeedFuelLog(target.Id);
         using var client = _factory.CreateClientForUser(admin);
 
         var response = await client.DeleteAsync($"/api/users/{target.Id}");
@@ -395,6 +396,7 @@ public class AuthorizationTests : IClassFixture<PropaneDriverWebAppFactory>
         Assert.False(db.Drivers.Any(d => d.UserId == target.Id));
         Assert.False(db.Routes.Any(r => r.DriverId == target.Id));
         Assert.False(db.FuelLogEntries.Any(f => f.DriverId == target.Id));
+        Assert.False(db.FuelLogs.Any(f => f.DriverId == target.Id));
     }
 
     [Fact]

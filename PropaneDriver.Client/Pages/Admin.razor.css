@@ -136,3 +136,11 @@
     background-color: #3a3a6a;
     color: #ffffff;
 }
+
+/* Compact select that sits beside header buttons rather than in a form field. */
+.admin-inline-select {
+    width: auto;
+    background-color: #0f0f1e;
+    color: whitesmoke;
+    border: 1px solid #2a2a4a;
+}

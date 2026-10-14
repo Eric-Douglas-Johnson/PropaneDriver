@@ -183,23 +183,46 @@ public class PropaneDriverWebAppFactory : WebApplicationFactory<Program>
         return route;
     }
 
-    // Seed one fuel-log row owned by the given driver.
-    public FuelLogEntryDbRecord SeedFuelLogEntry(Guid driverId)
+    // Seed a fuel log owned by the given driver: a Start row at meter 1000 and
+    // one 25-gallon fill. Open unless completed is set.
+    public FuelLogDbRecord SeedFuelLog(Guid driverId, bool completed = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PropaneDriverDbContext>();
 
-        var entry = new FuelLogEntryDbRecord
+        var fuelLog = new FuelLogDbRecord
         {
             Id = Guid.NewGuid(),
             DriverId = driverId,
-            EquipmentNumber = "T-100",
-            MeterValue = 1000m,
-            RecordedAt = DateTime.UtcNow,
+            StartedAt = DateTime.UtcNow.AddHours(-8),
+            CompletedAt = completed ? DateTime.UtcNow : null,
         };
-        db.FuelLogEntries.Add(entry);
+        db.FuelLogs.Add(fuelLog);
+
+        db.FuelLogEntries.Add(new FuelLogEntryDbRecord
+        {
+            Id = Guid.NewGuid(),
+            FuelLogId = fuelLog.Id,
+            DriverId = driverId,
+            EquipmentNumber = "Start",
+            MeterValue = 1000m,
+            SortOrder = 0,
+            RecordedAt = DateTime.UtcNow,
+        });
+        db.FuelLogEntries.Add(new FuelLogEntryDbRecord
+        {
+            Id = Guid.NewGuid(),
+            FuelLogId = fuelLog.Id,
+            DriverId = driverId,
+            EquipmentNumber = "T-100",
+            MeterValue = 1025m,
+            GallonsPumped = 25m,
+            SortOrder = 1,
+            RecordedAt = DateTime.UtcNow,
+        });
+
         db.SaveChanges();
-        return entry;
+        return fuelLog;
     }
 
     // Seed a delivery (and a backing address) on the given route. Address

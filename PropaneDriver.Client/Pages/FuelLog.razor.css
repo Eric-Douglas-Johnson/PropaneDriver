@@ -198,3 +198,87 @@
     font-size: 0.85rem;
     font-variant-numeric: tabular-nums;
 }
+
+.fuel-log-history-title {
+    color: whitesmoke;
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+}
+
+.fuel-log-history {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Each past log is a full-width tap target: period on the left, fill count
+   and gallons beneath on narrow screens, chevron on the right. */
+.fuel-log-history-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "period chevron"
+        "stats  chevron";
+    align-items: center;
+    gap: 0.15rem 0.75rem;
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    text-align: left;
+    color: whitesmoke;
+    background-color: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+}
+
+.fuel-log-history-item--open {
+    border-color: #5eb3c4;
+}
+
+.fuel-log-history-period {
+    grid-area: period;
+    font-weight: 600;
+}
+
+.fuel-log-history-stats {
+    grid-area: stats;
+    color: #8892b0;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.fuel-log-history-chevron {
+    grid-area: chevron;
+    color: #8892b0;
+}
+
+.fuel-log-history-detail {
+    padding: 0 0.25rem 0.5rem 0.25rem;
+}
+
+.fuel-log-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.fuel-log-history-table th {
+    color: #8892b0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid #2a2a4a;
+    text-align: left;
+}
+
+.fuel-log-history-table td {
+    color: whitesmoke;
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.fuel-log-history-table tr:last-child td {
+    border-bottom: none;
+}

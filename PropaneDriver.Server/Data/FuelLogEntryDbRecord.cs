@@ -11,6 +11,9 @@ namespace PropaneDriver.Server.Data
         public Guid Id { get; set; }
 
         [Required]
+        public Guid FuelLogId { get; set; }
+
+        [Required]
         public Guid DriverId { get; set; }
 
         [Required]

@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Client.ApiConsumers
+@using PropaneDriver.Client.HelperClasses
 @using PropaneDriver.Shared.Constants
 @using PropaneDriver.Shared.Dtos
 @using PropaneDriver.Shared.Enums
@@ -275,12 +276,12 @@
         </div>
     }
 
-    <!-- Fuel log for selected driver (admin only) -->
+    <!-- Current fuel log for selected driver (admin only) -->
     @if (_currentUserIsAdmin && !string.IsNullOrEmpty(_selectedDriverId))
     {
         <div class="admin-card">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="m-0">Fuel Log for Driver (@_driverFuelLog.Count entries)</h5>
+                <h5 class="m-0">Current Fuel Log for Driver (@_driverFuelLog.Count entries)</h5>
                 <div class="d-flex gap-2">
                     <button class="btn btn-sm btn-outline-secondary" @onclick="LoadDriverFuelLog"
                             disabled="@_loadingFuelLog">
@@ -547,15 +548,121 @@
             </div>
         }
     </div>
+
+    <!-- Every driver's fuel logs (supervisors and admins) -->
+    <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h5 class="m-0">All Fuel Logs (@FilteredAllFuelLogs.Count)</h5>
+            <div class="d-flex gap-2">
+                <select class="form-select form-select-sm admin-inline-select" @bind="_allFuelLogsDriverFilterId">
+                    <option value="">All drivers</option>
+                    @foreach (var driver in _drivers)
+                    {
+                        <option value="@driver.Id">@driver.FirstName @driver.LastName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="LoadAllFuelLogs"
+                        disabled="@_loadingAllFuelLogs">
+                    @(_loadingAllFuelLogs ? "Loading…" : "Refresh")
+                </button>
+            </div>
+        </div>
+
+        @if (_allFuelLogs is null)
+        {
+            <div style="font-size:0.85rem; color:#8892b0;">
+                @(_allFuelLogsLoadFailed ? "Couldn't load fuel logs — check error logs." : "Loading…")
+            </div>
+        }
+        else if (FilteredAllFuelLogs.Count == 0)
+        {
+            <div style="font-size:0.85rem; color:#8892b0;">No fuel logs yet.</div>
+        }
+        else
+        {
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Driver</th>
+                        <th>Period</th>
+                        <th>Fills</th>
+                        <th>Gallons</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var fuelLog in FilteredAllFuelLogs)
+                    {
+                        var capturedFuelLog = fuelLog;
+                        var isExpanded = _expandedAllFuelLogId == fuelLog.Id;
+                        <tr>
+                            <td>@DriverDisplayName(fuelLog.DriverId)</td>
+                            <td>@FuelLogPeriodFormatter.Format(fuelLog)</td>
+                            <td>@fuelLog.EntryCount</td>
+                            <td>@fuelLog.TotalGallons.ToString("0.##")</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info py-0 px-2"
+                                        @onclick="() => ToggleAllFuelLogsRow(capturedFuelLog)">
+                                    @(isExpanded ? "Hide" : "View")
+                                </button>
+                            </td>
+                        </tr>
+
+                        @if (isExpanded)
+                        {
+                            <tr>
+                                <td colspan="5">
+                                    @if (!_allFuelLogEntries.TryGetValue(fuelLog.Id, out var fuelLogEntries))
+                                    {
+                                        <div style="font-size:0.85rem; color:#8892b0;">Loading…</div>
+                                    }
+                                    else if (fuelLogEntries is null)
+                                    {
+                                        <div class="text-warning" style="font-size:0.85rem;">Couldn't load this log — click View to retry.</div>
+                                    }
+                                    else
+                                    {
+                                        <table class="admin-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Equip #</th>
+                                                    <th>Meter</th>
+                                                    <th>Gallons</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @for (var entryIndex = 0; entryIndex < fuelLogEntries.Count; entryIndex++)
+                                                {
+                                                    var fuelLogEntry = fuelLogEntries[entryIndex];
+                                                    <tr>
+                                                        <td>@(entryIndex == 0 ? "" : entryIndex.ToString())</td>
+                                                        <td>@fuelLogEntry.EquipmentNumber</td>
+                                                        <td>@fuelLogEntry.MeterValue.ToString("0.##")</td>
+                                                        <td>@(entryIndex > 0 && fuelLogEntry.GallonsPumped != 0 ? fuelLogEntry.GallonsPumped.ToString("0.##") : "—")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
 </div>
 
 @code {
     [CascadingParameter]
     private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
 
-    // Supervisors share this page for route management; fuel logs stay
-    // admin-only (the server enforces the same split). Accounts and roles
-    // are managed on the Tools page.
+    // Supervisors share this page for route management and can view every
+    // fuel log; editing a driver's current fuel log stays admin-only (the
+    // server enforces the same split). Accounts and roles are managed on the
+    // Tools page.
     private bool _currentUserIsAdmin;
 
     private List<DriverDto> _drivers = new();
@@ -579,6 +686,18 @@
     private bool _deletingFuelLog;
     private string? _fuelLogStatus;
     private bool _fuelLogStatusSuccess;
+
+    // Every driver's fuel logs for the All Fuel Logs card. Null until loaded
+    // or when loading failed.
+    private List<FuelLogSummaryDto>? _allFuelLogs;
+    private bool _loadingAllFuelLogs;
+    private bool _allFuelLogsLoadFailed;
+    private string _allFuelLogsDriverFilterId = string.Empty;
+    private string? _expandedAllFuelLogId;
+
+    // Entries per log id, loaded on first View. A missing key means still
+    // loading; a null value means the load failed.
+    private readonly Dictionary<string, List<FuelLogEntryDto>?> _allFuelLogEntries = new();
 
     // New delivery form fields
     private string _newStreet = string.Empty;
@@ -639,6 +758,55 @@
             _drivers = await Http.GetFromJsonAsync<List<DriverDto>>("api/drivers") ?? new();
         }
         catch { }
+
+        await LoadAllFuelLogs();
+    }
+
+    private async Task LoadAllFuelLogs()
+    {
+        _loadingAllFuelLogs = true;
+        StateHasChanged();
+
+        var allFuelLogs = await FuelLogApi.GetAllFuelLogsAsync();
+        _allFuelLogsLoadFailed = allFuelLogs is null;
+        _allFuelLogs = allFuelLogs;
+
+        // Logs may have changed since their entries were cached.
+        _allFuelLogEntries.Clear();
+        _expandedAllFuelLogId = null;
+        _loadingAllFuelLogs = false;
+    }
+
+    // Ids come back from SQL in upper case and from C# in lower case, so
+    // driver ids are matched case-insensitively.
+    private List<FuelLogSummaryDto> FilteredAllFuelLogs =>
+        (_allFuelLogs ?? new())
+            .Where(fuelLog => string.IsNullOrEmpty(_allFuelLogsDriverFilterId)
+                              || string.Equals(fuelLog.DriverId, _allFuelLogsDriverFilterId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private string DriverDisplayName(string driverId)
+    {
+        var driver = _drivers.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, driverId, StringComparison.OrdinalIgnoreCase));
+        return driver is null ? "Unknown driver" : $"{driver.FirstName} {driver.LastName}";
+    }
+
+    private async Task ToggleAllFuelLogsRow(FuelLogSummaryDto fuelLog)
+    {
+        if (_expandedAllFuelLogId == fuelLog.Id)
+        {
+            _expandedAllFuelLogId = null;
+            return;
+        }
+
+        _expandedAllFuelLogId = fuelLog.Id;
+        if (_allFuelLogEntries.TryGetValue(fuelLog.Id, out var loadedEntries) && loadedEntries is not null) return;
+
+        // Clear a failed attempt so the row shows Loading… while it retries.
+        _allFuelLogEntries.Remove(fuelLog.Id);
+        StateHasChanged();
+        _allFuelLogEntries[fuelLog.Id] = await FuelLogApi.GetFuelLogEntriesAsync(fuelLog.Id);
     }
 
     private async Task OnDriverChanged()
@@ -794,8 +962,8 @@
 
         var confirmed = await JS.InvokeAsync<bool>(
             "confirm",
-            "Delete this driver's entire fuel log?\n\n" +
-            "This removes every entry and can't be undone.");
+            "Delete this driver's current fuel log?\n\n" +
+            "This removes every entry in it and can't be undone. Past logs are kept.");
         if (!confirmed) return;
 
         _deletingFuelLog = true;
@@ -809,6 +977,7 @@
             _driverFuelLog.Clear();
             _fuelLogStatus = "Fuel log deleted.";
             _fuelLogStatusSuccess = true;
+            await LoadAllFuelLogs();
         }
         else
         {

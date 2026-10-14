@@ -2,6 +2,7 @@
 @using PropaneDriver.Client.Services
 @using PropaneDriver.Client.Authentication
 @using PropaneDriver.Client.ApiConsumers
+@using PropaneDriver.Client.HelperClasses
 @using PropaneDriver.Shared.Dtos
 @using Microsoft.AspNetCore.Components.Authorization
 @inject FuelLogApiConsumer FuelLogApi
@@ -124,6 +125,79 @@
             </div>
         }
     </div>
+
+    @* The driver's completed logs. Start new log moves the current one here. *@
+    <div class="fuel-log-card">
+        <h5 class="fuel-log-history-title">Past fuel logs</h5>
+
+        @if (_pastLogs is null)
+        {
+            <div class="fuel-log-status">@(_pastLogsLoadFailed ? "Couldn't load past logs." : "Loading…")</div>
+        }
+        else if (_pastLogs.Count == 0)
+        {
+            <div class="fuel-log-status">No past logs yet. Start new log moves the current log here.</div>
+        }
+        else
+        {
+            <div class="fuel-log-history">
+                @foreach (var pastLog in _pastLogs)
+                {
+                    var capturedPastLog = pastLog;
+                    var isExpanded = _expandedPastLogId == pastLog.Id;
+
+                    <button class="fuel-log-history-item @(isExpanded ? "fuel-log-history-item--open" : "")"
+                            @onclick="() => TogglePastLogAsync(capturedPastLog)">
+                        <span class="fuel-log-history-period">@FuelLogPeriodFormatter.Format(pastLog)</span>
+                        <span class="fuel-log-history-stats">
+                            @pastLog.EntryCount @(pastLog.EntryCount == 1 ? "fill" : "fills") ·
+                            @pastLog.TotalGallons.ToString("0.##") gal
+                        </span>
+                        <span class="fuel-log-history-chevron">@(isExpanded ? "▾" : "▸")</span>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="fuel-log-history-detail">
+                            @if (!_pastLogEntries.TryGetValue(pastLog.Id, out var pastLogEntries))
+                            {
+                                <div class="fuel-log-status">Loading…</div>
+                            }
+                            else if (pastLogEntries is null)
+                            {
+                                <div class="fuel-log-status">Couldn't load this log — tap it again to retry.</div>
+                            }
+                            else
+                            {
+                                <table class="fuel-log-history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Equip #</th>
+                                            <th>Meter</th>
+                                            <th>Gallons</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @for (var entryIndex = 0; entryIndex < pastLogEntries.Count; entryIndex++)
+                                        {
+                                            var pastLogEntry = pastLogEntries[entryIndex];
+                                            <tr>
+                                                <td>@(entryIndex == 0 ? "" : entryIndex.ToString())</td>
+                                                <td>@pastLogEntry.EquipmentNumber</td>
+                                                <td>@pastLogEntry.MeterValue.ToString("0.##")</td>
+                                                <td>@(entryIndex > 0 && pastLogEntry.GallonsPumped != 0 ? pastLogEntry.GallonsPumped.ToString("0.##") : "—")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
 </div>
 
 @code {
@@ -176,6 +250,15 @@
     // rows differ from it — that's what triggers the save prompt on New Log.
     private string _savedSignature = string.Empty;
 
+    // Past (completed) logs, newest first. Null until loaded or when loading failed.
+    private List<FuelLogSummaryDto>? _pastLogs;
+    private bool _pastLogsLoadFailed;
+    private string? _expandedPastLogId;
+
+    // Entries per past log id, loaded on first expand. A missing key means
+    // still loading; a null value means the load failed.
+    private readonly Dictionary<string, List<FuelLogEntryDto>?> _pastLogEntries = new();
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -214,6 +297,34 @@
         await TryRestoreLocalDraftAsync();
 
         _loading = false;
+
+        // Show the grid without waiting on the history list.
+        StateHasChanged();
+        await LoadPastLogsAsync();
+    }
+
+    private async Task LoadPastLogsAsync()
+    {
+        var pastLogs = await FuelLogApi.GetFuelLogHistoryAsync();
+        _pastLogsLoadFailed = pastLogs is null;
+        _pastLogs = pastLogs;
+    }
+
+    private async Task TogglePastLogAsync(FuelLogSummaryDto pastLog)
+    {
+        if (_expandedPastLogId == pastLog.Id)
+        {
+            _expandedPastLogId = null;
+            return;
+        }
+
+        _expandedPastLogId = pastLog.Id;
+        if (_pastLogEntries.TryGetValue(pastLog.Id, out var loadedEntries) && loadedEntries is not null) return;
+
+        // Clear a failed attempt so the row shows Loading… while it retries.
+        _pastLogEntries.Remove(pastLog.Id);
+        StateHasChanged();
+        _pastLogEntries[pastLog.Id] = await FuelLogApi.GetFuelLogEntriesAsync(pastLog.Id);
     }
 
     // Order-sensitive fingerprint of the rows' editable content. Gallons is
@@ -705,15 +816,15 @@
         if (!leave) context.PreventNavigation();
     }
 
-    // Clear the grid back to a fresh log (Start baseline + one empty entry)
-    // and persist that blank log immediately so it's the canonical state on the
-    // server, not just in the browser. Confirm first so a stray tap can't wipe
-    // the log, then, if there are unsaved changes, offer to save them first.
+    // Move the current log into Past fuel logs on the server, then reset the
+    // grid to a fresh log (Start baseline + one empty entry). Confirm first so a
+    // stray tap can't close the log, then, if there are unsaved changes, offer
+    // to save them first so they're kept in the past log.
     private async Task StartNewLogAsync()
     {
         var confirmedStartNewLog = await JS.InvokeAsync<bool>(
             "confirm",
-            "Start a new fuel log?\n\nThis clears every entry in the current log.");
+            "Start a new fuel log?\n\nThe current log moves to Past fuel logs.");
         if (!confirmedStartNewLog) return;
 
         if (IsDirty)
@@ -732,14 +843,42 @@
             }
         }
 
-        _rows.Clear();
-        EnsureStartRow();
+        _saving = true;
+        _statusMessage = null;
+        CancelSaveFlash();
+        StateHasChanged();
 
-        // Save the fresh blank log so it persists across reloads/devices. On
-        // failure SaveAsync leaves its own "Save failed" message, so only
-        // override the message when the save actually succeeded.
-        await SaveAsync();
-        if (_statusSuccess)
-            _statusMessage = "Started a new fuel log.";
+        // Hold the save gate so no queued or in-flight save can land between
+        // closing the log and clearing the grid; it would reopen a log holding
+        // the old rows.
+        while (_savePutInFlight || _autoSaveWaitingToSnapshot) await Task.Delay(150);
+        _savePutInFlight = true;
+        try
+        {
+            if (!await FuelLogApi.StartNewFuelLogAsync())
+            {
+                _statusSuccess = false;
+                _statusMessage = "Couldn't start a new log — try again.";
+                return;
+            }
+
+            _rows.Clear();
+            EnsureStartRow();
+            _savedSignature = CurrentSignature();
+            // Also drops any discarded edits from the on-device draft.
+            await PersistLocalDraftAsync(pendingSave: false);
+        }
+        finally
+        {
+            _savePutInFlight = false;
+            _saving = false;
+        }
+
+        _autoSaveState = AutoSaveState.Idle;
+        _statusSuccess = true;
+        _statusMessage = "Started a new fuel log.";
+
+        _expandedPastLogId = null;
+        await LoadPastLogsAsync();
     }
 }
