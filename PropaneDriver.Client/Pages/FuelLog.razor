@@ -233,6 +233,9 @@
         public int SortOrder { get; set; }
     }
 
+    // Meter readings and unit numbers are short, so give up on a silent mic quickly.
+    private static readonly TimeSpan VoiceCaptureMaxListenDuration = TimeSpan.FromSeconds(5);
+
     private readonly List<FuelLogRow> _rows = new();
     private bool _loading = true;
     private bool _saving;
@@ -394,7 +397,7 @@
         _statusMessage = null;
         StateHasChanged();
 
-        var (spoken, error) = await SpeechService.DictateDetailedAsync();
+        var (spoken, error) = await SpeechService.DictateDetailedAsync(VoiceCaptureMaxListenDuration);
 
         _listening = false;
 
@@ -404,6 +407,7 @@
             _statusMessage = error switch
             {
                 "no-speech" => "Didn't hear anything — tap Log Next and speak the meter reading.",
+                "timeout" => "Stopped listening — tap Log Next to try again.",
                 "not-allowed" or "service-not-allowed" =>
                     "Microphone access is blocked. Allow it in your browser settings.",
                 _ when error.Contains("not supported") =>
@@ -470,7 +474,7 @@
         _statusMessage = null;
         StateHasChanged();
 
-        var (spoken, error) = await SpeechService.DictateDetailedAsync();
+        var (spoken, error) = await SpeechService.DictateDetailedAsync(VoiceCaptureMaxListenDuration);
 
         _listening = false;
 
@@ -480,6 +484,7 @@
             _statusMessage = error switch
             {
                 "no-speech" => "Didn't hear anything — tap the Equip # box and speak the number.",
+                "timeout" => "Stopped listening — tap the Equip # box to try again.",
                 "not-allowed" or "service-not-allowed" =>
                     "Microphone access is blocked. Allow it in your browser settings.",
                 _ when error.Contains("not supported") =>
