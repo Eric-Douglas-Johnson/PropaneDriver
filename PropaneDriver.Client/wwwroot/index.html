@@ -401,6 +401,10 @@
         // firing result, error, or end, so every dictation is capped by the caller.
         var dictationStopGraceMilliseconds = 3000;
 
+        // iOS takes 2-3 seconds to bring the mic up (longer behind a permission
+        // prompt), so the listen cap starts at audiostart, within this allowance.
+        var dictationStartupAllowanceMilliseconds = 10000;
+
         window.startDictation = function (maxListenMilliseconds) {
             return new Promise(function (resolve) {
                 var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -413,29 +417,54 @@
                 }
                 var recognition = null;
                 var resolved = false;
+                var stopRequested = false;
+                var errorAfterStop = '';
+                var startupTimer = null;
                 var stopTimer = null;
                 var giveUpTimer = null;
                 function done(text, error) {
                     if (resolved) return;
                     resolved = true;
+                    clearTimeout(startupTimer);
                     clearTimeout(stopTimer);
                     clearTimeout(giveUpTimer);
                     if (window._activeDictation === recognition) window._activeDictation = null;
+                    // Release the mic now; a session iOS keeps alive can leave the next one deaf.
+                    try { recognition.abort(); } catch (e) { }
                     resolve({ text: text, error: error });
+                }
+                function startListenCountdown() {
+                    if (stopTimer || resolved) return;
+                    clearTimeout(startupTimer);
+                    stopTimer = setTimeout(function () {
+                        // stop() still delivers anything heard so far; give up if even that never ends.
+                        stopRequested = true;
+                        try { recognition.stop(); } catch (e) { }
+                        giveUpTimer = setTimeout(function () {
+                            done('', 'timeout');
+                        }, dictationStopGraceMilliseconds);
+                    }, maxListenMilliseconds);
                 }
                 try {
                     recognition = new SpeechRec();
                     recognition.lang = 'en-US';
                     recognition.interimResults = false;
                     recognition.maxAlternatives = 1;
+                    recognition.onaudiostart = startListenCountdown;
                     recognition.onresult = function (event) {
                         done(event.results[0][0].transcript, '');
                     };
                     recognition.onerror = function (event) {
-                        done('', event.error || 'unknown error');
+                        var error = event.error || 'unknown error';
+                        // iOS reports "aborted" for our own stop() even on sessions that still produce a result, so wait for end.
+                        if (stopRequested && (error === 'aborted' || error === 'no-speech')) {
+                            errorAfterStop = 'no-speech';
+                            return;
+                        }
+                        done('', error);
                     };
                     recognition.onend = function () {
-                        done('', '');
+                        done('', errorAfterStop);
                     };
                     recognition.start();
                 } catch (e) {
@@ -443,14 +472,9 @@
                     return;
                 }
                 window._activeDictation = recognition;
-                stopTimer = setTimeout(function () {
-                    // stop() still delivers anything heard so far; give up if even that never ends.
-                    try { recognition.stop(); } catch (e) { }
-                    giveUpTimer = setTimeout(function () {
-                        try { recognition.abort(); } catch (e) { }
-                        done('', 'timeout');
-                    }, dictationStopGraceMilliseconds);
-                }, maxListenMilliseconds);
+                startupTimer = setTimeout(function () {
+                    done('', 'timeout');
+                }, dictationStartupAllowanceMilliseconds);
             });
         };
 
