@@ -27,17 +27,17 @@ public class DeliveryTimesLiveDbTests : IAsyncLifetime
         return new PropaneDriverDbContext(options);
     }
 
-    public Task InitializeAsync()
+    public ValueTask InitializeAsync()
     {
         var password = GetPassword();
         if (password is not null)
         {
             _db = CreateLiveDb(password);
         }
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_db is not null)
             await _db.DisposeAsync();
