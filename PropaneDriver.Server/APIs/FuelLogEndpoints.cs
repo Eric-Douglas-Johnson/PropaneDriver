@@ -13,10 +13,7 @@ namespace PropaneDriver.Server.Endpoints
         {
             var group = app.MapGroup("api/fuel-log");
 
-            // Return the signed-in driver's open fuel log, in saved order. The
-            // gallons-pumped figure is order-dependent (each row's gallons is
-            // its meter minus the previous row's), so rows always come back
-            // ordered by SortOrder. No open log yet means an empty list.
+            // Return the signed-in driver's open fuel log, in saved order
             group.MapGet("", async (
                 ClaimsPrincipal user,
                 PropaneDriverDbContext db,
@@ -36,11 +33,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Replace the rows of the signed-in driver's open fuel log with the
-            // posted rows, opening a log first if they don't have one. The
-            // client edits the whole grid and saves in one shot, so a full
-            // replace keeps server and client in lockstep without per-row
-            // diffing. SortOrder is assigned from list position.
+            // Replace the rows of the signed-in driver's open fuel log
             group.MapPut("", async (
                 SaveFuelLogDto dto,
                 ClaimsPrincipal user,
@@ -104,10 +97,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Complete the signed-in driver's open log so it becomes a past log;
-            // their next save opens a fresh one. A log with only the Start row
-            // isn't worth keeping, so it's discarded instead. Safe to repeat:
-            // with no open log there's nothing to do.
+            // Complete the signed-in driver's open log
             group.MapPost("start-new", async (
                 ClaimsPrincipal user,
                 PropaneDriverDbContext db,
@@ -146,7 +136,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // The signed-in driver's completed logs, most recent first.
+            // Get the signed-in driver's completed logs, most recent first.
             group.MapGet("history", async (
                 ClaimsPrincipal user,
                 PropaneDriverDbContext db,
@@ -168,8 +158,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Supervisor/admin: every driver's logs for review on the Admin page —
-            // all completed logs, plus any open log that has fill rows yet.
+            // Supervisor/admin: every driver's logs for review on the Admin page
             group.MapGet("all", async (
                 PropaneDriverDbContext db,
                 ILogger<Program> logger) =>
@@ -188,8 +177,7 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("SupervisorOrAdmin");
 
-            // One log's rows, open or completed. Drivers can open only their own
-            // logs; supervisors and admins can open anyone's.
+            // One log's rows, open or completed
             group.MapGet("logs/{fuelLogId:guid}", async (
                 Guid fuelLogId,
                 ClaimsPrincipal user,
@@ -214,9 +202,6 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AuthenticatedDriver");
 
-            // Admin: return a specific driver's open fuel log, ordered the same
-            // way as the driver's own GET above. The Admin page loads this to
-            // review a driver's current entries before deciding whether to clear them.
             group.MapGet("{driverId:guid}", async (
                 Guid driverId,
                 PropaneDriverDbContext db,
@@ -233,9 +218,6 @@ namespace PropaneDriver.Server.Endpoints
                 }
             }).RequireAuthorization("AdminOnly");
 
-            // Admin: delete a driver's open fuel log in one shot; past logs are
-            // kept. Returns 404 when the driver has no open log so the client can
-            // report that there was nothing to delete rather than a phantom success.
             group.MapDelete("{driverId:guid}", async (
                 Guid driverId,
                 PropaneDriverDbContext db,
