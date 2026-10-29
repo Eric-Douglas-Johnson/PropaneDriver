@@ -23,61 +23,6 @@
     margin: 0 0 1rem 0;
 }
 
-/* Big, thumb-friendly voice-capture button above the grid. Fills the card
-   width so it's easy to hit one-handed in the cab. Flex layout keeps the mic
-   icon and the "Log Next" label centered side by side; the !important on the
-   color/background overrides Bootstrap's bare .btn defaults. */
-.fuel-log-lognext {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    margin-bottom: 1rem;
-    padding: 0.85rem 1rem;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: whitesmoke !important;
-    background-color: #3b82f6 !important;
-    border: 1px solid #5eb3c4;
-    border-radius: 8px;
-}
-
-/* The copy below the grid: spacing flips to sit between the last row and the
-   action buttons (whose own margin-top provides the gap beneath). */
-.fuel-log-lognext--bottom {
-    margin-top: 1rem;
-    margin-bottom: 0;
-}
-
-/* Momentary save confirmation: the button goes green and reads "Saved" while
-   the flag is set. The flash pulses via filter (not background-color) because
-   the base background carries !important, which animation keyframes can't
-   override. */
-.fuel-log-lognext--saved {
-    background-color: #22a35e !important;
-    border-color: #1c7d49;
-    animation: fuel-log-saved-flash 0.35s ease-in-out 3;
-}
-
-@keyframes fuel-log-saved-flash {
-    50% { filter: brightness(1.45); }
-}
-
-.fuel-log-lognext-icon {
-    font-size: 1.35rem;
-    line-height: 1;
-}
-
-.fuel-log-lognext:hover:not(:disabled) {
-    background-color: #2f6fe0;
-}
-
-.fuel-log-lognext:disabled {
-    opacity: 0.7;
-    cursor: default;
-}
-
 .fuel-log-status {
     color: #8892b0;
     font-size: 0.85rem;
@@ -172,8 +117,6 @@
 /* Big, thumb-friendly action buttons under the grid. Each grows to share the
    row evenly and wraps to its own full-width line on a narrow phone, so they're
    easy to hit one-handed in the cab. */
-/* Match the Log Next button's height: same vertical padding, font-size and
-   1px border so all the fuel-log buttons line up at the same size. */
 .fuel-log-action {
     flex: 1 1 12rem;
     padding: 0.85rem 1.35rem;
@@ -181,6 +124,19 @@
     font-weight: 600;
     border-width: 1px;
     border-radius: 8px;
+}
+
+/* Momentary save confirmation: the Save button goes green and reads "Saved".
+   The flash pulses via filter so it layers over the green background. */
+.fuel-log-action--saved,
+.fuel-log-action--saved:hover {
+    background-color: #22a35e;
+    border-color: #1c7d49;
+    animation: fuel-log-saved-flash 0.35s ease-in-out 3;
+}
+
+@keyframes fuel-log-saved-flash {
+    50% { filter: brightness(1.45); }
 }
 
 /* Save/status line sits on its own row beneath the action buttons. */

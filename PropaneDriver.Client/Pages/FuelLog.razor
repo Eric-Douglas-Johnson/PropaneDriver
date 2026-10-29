@@ -6,7 +6,6 @@
 @using PropaneDriver.Shared.Dtos
 @using Microsoft.AspNetCore.Components.Authorization
 @inject FuelLogApiConsumer FuelLogApi
-@inject SpeechService SpeechService
 @inject BrowserStorageService BrowserStorage
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
@@ -30,11 +29,6 @@
         }
         else
         {
-            <button class="btn fuel-log-lognext @LogNextButtonClass" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
-                <span class="fuel-log-lognext-icon">@LogNextButtonIcon</span>
-                <span class="fuel-log-lognext-label">@LogNextButtonLabel</span>
-            </button>
-
             <div class="fuel-log-table">
                 <div class="fuel-log-row fuel-log-row--head">
                     <span>#</span>
@@ -64,8 +58,7 @@
                             <input class="form-control form-control-sm"
                                    placeholder="104"
                                    @bind="row.EquipmentNumber"
-                                   @bind:after="MirrorDraftAfterEditAsync"
-                                   @onfocus="() => ListenForEquipmentNumberAsync(index)" />
+                                   @bind:after="MirrorDraftAfterEditAsync" />
                         }
 
                         <input class="form-control form-control-sm" type="number" step="any"
@@ -89,15 +82,10 @@
                 }
             </div>
 
-            <button class="btn fuel-log-lognext fuel-log-lognext--bottom @LogNextButtonClass" @onclick="LogNextAsync" disabled="@(_listening || _saving)">
-                <span class="fuel-log-lognext-icon">@LogNextButtonIcon</span>
-                <span class="fuel-log-lognext-label">@LogNextButtonLabel</span>
-            </button>
-
             <div class="fuel-log-actions">
                 <button class="btn btn-outline-secondary fuel-log-action" @onclick="AddRow">+ Add row</button>
-                <button class="btn btn-primary fuel-log-action" @onclick="SaveAsync" disabled="@_saving">
-                    @(_saving ? "Saving…" : "Save fuel log")
+                <button class="btn btn-primary fuel-log-action @SaveButtonClass" @onclick="SaveAsync" disabled="@_saving">
+                    @SaveButtonLabel
                 </button>
                 <button class="btn btn-outline-warning fuel-log-action" @onclick="StartNewLogAsync" disabled="@_saving">
                     Start new log
@@ -108,15 +96,6 @@
             {
                 <div class="@(_statusSuccess ? "text-success" : "text-warning") fuel-log-savemsg">
                     @_statusMessage
-                </div>
-            }
-
-            @if (_autoSaveState != AutoSaveState.Idle)
-            {
-                <div class="fuel-log-savemsg @(_autoSaveState == AutoSaveState.Failed ? "text-warning" : "text-muted")">
-                    @(_autoSaveState == AutoSaveState.Saving
-                        ? "Auto-saving…"
-                        : "Auto-save failed — entries are kept on this device. Tap Save fuel log to retry.")
                 </div>
             }
 
@@ -233,13 +212,9 @@
         public int SortOrder { get; set; }
     }
 
-    // Meter readings and unit numbers are short, so give up on a silent mic quickly.
-    private static readonly TimeSpan VoiceCaptureMaxListenDuration = TimeSpan.FromSeconds(5);
-
     private readonly List<FuelLogRow> _rows = new();
     private bool _loading = true;
     private bool _saving;
-    private bool _listening;
     private string? _statusMessage;
     private bool _statusSuccess;
 
@@ -276,8 +251,7 @@
             // The meter column is stored NOT NULL, so a row saved with no
             // reading yet (e.g. an equipment number entered before its meter)
             // comes back as 0. Treat a non-start row's 0 as the blank it really
-            // was: Log Next fills the first row whose meter is null, and a stray
-            // 0 would hide that row and send the next reading to the wrong line.
+            // was, so the box shows empty and no bogus gallons are computed.
             // A pump meter is cumulative and only climbs, so 0 on a later row is
             // never a real reading. Row 0 is the Start baseline, whose 0 is a
             // genuine starting meter, so it's left as-is.
@@ -386,171 +360,6 @@
         _statusMessage = null;
     }
 
-    // Voice-capture the next meter reading and drop it into the next empty
-    // meter box. "Next open" = the first row (top-down) whose meter is still
-    // blank; if every row is filled we append a fresh one so the spoken value
-    // isn't lost. The driver still types the equipment number themselves.
-    private async Task LogNextAsync()
-    {
-        CancelSaveFlash();
-        _listening = true;
-        _statusMessage = null;
-        StateHasChanged();
-
-        var (spoken, error) = await SpeechService.DictateDetailedAsync(VoiceCaptureMaxListenDuration);
-
-        _listening = false;
-
-        if (!string.IsNullOrEmpty(error))
-        {
-            _statusSuccess = false;
-            _statusMessage = error switch
-            {
-                "no-speech" => "Didn't hear anything — tap Log Next and speak the meter reading.",
-                "timeout" => "Stopped listening — tap Log Next to try again.",
-                "not-allowed" or "service-not-allowed" =>
-                    "Microphone access is blocked. Allow it in your browser settings.",
-                _ when error.Contains("not supported") =>
-                    "Voice input isn't supported in this browser. On iPhone, use Safari, " +
-                    "or tap the meter box and use the keyboard's microphone key.",
-                _ => $"Voice input failed: {error}"
-            };
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(spoken))
-        {
-            _statusSuccess = false;
-            _statusMessage = "Didn't catch a meter reading — tap Log Next to try again.";
-            return;
-        }
-
-        var meterValue = ParseMeterValue(spoken);
-        if (meterValue is null)
-        {
-            _statusSuccess = false;
-            _statusMessage = $"Couldn't read a number from \"{spoken}\".";
-            return;
-        }
-
-        var targetRow = _rows.FirstOrDefault(row => row.MeterValue is null);
-        if (targetRow is null)
-        {
-            targetRow = new FuelLogRow();
-            _rows.Add(targetRow);
-        }
-
-        targetRow.MeterValue = meterValue;
-
-        // Mirror the captured reading to this device so a reload can recover
-        // it, then push it to the server in the background.
-        await PersistLocalDraftAsync(pendingSave: true);
-        QueueAutoSave();
-
-        _statusSuccess = true;
-        var gallons = GallonsForRow(_rows.IndexOf(targetRow));
-        _statusMessage = gallons.HasValue
-            ? $"Logged meter {meterValue.Value.ToString("0.##")} " +
-              $"({gallons.Value.ToString("0.##")} gal)."
-            : $"Logged meter {meterValue.Value.ToString("0.##")}.";
-    }
-
-    // Focusing into an empty Equip # box arms the recognizer and drops the
-    // spoken digits into that row's field, so the driver doesn't have to type
-    // the unit number with one hand on the pump. We only listen when the field
-    // is blank — once a value's there (typed or dictated), re-focusing to edit
-    // it shouldn't start a fresh capture. The _listening guard also keeps a
-    // simultaneous Log Next capture from being clobbered.
-    private async Task ListenForEquipmentNumberAsync(int rowIndex)
-    {
-        if (_listening || _saving) return;
-        if (rowIndex <= 0 || rowIndex >= _rows.Count) return;
-
-        var targetRow = _rows[rowIndex];
-        if (!string.IsNullOrWhiteSpace(targetRow.EquipmentNumber)) return;
-
-        CancelSaveFlash();
-        _listening = true;
-        _statusMessage = null;
-        StateHasChanged();
-
-        var (spoken, error) = await SpeechService.DictateDetailedAsync(VoiceCaptureMaxListenDuration);
-
-        _listening = false;
-
-        if (!string.IsNullOrEmpty(error))
-        {
-            _statusSuccess = false;
-            _statusMessage = error switch
-            {
-                "no-speech" => "Didn't hear anything — tap the Equip # box and speak the number.",
-                "timeout" => "Stopped listening — tap the Equip # box to try again.",
-                "not-allowed" or "service-not-allowed" =>
-                    "Microphone access is blocked. Allow it in your browser settings.",
-                _ when error.Contains("not supported") =>
-                    "Voice input isn't supported in this browser. On iPhone, use Safari, " +
-                    "or type the equipment number on the keyboard.",
-                _ => $"Voice input failed: {error}"
-            };
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(spoken))
-        {
-            _statusSuccess = false;
-            _statusMessage = "Didn't catch an equipment number — tap the field to try again.";
-            return;
-        }
-
-        var equipmentNumber = ParseEquipmentNumber(spoken);
-        if (string.IsNullOrEmpty(equipmentNumber))
-        {
-            _statusSuccess = false;
-            _statusMessage = $"Couldn't read an equipment number from \"{spoken}\".";
-            return;
-        }
-
-        targetRow.EquipmentNumber = equipmentNumber;
-
-        // Mirror the captured unit number to this device, then push it to the
-        // server in the background alongside its meter reading.
-        await PersistLocalDraftAsync(pendingSave: true);
-        QueueAutoSave();
-        _statusSuccess = true;
-        _statusMessage = $"Logged equipment #{equipmentNumber}.";
-    }
-
-    // Equipment numbers look like "104" per the placeholder, so pull the first
-    // digit run out of the spoken text — speech usually returns plain digits
-    // but can carry grouping commas ("1,040") or trailing words. If no digits
-    // come through at all, fall back to the trimmed text so the driver can fix
-    // up an unusual unit label by hand rather than losing their dictation.
-    private static string ParseEquipmentNumber(string spoken)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            spoken.Replace(",", string.Empty), @"\d+");
-        return match.Success ? match.Value : spoken.Trim();
-    }
-
-    // Pull the first numeric run out of the spoken text. Speech usually comes
-    // back as plain digits ("104") but can carry grouping commas ("1,040") or
-    // trailing words ("104 gallons"), so strip commas and match the first
-    // number rather than parsing the whole string.
-    private static decimal? ParseMeterValue(string spoken)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            spoken.Replace(",", string.Empty), @"-?\d+(\.\d+)?");
-        if (!match.Success) return null;
-
-        return decimal.TryParse(
-            match.Value,
-            System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out var value)
-            ? value
-            : null;
-    }
-
     private void RemoveRow(int index)
     {
         // Index 0 is the Start baseline and can't be removed.
@@ -565,7 +374,6 @@
     {
         _saving = true;
         _statusMessage = null;
-        _autoSaveState = AutoSaveState.Idle;
         StateHasChanged();
 
         var saved = await SaveRowsToServerAsync();
@@ -576,11 +384,11 @@
         if (saved) _ = FlashSaveConfirmationAsync();
     }
 
-    // True while a fuel-log PUT is on the wire. Auto-saves and manual saves
-    // both funnel through SaveRowsToServerAsync's gate on this flag, so two
-    // saves can never overlap on the network — overlapping requests on a
-    // reused connection are what produced the "TypeError: Load failed"
-    // spurious failures on iOS Safari.
+    // True while a fuel-log PUT is on the wire. Saves funnel through
+    // SaveRowsToServerAsync's gate on this flag, so two saves can never
+    // overlap on the network — overlapping requests on a reused connection
+    // are what produced the "TypeError: Load failed" spurious failures on
+    // iOS Safari.
     private bool _savePutInFlight;
 
     // Send the current grid to the server, one request at a time. Waits for
@@ -630,11 +438,8 @@
         }
     }
 
-    private enum AutoSaveState { Idle, Saving, Failed }
-    private AutoSaveState _autoSaveState = AutoSaveState.Idle;
-
-    // Successful saves are confirmed on the Log Next buttons themselves: they
-    // turn green, flash a couple of times, and read "Saved" for a moment
+    // Successful saves are confirmed on the Save button itself: it turns
+    // green, flashes a couple of times, and reads "Saved" for a moment
     // instead of showing a status label. The token guards overlapping flashes
     // and cancellation — a newer flash or a cancel invalidates the pending
     // revert so it can't cut the newer state short.
@@ -642,10 +447,9 @@
     private int _saveFlashToken;
     private static readonly TimeSpan SaveFlashDuration = TimeSpan.FromMilliseconds(1600);
 
-    private string LogNextButtonClass => _saveFlashActive ? "fuel-log-lognext--saved" : string.Empty;
-    private string LogNextButtonIcon => !_listening && _saveFlashActive ? "✓" : "🎤";
-    private string LogNextButtonLabel =>
-        _listening ? "Listening…" : _saveFlashActive ? "Saved" : "Log Next";
+    private string SaveButtonClass => _saveFlashActive ? "fuel-log-action--saved" : string.Empty;
+    private string SaveButtonLabel =>
+        _saving ? "Saving…" : _saveFlashActive ? "✓ Saved" : "Save fuel log";
 
     private async Task FlashSaveConfirmationAsync()
     {
@@ -664,48 +468,6 @@
     {
         _saveFlashToken++;
         _saveFlashActive = false;
-    }
-
-    // True while a queued auto-save is still waiting to snapshot the rows.
-    // Queuing another one in that window is redundant — the waiting save will
-    // pick up the newer values when it runs — so QueueAutoSave coalesces them.
-    private bool _autoSaveWaitingToSnapshot;
-
-    // Fire-and-forget save after a voice capture. Runs entirely in the
-    // background: Log Next and the grid stay usable while it's in flight, and
-    // a failure is non-fatal because the rows are already mirrored on-device —
-    // the driver can always fall back to the Save fuel log button.
-    private void QueueAutoSave()
-    {
-        if (_autoSaveWaitingToSnapshot) return;
-        _autoSaveWaitingToSnapshot = true;
-        _autoSaveState = AutoSaveState.Saving;
-        _ = RunQueuedAutoSaveAsync();
-    }
-
-    private async Task RunQueuedAutoSaveAsync()
-    {
-        try
-        {
-            // Wait out any in-flight save here (not just inside
-            // SaveRowsToServerAsync) so the coalescing flag can be cleared at
-            // the same moment the rows are snapshotted: once it's false, a new
-            // Log Next capture queues a fresh save rather than assuming this
-            // one will carry it.
-            while (_savePutInFlight) await Task.Delay(150);
-            _autoSaveWaitingToSnapshot = false;
-
-            var saved = await SaveRowsToServerAsync();
-            _autoSaveState = saved ? AutoSaveState.Idle : AutoSaveState.Failed;
-            if (saved) _ = FlashSaveConfirmationAsync();
-        }
-        catch
-        {
-            _autoSaveWaitingToSnapshot = false;
-            _autoSaveState = AutoSaveState.Failed;
-        }
-
-        await InvokeAsync(StateHasChanged);
     }
 
     // Mirror an edited meter or equipment field to this device's local storage.
@@ -853,10 +615,9 @@
         CancelSaveFlash();
         StateHasChanged();
 
-        // Hold the save gate so no queued or in-flight save can land between
-        // closing the log and clearing the grid; it would reopen a log holding
-        // the old rows.
-        while (_savePutInFlight || _autoSaveWaitingToSnapshot) await Task.Delay(150);
+        // Hold the save gate so no in-flight save can land between closing the
+        // log and clearing the grid; it would reopen a log holding the old rows.
+        while (_savePutInFlight) await Task.Delay(150);
         _savePutInFlight = true;
         try
         {
@@ -879,7 +640,6 @@
             _saving = false;
         }
 
-        _autoSaveState = AutoSaveState.Idle;
         _statusSuccess = true;
         _statusMessage = "Started a new fuel log.";
 
