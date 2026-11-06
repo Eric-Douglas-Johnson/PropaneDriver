@@ -31,11 +31,12 @@ namespace PropaneDriver.Client.Services
         private readonly DeliveryCompletionService _deliveryCompletion;
 
         private IDelivery? _activeDelivery;
-        private bool _lastCheckWasInsideGeoFence;
+        private bool _hasArrivedAtActiveDelivery;
 
         public event Action<GeoFenceEventArgs>? OnFenceStatusChanged;
 
-        public bool IsInsideFence => _lastCheckWasInsideGeoFence;
+        // Latched on fence entry; leaving the fence doesn't clear it, only finishing or retargeting does.
+        public bool HasArrived => _hasArrivedAtActiveDelivery;
         public bool IsMonitoring => _activeDelivery != null;
 
         public GeoFenceService(GeolocationService geolocationService,
@@ -51,7 +52,7 @@ namespace PropaneDriver.Client.Services
         public void SetTarget(IDelivery? delivery)
         {
             _activeDelivery = delivery;
-            _lastCheckWasInsideGeoFence = delivery is not null && _deliveryTimerService.IsRunningFor(delivery.Id);
+            _hasArrivedAtActiveDelivery = delivery is not null && _deliveryTimerService.IsRunningFor(delivery.Id);
         }
 
         private async void HandleGpsPositionChange(double latitude, double longitude, double accuracy)
@@ -73,9 +74,10 @@ namespace PropaneDriver.Client.Services
 
                 var insideGeoFence = distance <= FenceRadiusMeters;
 
-                if (insideGeoFence && !_lastCheckWasInsideGeoFence)
+                // Entry starts the timer. Exit does nothing; the driver ends the stop via FinishArrivedDeliveryAsync.
+                if (insideGeoFence && !_hasArrivedAtActiveDelivery)
                 {
-                    _lastCheckWasInsideGeoFence = true;
+                    _hasArrivedAtActiveDelivery = true;
 
                     try
                     {
@@ -87,11 +89,6 @@ namespace PropaneDriver.Client.Services
                             "GeoFenceService.HandlePositionChanged", $"Starting fence timer failed: {ex.Message}");
                     }
                 }
-                else if (!insideGeoFence && _lastCheckWasInsideGeoFence)
-                {
-                    await CompleteOnFenceExitAsync();
-                    return;
-                }
 
                 OnFenceStatusChanged?.Invoke(new GeoFenceEventArgs
                 {
@@ -99,7 +96,7 @@ namespace PropaneDriver.Client.Services
                     Address = _activeDelivery.Address.FullAddress,
                     Latitude = latitude,
                     Longitude = longitude,
-                    IsInsideFence = _lastCheckWasInsideGeoFence,
+                    HasArrived = _hasArrivedAtActiveDelivery,
                     DistanceMeters = distance
                 });
             }
@@ -109,20 +106,32 @@ namespace PropaneDriver.Client.Services
             }
         }
 
-        private async Task CompleteOnFenceExitAsync()
+        // Driver-initiated end of an arrived stop: stops the timer, saves the time, marks it complete.
+        // No 5-minute minimum — that guarded against fence blips, and a deliberate tap isn't one.
+        public async Task<bool> FinishArrivedDeliveryAsync()
         {
-            var departedDelivery = _activeDelivery;
-            _lastCheckWasInsideGeoFence = false;
+            if (_activeDelivery is null || !_hasArrivedAtActiveDelivery)
+            {
+                return false;
+            }
+
+            // Disarm first: the driver is usually still inside the fence, and a fix landing
+            // mid-finish would otherwise restart the timer on the stop being finished.
+            var finishedDelivery = _activeDelivery;
+            _activeDelivery = null;
+            _hasArrivedAtActiveDelivery = false;
 
             var rawElapsedSeconds = await _deliveryTimerService.StopAsync();
-            var wasCompleted = await _deliveryCompletion.CompleteDeliveryAsync(departedDelivery, rawElapsedSeconds);
+            var wasCompleted = await _deliveryCompletion.CompleteDeliveryAsync(
+                finishedDelivery, rawElapsedSeconds, enforceMinimumDuration: false);
 
-            // Disarm only once the stop is actually done, so a delivery that
-            // failed to complete can still be retried on the next crossing.
-            if (wasCompleted)
+            // Re-arm a failed stop so the next fix inside its fence retries it, unless the page already retargeted.
+            if (!wasCompleted && _activeDelivery is null)
             {
-                _activeDelivery = null;
+                _activeDelivery = finishedDelivery;
             }
+
+            return wasCompleted;
         }
 
         /// <summary>

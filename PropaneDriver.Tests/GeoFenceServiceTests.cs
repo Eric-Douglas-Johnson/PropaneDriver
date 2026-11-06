@@ -10,7 +10,7 @@ namespace PropaneDriver.Tests;
 // Pins the rule that makes LongRunning stops safe from the geofence: a
 // GeoFenceService holding no target does nothing with GPS updates. Route.razor
 // routes LongRunning deliveries to SetTarget(null), so if a disarmed fence ever
-// started doing work again, those stops would auto-complete mid-fill.
+// started doing work again, it would start its own timer on top of the driver's.
 //
 // Coordinates are real-ish rural-MN points around Hibbing, matching the
 // convention in RouteProgressTrackerTests.
@@ -36,7 +36,7 @@ public class GeoFenceServiceTests
         harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
 
         Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
-        Assert.False(harness.GeoFence.IsInsideFence);
+        Assert.False(harness.GeoFence.HasArrived);
         Assert.Equal(0, fenceEventCount);
     }
 
@@ -53,7 +53,7 @@ public class GeoFenceServiceTests
         harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
 
         Assert.True(harness.DeliveryTimers.IsRunningFor(delivery.Id));
-        Assert.True(harness.GeoFence.IsInsideFence);
+        Assert.True(harness.GeoFence.HasArrived);
     }
 
     [Fact]
@@ -66,13 +66,13 @@ public class GeoFenceServiceTests
         harness.Geolocation.OnPositionUpdate(OutsideFenceLatitude, TankLongitude, accuracy: 5);
 
         Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
-        Assert.False(harness.GeoFence.IsInsideFence);
+        Assert.False(harness.GeoFence.HasArrived);
     }
 
     // Disarming has to actually drop the previous target, not just reset the
     // inside-fence flag. A SetTarget that ignores null leaves the old delivery
     // armed, and the damage shows up on the NEXT entry into its fence — the
-    // stop restarts and re-completes itself. This is the path a LongRunning
+    // abandoned stop's timer restarts. This is the path a LongRunning
     // toggle takes when the page re-routes the target to null.
     [Fact]
     public void DisarmingDropsThePreviousTargetSoReenteringItsFenceDoesNothing()
@@ -94,17 +94,40 @@ public class GeoFenceServiceTests
         harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
 
         Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
-        Assert.False(harness.GeoFence.IsInsideFence);
+        Assert.False(harness.GeoFence.HasArrived);
         Assert.Equal(0, fenceEventCount);
         Assert.Equal(0, completedCount);
         Assert.Equal(0, delivery.Status);
     }
 
-    // Driving into the fence and straight back out (a drive-by clip or a GPS
-    // blip) must not record a time, complete the stop, or advance the route.
-    // The fence stays armed on the same delivery so a real visit can finish it.
+    // Leaving the fence no longer ends the stop — only the driver's Finish
+    // tap does. The arrival and its timer survive the drive back out.
     [Fact]
-    public void QuickFenceBounceDiscardsTheStopAndKeepsTheDeliveryPending()
+    public void LeavingTheFenceKeepsTheStopArrivedAndItsTimerRunning()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+        var completedCount = 0;
+        var lastReportedArrival = false;
+        harness.DeliveryCompletion.OnDeliveryCompleted += (_, _) => completedCount++;
+        harness.GeoFence.OnFenceStatusChanged += args => lastReportedArrival = args.HasArrived;
+
+        harness.GeoFence.SetTarget(delivery);
+        harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+        harness.Geolocation.OnPositionUpdate(OutsideFenceLatitude, TankLongitude, accuracy: 5);
+
+        Assert.Equal(0, completedCount);
+        Assert.Equal(0, delivery.Status);
+        Assert.True(harness.DeliveryTimers.IsRunningFor(delivery.Id));
+        Assert.True(harness.GeoFence.HasArrived);
+        Assert.True(lastReportedArrival);
+        Assert.True(harness.GeoFence.IsMonitoring);
+    }
+
+    // Finishing ends the stop the way fence exit used to, minus the 5-minute
+    // minimum: this stop is only milliseconds long and still completes.
+    [Fact]
+    public async Task FinishingAnArrivedStopCompletesItAndDisarmsTheFence()
     {
         var harness = new GeoFenceHarness();
         var delivery = DeliveryAtTank();
@@ -113,16 +136,63 @@ public class GeoFenceServiceTests
 
         harness.GeoFence.SetTarget(delivery);
         harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+
+        // Guarantees a non-zero elapsed time; zero-second stops are rejected.
+        await Task.Delay(20);
+
+        var wasFinished = await harness.GeoFence.FinishArrivedDeliveryAsync();
+
+        Assert.True(wasFinished);
+        Assert.Equal(2, delivery.Status);
+        Assert.Equal(1, completedCount);
+        Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
+        Assert.False(harness.GeoFence.HasArrived);
+        Assert.False(harness.GeoFence.IsMonitoring);
+
+        // Still parked at the tank: the finished stop must not restart.
+        harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+        Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
+    }
+
+    [Fact]
+    public async Task FinishingBeforeArrivalDoesNothing()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+
+        harness.GeoFence.SetTarget(delivery);
         harness.Geolocation.OnPositionUpdate(OutsideFenceLatitude, TankLongitude, accuracy: 5);
 
-        Assert.Equal(0, completedCount);
-        Assert.Equal(0, delivery.Status);
-        Assert.False(harness.DeliveryTimers.IsAnyTimerRunning);
-        Assert.True(harness.GeoFence.IsMonitoring);
+        var wasFinished = await harness.GeoFence.FinishArrivedDeliveryAsync();
 
-        // A return visit re-arms the clock for the real attempt.
+        Assert.False(wasFinished);
+        Assert.Equal(0, delivery.Status);
+        Assert.True(harness.GeoFence.IsMonitoring);
+    }
+
+    // A finish that can't be saved (here: no linked address record) leaves the
+    // stop pending and the fence armed, so the next fix inside it restarts the timer.
+    [Fact]
+    public async Task AFailedFinishLeavesTheStopArmedForARetry()
+    {
+        var harness = new GeoFenceHarness();
+        var delivery = DeliveryAtTank();
+        delivery.Address.Id = Guid.Empty;
+
+        harness.GeoFence.SetTarget(delivery);
+        harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
+        await Task.Delay(20);
+
+        var wasFinished = await harness.GeoFence.FinishArrivedDeliveryAsync();
+
+        Assert.False(wasFinished);
+        Assert.Equal(0, delivery.Status);
+        Assert.True(harness.GeoFence.IsMonitoring);
+        Assert.False(harness.GeoFence.HasArrived);
+
         harness.Geolocation.OnPositionUpdate(TankLatitude, TankLongitude, accuracy: 5);
         Assert.True(harness.DeliveryTimers.IsRunningFor(delivery.Id));
+        Assert.True(harness.GeoFence.HasArrived);
     }
 
     [Fact]

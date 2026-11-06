@@ -83,12 +83,6 @@
     <!-- Delivery List (Left) -->
     <div class="delivery-list">
         <h5>Deliveries</h5>
-        <button class="menu-btn navigate-next-btn"
-                @onclick="NavigateToNext"
-                disabled="@(NextPendingDelivery() is null)"
-                title="Open navigation to the next pending stop after the active one">
-            Navigate to Next
-        </button>
         @if (!string.IsNullOrEmpty(_saveStatus))
         {
             <div class="@(_saveSuccess ? "text-success" : "text-danger") mb-2" style="font-size:0.8rem;">@_saveStatus</div>
@@ -128,8 +122,8 @@
                     <div class="delivery-item-header">
                         @if (isActive)
                         {
-                            var inside = _geoFenceStatus?.IsInsideFence == true;
-                            <span class="delivery-status-badge @(inside ? "geofence-inside-badge" : "active-badge")">● @(inside ? "Arrived" : "Active")</span>
+                            var arrived = HasArrivedAtActiveDelivery;
+                            <span class="delivery-status-badge @(arrived ? "geofence-inside-badge" : "active-badge")">● @(arrived ? "Arrived" : "Active")</span>
                             @if (delivery.LongRunning && DeliveryTimerService.IsRunningFor(delivery.Id))
                             {
                                 <span class="delivery-status-badge manual-timer-badge">@FormatTimer(DeliveryTimerService.ElapsedSecondsFor(delivery.Id))</span>
@@ -140,6 +134,17 @@
                     <div class="delivery-item-name">@delivery.Address.Street</div>
                     <div class="delivery-item-address">@delivery.Address.FullAddress</div>
                 </div>
+                @if (isActive && HasArrivedAtActiveDelivery)
+                {
+                    var hasNextStop = _deliveries.Any(d => d.Status == 0 && d.Id != delivery.Id);
+                    <button class="menu-btn finish-and-navigate-btn"
+                            @onclick="FinishAndNavigateToNext"
+                            disabled="@_finishingActiveDelivery">
+                        @(_finishingActiveDelivery
+                            ? "Finishing…"
+                            : hasNextStop ? "Finish and Navigate to Next" : "Finish Delivery")
+                    </button>
+                }
             }
         }
     </div>
@@ -318,7 +323,7 @@
     private GeoFenceEventArgs? _geoFenceStatus;
     private string? _saveStatus;
     private bool _saveSuccess;
-    private bool _wasInsideFence;
+    private bool _finishingActiveDelivery;
     private bool _settingAddressGps;
     private string? _addressGpsStatus;
     private bool _addressGpsSuccess;
@@ -344,6 +349,8 @@
     private int ProgressPercent => _routeSummary.TotalStops > 0
         ? (int)((double)_routeSummary.CompletedStops / _routeSummary.TotalStops * 100)
         : 0;
+
+    private bool HasArrivedAtActiveDelivery => _geoFenceStatus?.HasArrived == true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -426,20 +433,52 @@
         OpenGoogleMapsDirections(_activeDelivery);
     }
 
-    // The stop the driver would head to after the active one: the first
-    // pending delivery that isn't already active. When nothing is active
-    // (start of route, or the route just finished), it's simply the first
-    // pending stop.
-    private IDelivery? NextPendingDelivery() =>
-        _deliveries.FirstOrDefault(d => d.Status == 0 && d.Id != _activeDelivery?.Id);
-
-    // Same as NavigateToActive, but for the upcoming stop — lets the driver
-    // preview the drive to the next delivery while the current one is active.
-    private void NavigateToNext()
+    // Ends the arrived stop (time saved, marked complete, route advanced via
+    // HandleDeliveryCompleted), then opens directions to the new active stop.
+    private async Task FinishAndNavigateToNext()
     {
-        var nextDelivery = NextPendingDelivery();
-        if (nextDelivery is null) return;
-        OpenGoogleMapsDirections(nextDelivery);
+        if (_finishingActiveDelivery || _activeDelivery is null) return;
+
+        var finishingDelivery = _activeDelivery;
+        var upcomingDelivery = _deliveries.FirstOrDefault(d => d.Status == 0 && d.Id != finishingDelivery.Id);
+        var elapsedMinutes = DeliveryTimerService.ElapsedSecondsFor(finishingDelivery.Id) / 60.0;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Finish delivery to {finishingDelivery.Address.FullAddress}?\n\n" +
+            $"Elapsed: {elapsedMinutes:F1} min — this saves the delivery time and marks the stop complete." +
+            (upcomingDelivery is not null
+                ? $"\n\nNavigation to {upcomingDelivery.Address.Street} opens next."
+                : ""));
+        if (!confirmed) return;
+
+        _finishingActiveDelivery = true;
+        _saveStatus = null;
+
+        bool wasFinished;
+        try
+        {
+            wasFinished = await GeoFenceService.FinishArrivedDeliveryAsync();
+        }
+        finally
+        {
+            _finishingActiveDelivery = false;
+        }
+
+        if (!wasFinished)
+        {
+            // The fence dropped the arrival; the next fix inside it re-arrives and restarts the timer.
+            _geoFenceStatus = null;
+            _saveStatus = $"✗ Couldn't finish {finishingDelivery.Address.Street} — see ErrorLog.";
+            _saveSuccess = false;
+            return;
+        }
+
+        var nextDelivery = FindNextDelivery();
+        if (nextDelivery is not null)
+        {
+            OpenGoogleMapsDirections(nextDelivery);
+        }
     }
 
     private async Task CancelActiveDelivery()
@@ -459,10 +498,8 @@
         _saveStatus = null;
         StateHasChanged();
 
-        // Clear the geofence target BEFORE flipping status, so any in-flight
-        // GPS tick or running manual timer is torn down first. Otherwise a
-        // position update landing mid-cancel could trip StopTimerAndSaveAsync
-        // and persist the delivery time we explicitly didn't want recorded.
+        // Disarm the fence and drop any running timer BEFORE flipping status,
+        // so a cancelled stop can never have a delivery time recorded.
         await SetActiveDeliveryAsync(null);
 
         var ok = await DeliveryApi.UpdateStatusAsync(current.Id, 2);
@@ -519,7 +556,7 @@
     }
 
     // Stopping ends the stop: the elapsed time goes through the same completion
-    // pipeline the geofence uses, so HandleDeliveryCompleted advances the route.
+    // pipeline as Finish and Navigate, so HandleDeliveryCompleted advances the route.
     // The driver confirms first — the timer keeps running on Cancel — and a
     // confirmed stop always counts, even under the 5-minute fence-blip minimum,
     // because a deliberate tap isn't a false trigger.
@@ -878,7 +915,6 @@
     private void HandleFenceStatusChanged(GeoFenceEventArgs args)
     {
         _geoFenceStatus = args;
-        _wasInsideFence = args.IsInsideFence;
         InvokeAsync(StateHasChanged);
     }
 
@@ -913,7 +949,6 @@
         _selectedDelivery = delivery;
 
         _geoFenceStatus = null;
-        _wasInsideFence = false;
 
         // Awaited before the fence is armed so a timer persisted across a page
         // reload is back in memory first. A fire-and-forget call would race

@@ -6,7 +6,7 @@ namespace PropaneDriver.Shared.Dtos
         public string Address { get; set; } = string.Empty;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-        public bool IsInsideFence { get; set; }
+        public bool HasArrived { get; set; }
         public double DistanceMeters { get; set; }
     }
 }
