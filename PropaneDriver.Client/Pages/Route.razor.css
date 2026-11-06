@@ -164,18 +164,21 @@
     border-bottom: 1px solid rgba(245, 245, 245, 0.3);
 }
 
-/* Full-width button under the active row, shown once the driver has arrived. */
+/* Full-width button inside the active row, shown once the driver has arrived. */
 .finish-and-navigate-btn {
     width: 100%;
-    margin-bottom: 0.75rem;
+    margin-top: 0.6rem;
     font-size: 1rem;
-    color: #22c55e;
-    border-color: #22c55e;
+    font-weight: 600;
+    color: white;
+    background-color: #16a34a;
+    border-color: #16a34a;
 }
 
-.finish-and-navigate-btn:hover {
-    border-color: #22c55e;
-    background-color: #16382a;
+.finish-and-navigate-btn:hover,
+.finish-and-navigate-btn:active {
+    background-color: #15803d;
+    border-color: #15803d;
 }
 
 .finish-and-navigate-btn:disabled {

@@ -133,18 +133,20 @@
                     </div>
                     <div class="delivery-item-name">@delivery.Address.Street</div>
                     <div class="delivery-item-address">@delivery.Address.FullAddress</div>
+                    @if (isActive && HasArrivedAtActiveDelivery)
+                    {
+                        var hasNextStop = _deliveries.Any(d => d.Status == 0 && d.Id != delivery.Id);
+                        @* stopPropagation so the tap doesn't also fire the row's SelectDelivery *@
+                        <button class="menu-btn finish-and-navigate-btn"
+                                @onclick="FinishAndNavigateToNext"
+                                @onclick:stopPropagation="true"
+                                disabled="@_finishingActiveDelivery">
+                            @(_finishingActiveDelivery
+                                ? "Finishing…"
+                                : hasNextStop ? "Finish and Navigate to Next" : "Finish Delivery")
+                        </button>
+                    }
                 </div>
-                @if (isActive && HasArrivedAtActiveDelivery)
-                {
-                    var hasNextStop = _deliveries.Any(d => d.Status == 0 && d.Id != delivery.Id);
-                    <button class="menu-btn finish-and-navigate-btn"
-                            @onclick="FinishAndNavigateToNext"
-                            disabled="@_finishingActiveDelivery">
-                        @(_finishingActiveDelivery
-                            ? "Finishing…"
-                            : hasNextStop ? "Finish and Navigate to Next" : "Finish Delivery")
-                    </button>
-                }
             }
         }
     </div>
